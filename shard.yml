@@ -1,0 +1,13 @@
+name: SDKMAN utils CLI
+version: 0.1.0
+
+authors:
+  - Alexander Balyshyn <balyszyn@gmail.com>
+
+targets:
+  sdku-cli:
+    main: src/main.cr
+
+crystal: 0.31.1
+
+license: MIT
