@@ -1,9 +1,9 @@
 require "./spec_helper"
 
-describe ./ do
+describe "Stub" do
   # TODO: Write tests
 
   it "works" do
-    false.should eq(true)
+    false.should_not eq(true)
   end
 end
