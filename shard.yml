@@ -4,6 +4,20 @@ version: 0.1.0
 authors:
   - Alexander Balyshyn <balyszyn@gmail.com>
 
+dependencies:
+  admiral:
+    github: jwaldrip/admiral.cr
+  commander:
+    github: mrrooijen/commander
+    version: ~> 0.3.4
+  progress_bar.cr:
+    github: tpei/progress_bar.cr
+    branch: master
+  tablo:
+    github: hutou/tablo
+  terminimal:
+    github: aca-labs/terminimal
+
 targets:
   sdku-cli:
     main: src/main.cr
