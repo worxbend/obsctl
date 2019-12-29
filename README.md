@@ -1,4 +1,4 @@
-# SDKMAN utils CLI
+# SDKMAN utils CLI (!WIP)
 ### CLI wrapper around SDKMAN which provides which makes it possible to make installation, cleaning and version selection faster.
 
 ---
