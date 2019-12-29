@@ -28,13 +28,12 @@ TODO: Write development instructions here
 5. Create a new Pull Request
 
 #### To make it easier to review, we have these PR requirements:
-
-    Every PR must have exactly one issue associated with it.
-    Write a clear explanation of what the code is doing when opening the pull request, and optionally add comments to the PR.
-    Make sure there are tests - or ask for help on how the code should be tested in the Issue!
-    Keep PRs small and to the point. For extra code-health changes, either file a separate issue, or make it a separate PR that can be easily reviewed.
-    Use micro-commits. This makes it easier and faster to review.
-    Add a screenshot for UX changes (this is part of the PR checklist)
+ - Every PR must have exactly one issue associated with it.
+ - Write a clear explanation of what the code is doing when opening the pull request, and optionally add comments to the PR.
+ - Make sure there are tests - or ask for help on how the code should be tested in the Issue!
+ - Keep PRs small and to the point. For extra code-health changes, either file a separate issue, or make it a separate PR that can be easily reviewed.
+ - Use micro-commits. This makes it easier and faster to review.
+ - Add a screenshot for UX changes (this is part of the PR checklist)
 
 
 ## Contributors
