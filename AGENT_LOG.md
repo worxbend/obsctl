@@ -67,3 +67,19 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:22:02Z iteration 3 validation started
+2026-06-15T18:22:10Z iteration 3 committed
+2026-06-15T18:22:12Z iteration 3 pushed
+2026-06-15T18:22:12Z iteration 4 started
+
+## 2026-06-15 Server subscription broadcasts
+
+- Added a persistent server-side client registry for subscribed IPC sessions with topic validation and dead-session cleanup.
+- Wired state-store updates to broadcast `state` events to subscribers after supervisor refreshes and command-triggered snapshot changes.
+- Serialized IPC session writes so command responses and pushed events cannot interleave on a socket.
+- Added server coverage proving a subscribed IPC client receives a pushed state snapshot after a server-owned scene change.
+- Updated protocol docs and `TODO.md`; next planned slice is converting the TUI to subscribe over local IPC.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

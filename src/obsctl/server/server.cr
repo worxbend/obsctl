@@ -1,5 +1,6 @@
 require "../config/config"
 require "../ipc/protocol"
+require "./client_registry"
 require "./command_executor"
 require "./obs_supervisor"
 require "./server_options"
@@ -14,9 +15,10 @@ module Obsctl
         @options : ServerOptions = ServerOptions.new,
         @socket_path : String = IPC::SocketPath.resolve,
       )
-        @state = StateStore.new
+        @registry = ClientRegistry.new
+        @state = StateStore.new(->(snapshot : JSON::Any) { @registry.broadcast("state", snapshot) })
         @supervisor = ObsSupervisor.new(@config, @state)
-        @executor = CommandExecutor.new(@config, @config_path, @state, @supervisor)
+        @executor = CommandExecutor.new(@config, @config_path, @state, @supervisor, -> { @registry.client_count })
         @ipc = IPC::UnixServer.new(@socket_path)
       end
 
@@ -44,6 +46,7 @@ module Obsctl
           end
 
           if request.subscribe?
+            @registry.add(session, request.topics)
             session.write_message(IPC::Response.new(request.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
             session.write_message(IPC::Event.new("state", @state.snapshot_json))
           elsif request.command?
@@ -52,6 +55,11 @@ module Obsctl
             session.write_message(IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new("INVALID_REQUEST", "unsupported request type")))
           end
         end
+      rescue ex : Domain::IpcProtocolError
+        session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new("INVALID_REQUEST", ex.message || "invalid IPC request")))
+      ensure
+        @registry.remove(session)
+        session.close
       end
     end
   end

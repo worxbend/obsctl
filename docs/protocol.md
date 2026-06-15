@@ -18,6 +18,11 @@ Subscribe request:
 {"id":"req-000002","type":"subscribe","topics":["state","events","logs"]}
 ```
 
+The server validates subscription topics. Supported topics are `state`, `events`, and `logs`.
+After a successful subscription, the server replies with an acknowledgement and immediately
+pushes the current `state` snapshot. Later server-side snapshot changes are broadcast as
+`state` events to all subscribed clients.
+
 Success response:
 
 ```json
