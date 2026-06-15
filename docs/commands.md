@@ -45,3 +45,13 @@ Quoted names are preserved: `/scene "Main Camera"`.
 Non-interactive OBS control commands are IPC clients. They connect to the local Unix socket, send a typed command to the server, print the response, and exit. If the server is unavailable, they print startup/service instructions and exit `3`.
 
 `obsctl` and `obsctl tui` run the ANSI TUI as an IPC client in normal mode. The TUI subscribes to server state snapshots and forwards palette commands to the same server-owned command executor used by scriptable CLI commands.
+
+TUI keyboard input:
+
+- `/` or `:` opens the command palette with the configured command prefix.
+- `Backspace` edits the current palette line.
+- `Enter` submits the current palette command.
+- `Esc` or `Ctrl-C` cancels palette editing.
+- `q` exits from the dashboard.
+- `r` sends `/reload-config` from the dashboard.
+- `D` sends `/dump-config` from the dashboard.

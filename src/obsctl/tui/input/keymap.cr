@@ -14,6 +14,14 @@ module Obsctl
         def command_palette?(key : String) : Bool
           @config.command_palette.includes?(key)
         end
+
+        def reload_config?(key : String) : Bool
+          @config.reload_config.includes?(key)
+        end
+
+        def dump_config?(key : String) : Bool
+          @config.dump_config.includes?(key)
+        end
       end
     end
   end
