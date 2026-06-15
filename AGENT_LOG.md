@@ -374,3 +374,16 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:47:36Z iteration 22 validation started
+2026-06-15T19:47:48Z iteration 22 committed
+2026-06-15T19:47:50Z iteration 22 pushed
+2026-06-15T19:47:50Z iteration 23 started
+
+## 2026-06-15 Public API documentation pass
+
+- Added focused public documentation comments for IPC message/session/codec types, server runtime/state/supervisor/registry types, runtime logger/reconnect helpers, and systemd service helpers.
+- Updated `TODO.md` to mark the IPC/server/runtime/service documentation slice complete and narrow the remaining documentation work to config, OBS, domain, and TUI public APIs.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

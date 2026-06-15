@@ -4,12 +4,14 @@ require "../domain/errors"
 
 module Obsctl
   module Runtime
+    # Ordered log severity used by the server runtime logger.
     enum LogLevel
       Debug
       Info
       Warn
       Error
 
+      # Parses a CLI/config log-level string.
       def self.parse(value : String) : LogLevel
         case value.downcase
         when "debug"
@@ -26,26 +28,33 @@ module Obsctl
       end
     end
 
+    # Small file logger for server lifecycle and command-failure diagnostics.
     class Logger
+      # Creates a logger writing to the configured runtime log path.
       def initialize(@level : LogLevel = LogLevel::Info, @path : String = Config::ConfigPaths.log_path)
       end
 
+      # Writes a debug-level message when enabled.
       def debug(message : String) : Nil
         write(LogLevel::Debug, message)
       end
 
+      # Writes an info-level message when enabled.
       def info(message : String) : Nil
         write(LogLevel::Info, message)
       end
 
+      # Writes a warn-level message when enabled.
       def warn(message : String) : Nil
         write(LogLevel::Warn, message)
       end
 
+      # Writes an error-level message when enabled.
       def error(message : String) : Nil
         write(LogLevel::Error, message)
       end
 
+      # Writes a message with a typed severity, redacting known sensitive fields.
       def write(level : LogLevel, message : String) : Nil
         return if level.value < @level.value
 
@@ -56,6 +65,7 @@ module Obsctl
       rescue
       end
 
+      # Writes a message with a parsed string severity.
       def write(level : String, message : String) : Nil
         write(LogLevel.parse(level), message)
       rescue Domain::CommandParseError

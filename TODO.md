@@ -682,7 +682,7 @@ Implemented:
 - Volume meter events.
 - `ameba` lint execution in this environment.
 - Release packaging beyond `make release`.
-- Public API/module documentation comments throughout.
+- Broader public API/module documentation comments for config, OBS, domain, and TUI surfaces.
 - Unknown config field preservation.
 
 ## Milestone Tracking
@@ -834,6 +834,7 @@ Partial:
 - plaintext password warning on `validate-config`
 - viewport-bounded ANSI TUI rendering
 - incremental ANSI TUI renderer backend
+- public documentation comments for IPC, server, runtime, and systemd service public boundary types
 - Makefile
 
 Remaining:
@@ -843,7 +844,7 @@ Remaining:
 - packaging
 - demo config
 - ameba lint wiring after dependency install
-- public module documentation comments
+- public module documentation comments for config, OBS, domain, and TUI surfaces
 
 ### Milestone 9: Local IPC
 
@@ -893,6 +894,6 @@ Remaining:
 
 ## Planned Next
 
-1. Add public documentation comments and run lint once dependencies are installed.
+1. Continue public documentation comments for config, OBS, domain, and TUI public APIs.
 2. Add CLI-level service smoke coverage if CLI dependency injection is introduced later.
 3. Revisit a `termisu` backend if the pre-1.0 dependency becomes acceptable for the project.

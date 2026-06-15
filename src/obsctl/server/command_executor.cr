@@ -12,7 +12,9 @@ require "./state_store"
 
 module Obsctl
   module Server
+    # Executes validated IPC commands against server-owned config, state, and OBS client.
     class CommandExecutor
+      # Creates a command executor for one server runtime.
       def initialize(
         @config : Config::Config,
         @config_path : String,
@@ -25,6 +27,7 @@ module Obsctl
       )
       end
 
+      # Executes a command request and converts domain failures into IPC errors.
       def execute(request : IPC::Request) : IPC::Response
         command = request.command
         raise Domain::IpcProtocolError.new("command request missing command payload") unless command

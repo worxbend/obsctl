@@ -1,17 +1,21 @@
 module Obsctl
   module Service
+    # Renders the systemd --user unit that runs `obsctl server --headless`.
     struct SystemdUserService
       SERVICE_NAME = "obsctl.service"
 
       getter executable_path
 
+      # Creates a unit renderer for an absolute obsctl executable path.
       def initialize(@executable_path : String)
       end
 
+      # Returns the default user service path for the supplied environment.
       def self.default_path(env = ENV) : String
         File.join(home(env), ".config/systemd/user", SERVICE_NAME)
       end
 
+      # Renders the complete service unit file.
       def render : String
         <<-SERVICE
         [Unit]

@@ -5,9 +5,11 @@ require "../domain/errors"
 
 module Obsctl
   module Service
+    # Installs and controls the obsctl systemd user service.
     class ServiceInstaller
       VALID_ACTIONS = %w[install uninstall status start stop restart]
 
+      # Creates a service installer with injectable paths and command runner for tests.
       def initialize(
         @service_path : String = SystemdUserService.default_path,
         @executable_path : String = default_executable_path,
@@ -15,6 +17,7 @@ module Obsctl
       )
       end
 
+      # Runs a service action such as install, start, status, or uninstall.
       def run(action : String) : String
         unless VALID_ACTIONS.includes?(action)
           raise Domain::CommandParseError.new("unknown service action: #{action}")
@@ -42,6 +45,7 @@ module Obsctl
         end
       end
 
+      # Writes the service unit and reloads the user systemd manager.
       def install : String
         unit = SystemdUserService.new(File.expand_path(@executable_path)).render
         FileUtils.mkdir_p(File.dirname(@service_path))
@@ -52,6 +56,7 @@ module Obsctl
         raise Domain::ServiceInstallFailed.new("failed to install service: #{ex.message}")
       end
 
+      # Removes the service unit when present and reloads the user systemd manager.
       def uninstall : String
         File.delete(@service_path) if File.exists?(@service_path)
         systemctl_user(["daemon-reload"])

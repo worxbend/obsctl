@@ -6,17 +6,20 @@ require "./socket_path"
 
 module Obsctl
   module IPC
+    # Unix domain socket server for the local obsctl daemon IPC endpoint.
     class UnixServer
       alias Handler = Proc(ClientSession, Nil)
 
       getter socket_path
       @server : UNIXServer?
 
+      # Creates a server that will bind the configured socket path on listen.
       def initialize(@socket_path : String = SocketPath.resolve, @codec : Codec = Codec.new)
         @server = nil
         @closed = true
       end
 
+      # Binds the socket and handles accepted sessions until closed.
       def listen(handler : Handler) : Nil
         bind
         @closed = false
@@ -33,12 +36,14 @@ module Obsctl
         close
       end
 
+      # Accepts one client session from the bound server socket.
       def accept : ClientSession
         server = @server
         raise Domain::IpcConnectionFailed.new("obsctl server socket is not bound") unless server
         ClientSession.new(server.accept, @codec)
       end
 
+      # Creates the socket, removing stale socket files when no server responds.
       def bind : Nil
         SocketPath.ensure_parent(@socket_path)
         remove_stale_socket
@@ -48,6 +53,7 @@ module Obsctl
         raise Domain::IpcConnectionFailed.new("obsctl server socket is already active: #{@socket_path}")
       end
 
+      # Closes the server socket and removes the socket path.
       def close : Nil
         @closed = true
         server = @server

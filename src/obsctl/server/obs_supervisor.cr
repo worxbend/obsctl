@@ -8,7 +8,9 @@ require "./state_store"
 
 module Obsctl
   module Server
+    # Owns the single OBS WebSocket client and reconnect loop for the daemon.
     class ObsSupervisor
+      # Creates a supervisor that updates server state and optional event/log broadcasts.
       def initialize(
         @config : Config::Config,
         @state : StateStore,
@@ -20,10 +22,12 @@ module Obsctl
         @stopped = false
       end
 
+      # Starts the reconnecting supervisor loop in a background fiber.
       def start : Nil
         spawn(name: "obsctl-obs-supervisor") { run }
       end
 
+      # Stops reconnect attempts and closes the active OBS client.
       def stop : Nil
         @stopped = true
         current_client = @client_lock.synchronize do
@@ -34,12 +38,14 @@ module Obsctl
         current_client.try(&.close)
       end
 
+      # Yields the active OBS client or raises when OBS is unavailable.
       def with_client(&block : OBS::Client -> T) : T forall T
         client = @client_lock.synchronize { @client }
         raise Domain::ObsUnavailable.new unless client && client.connected?
         block.call(client)
       end
 
+      # Drops the active client so the supervisor reconnect loop starts over.
       def reconnect : Nil
         client = @client_lock.synchronize do
           existing = @client

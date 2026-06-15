@@ -9,7 +9,9 @@ require "./state_store"
 
 module Obsctl
   module Server
+    # Foreground local daemon that owns the OBS WebSocket connection and IPC socket.
     class Server
+      # Builds a server runtime around a loaded config and resolved socket path.
       def initialize(
         @config : Config::Config,
         @config_path : String,
@@ -28,6 +30,7 @@ module Obsctl
 
       getter socket_path
 
+      # Starts the OBS supervisor and blocks in the Unix socket accept loop.
       def run : Int32
         log("info", "server_start", "obsctl server starting socket=#{@socket_path}")
         @supervisor.start
@@ -37,6 +40,7 @@ module Obsctl
         stop
       end
 
+      # Stops OBS supervision, closes IPC listeners, and removes the socket.
       def stop : Nil
         @supervisor.stop
         @ipc.close

@@ -5,21 +5,26 @@ require "../obs/state/audio_state"
 
 module Obsctl
   module Server
+    # Authoritative OBS snapshot cache owned by the local daemon.
     class StateStore
+      # Creates a disconnected state store with an optional update callback.
       def initialize(@on_update : Proc(JSON::Any, Nil)? = nil)
         @snapshot = disconnected_snapshot
         @lock = Mutex.new
       end
 
+      # Returns the latest cached OBS snapshot.
       def snapshot : OBS::State::ObsSnapshot
         @lock.synchronize { @snapshot }
       end
 
+      # Replaces the cached snapshot and publishes it to subscribers.
       def update(snapshot : OBS::State::ObsSnapshot) : Nil
         @lock.synchronize { @snapshot = snapshot }
         publish_snapshot(snapshot)
       end
 
+      # Marks OBS unavailable while preserving the last known lists and versions.
       def mark_disconnected(error : String? = nil) : Nil
         next_snapshot = nil
         @lock.synchronize do
@@ -40,10 +45,12 @@ module Obsctl
         publish_snapshot(next_snapshot.not_nil!)
       end
 
+      # Returns the latest snapshot as the IPC state-event JSON payload.
       def snapshot_json : JSON::Any
         snapshot_to_json(snapshot)
       end
 
+      # Converts a snapshot into the stable IPC state-event JSON shape.
       def self.snapshot_to_json(snapshot : OBS::State::ObsSnapshot) : JSON::Any
         JSON.parse({
           connected:             snapshot.connected,
