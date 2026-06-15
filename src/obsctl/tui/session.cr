@@ -6,6 +6,7 @@ require "../domain/command"
 require "../domain/command_parser"
 require "../domain/command_result"
 require "../domain/errors"
+require "../ipc/socket_path"
 require "../runtime/reconnect_policy"
 
 module Obsctl
@@ -19,7 +20,7 @@ module Obsctl
         @config : Config::Config,
         @config_path : String,
         @client_factory : Proc(Config::Config, SessionClient) = ->(config : Config::Config) {
-          IpcSessionClient.new.as(SessionClient)
+          IpcSessionClient.new(IPC::UnixClient.new(IPC::SocketPath.resolve(config.server.socket_path))).as(SessionClient)
         },
       )
         @parser = Domain::CommandParser.new
@@ -170,7 +171,7 @@ module Obsctl
       end
 
       private def reconnect_due? : Bool
-        return false unless @config.connection.reconnect.enabled
+        return false unless @config.reconnect.enabled
         return false unless @snapshot.try { |snapshot| !snapshot.connected }
 
         reconnect_at = @next_reconnect_at
@@ -182,9 +183,9 @@ module Obsctl
       end
 
       private def schedule_reconnect : Nil
-        return unless @config.connection.reconnect.enabled
+        return unless @config.reconnect.enabled
 
-        delay = Runtime::ReconnectPolicy.new(@config.connection.reconnect).delay_for(@reconnect_attempt)
+        delay = Runtime::ReconnectPolicy.new(@config.reconnect).delay_for(@reconnect_attempt)
         @reconnect_attempt += 1
         @next_reconnect_at = Time.utc + delay
       end

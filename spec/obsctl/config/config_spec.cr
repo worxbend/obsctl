@@ -50,6 +50,81 @@ describe Obsctl::Config::Config do
     config.connection.password_env.should eq("")
   end
 
+  it "loads and writes server and top-level reconnect settings" do
+    config = Obsctl::Config::Config.from_yaml(<<-YAML)
+    version: 1
+    server:
+      socket_path: /tmp/obsctl-custom.sock
+      pid_file: /tmp/obsctl.pid
+      allow_remote_shutdown: true
+      start_embedded_if_missing: false
+    connection:
+      host: 127.0.0.1
+      port: 4455
+      password_env: ""
+    reconnect:
+      enabled: false
+      endless: false
+      initial_delay_ms: 100
+      max_delay_ms: 2000
+      multiplier: 2.0
+      jitter_ms: 0
+    YAML
+
+    config.server.socket_path.should eq("/tmp/obsctl-custom.sock")
+    config.server.pid_file.should eq("/tmp/obsctl.pid")
+    config.server.allow_remote_shutdown.should be_true
+    config.server.start_embedded_if_missing.should be_false
+    config.reconnect.enabled.should be_false
+    config.reconnect.endless.should be_false
+    config.reconnect.initial_delay_ms.should eq(100)
+    config.reconnect.max_delay_ms.should eq(2000)
+    config.reconnect.multiplier.should eq(2.0)
+    config.reconnect.jitter_ms.should eq(0)
+
+    written = config.to_yaml
+    written.should contain("server:")
+    written.should contain("reconnect:")
+    written.should_not contain("  reconnect:\n    enabled")
+  end
+
+  it "loads legacy connection.reconnect settings for compatibility" do
+    config = Obsctl::Config::Config.from_yaml(<<-YAML)
+    version: 1
+    connection:
+      host: 127.0.0.1
+      port: 4455
+      password_env: ""
+      reconnect:
+        enabled: false
+        initial_delay_ms: 25
+        max_delay_ms: 50
+        multiplier: 1.0
+    YAML
+
+    config.reconnect.enabled.should be_false
+    config.reconnect.initial_delay_ms.should eq(25)
+    config.reconnect.max_delay_ms.should eq(50)
+    config.reconnect.multiplier.should eq(1.0)
+  end
+
+  it "prefers top-level reconnect over legacy connection.reconnect" do
+    config = Obsctl::Config::Config.from_yaml(<<-YAML)
+    version: 1
+    connection:
+      password_env: ""
+      reconnect:
+        enabled: false
+        initial_delay_ms: 25
+    reconnect:
+      enabled: true
+      initial_delay_ms: 75
+    YAML
+
+    config.reconnect.enabled.should be_true
+    config.reconnect.initial_delay_ms.should eq(75)
+  end
+
   it "loads numeric YAML shortcuts as strings" do
     config = Obsctl::Config::Config.from_yaml(<<-YAML)
     version: 1

@@ -6,6 +6,7 @@ require "../config/config_writer"
 require "../config/config_schema"
 require "../domain/command_parser"
 require "../domain/errors"
+require "../ipc/socket_path"
 require "../server/server"
 require "../server/server_options"
 require "../service/service_installer"
@@ -36,7 +37,8 @@ module Obsctl
         if command == "server"
           config = Config::ConfigLoader.new.load(options.config_path)
           server_options = Server::ServerOptions.new(headless: options.args.includes?("--headless"))
-          return Server::Server.new(config, options.config_path, server_options).run
+          socket_path = IPC::SocketPath.resolve(config.server.socket_path)
+          return Server::Server.new(config, options.config_path, server_options, socket_path).run
         end
 
         if command == "service"
@@ -55,7 +57,7 @@ module Obsctl
 
         palette_line = cli_to_palette(command, options.args)
         parsed = Domain::CommandParser.new.parse(palette_line)
-        result = ClientCommands.new.execute(parsed)
+        result = ClientCommands.new(IPC::UnixClient.new(client_socket_path(options.config_path))).execute(parsed)
         puts result.message
         result.ok ? 0 : 1
       rescue ex : Domain::ServerUnavailable
@@ -114,6 +116,13 @@ module Obsctl
         end
 
         Config::ConfigLoader.new.load(path)
+      end
+
+      private def self.client_socket_path(config_path : String) : String
+        return IPC::SocketPath.resolve unless File.exists?(config_path)
+
+        config = Config::Config.from_yaml(File.read(config_path))
+        IPC::SocketPath.resolve(config.server.socket_path)
       end
 
       private def self.server_unavailable_message : String

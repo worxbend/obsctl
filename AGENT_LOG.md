@@ -230,3 +230,18 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:03:10Z iteration 13 validation started
+2026-06-15T19:03:21Z iteration 13 committed
+2026-06-15T19:03:23Z iteration 13 pushed
+2026-06-15T19:03:23Z iteration 14 started
+
+## 2026-06-15 Config server/reconnect schema
+
+- Added top-level `server` and `reconnect` config sections, including compatibility for legacy `connection.reconnect` and canonical top-level writes.
+- Wired configured `server.socket_path` into `obsctl server`, thin CLI IPC clients, and normal TUI IPC sessions.
+- Fixed boolean config parsing so explicit `false` values are preserved, and added validation for server path and reconnect policy values.
+- Added specs for config migration, reconnect precedence, custom socket CLI behavior, and boolean parsing; updated config docs and `TODO.md`.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)
