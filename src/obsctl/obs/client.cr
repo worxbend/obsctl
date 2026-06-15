@@ -26,7 +26,7 @@ module Obsctl
         @request_ids = Protocol::RequestId.new
         @identified = false
         @ws = uninitialized HTTP::WebSocket
-        @system_frames = Channel(String | Exception).new
+        @system_frames = Channel(String | Exception).new(8)
         @events = Channel(Protocol::Event).new
         @pending = {} of String => Channel(Protocol::Response | Exception)
         @pending_lock = Mutex.new
@@ -38,13 +38,20 @@ module Obsctl
         @ws = Connection.new(@config.connection).connect
         @ws.on_message { |message| handle_frame(message) }
         @ws.on_close { fail_all_pending(Domain::ConnectionFailed.new("OBS WebSocket closed")) }
-        spawn { @ws.run }
+        spawn do
+          begin
+            @ws.run
+          rescue ex
+            fail_all_pending(Domain::ConnectionFailed.new("OBS WebSocket reader failed: #{ex.message}"))
+          end
+        end
         hello = read_system_frame
         identify(hello)
         @identified = true
       end
 
       def close : Nil
+        @identified = false
         @ws.close unless @ws.closed?
       rescue
       end
@@ -52,9 +59,13 @@ module Obsctl
       def request(request_type : String, data : JSON::Any? = nil) : Protocol::Response
         raise Domain::ConnectionFailed.new("OBS client is not identified") unless @identified
         id = @request_ids.next
-        responses = Channel(Protocol::Response | Exception).new
+        responses = Channel(Protocol::Response | Exception).new(1)
         @pending_lock.synchronize { @pending[id] = responses }
-        @ws.send(Protocol::Request.new(request_type, id, data).to_frame)
+        begin
+          @ws.send(Protocol::Request.new(request_type, id, data).to_frame)
+        rescue ex
+          raise Domain::ConnectionFailed.new("failed to send OBS request #{request_type}: #{ex.message}")
+        end
         timeout = @config.connection.request_timeout_ms.milliseconds
         select
         when result = responses.receive
@@ -237,13 +248,14 @@ module Obsctl
       end
 
       private def fail_all_pending(error : Exception) : Nil
-        @system_frames.send(error)
+        @identified = false
         pending = @pending_lock.synchronize do
-          channels = @pending.values
+          channels = @pending.values.to_a
           @pending.clear
           channels
         end
         pending.each { |channel| channel.send(error) }
+        spawn { @system_frames.send(error) }
       end
     end
   end

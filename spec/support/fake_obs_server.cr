@@ -19,6 +19,7 @@ module Obsctl
       @server : HTTP::Server
       @mutex = Mutex.new
       @identify_data = nil.as(JSON::Any?)
+      @request_notifications = Channel(String).new(16)
 
       def initialize(
         @scenes : Array(String) = ["Main Camera", "Screen Share", "BRB"],
@@ -27,6 +28,8 @@ module Obsctl
           AudioInput.new("Mic/Aux", "input", false, 0.7, -3.0),
           AudioInput.new("Desktop Audio", "output", true, 0.4, -8.0),
         ],
+        @request_delays : Hash(String, Time::Span) = {} of String => Time::Span,
+        @request_timeout_ms : Int32 = 500,
       )
         @host = "127.0.0.1"
         @server = HTTP::Server.new([websocket_handler])
@@ -51,7 +54,7 @@ module Obsctl
             host: @host,
             port: @port,
             password_env: "",
-            request_timeout_ms: 500
+            request_timeout_ms: @request_timeout_ms
           ),
           scenes: [
             Config::SceneConfig.new("Main Camera", "main", "1", "primary"),
@@ -76,6 +79,15 @@ module Obsctl
         @mutex.synchronize { @identify_data }
       end
 
+      def next_request(timeout : Time::Span = 1.second) : String?
+        select
+        when request_type = @request_notifications.receive
+          request_type
+        when timeout(timeout)
+          nil
+        end
+      end
+
       private def websocket_handler : HTTP::WebSocketHandler
         HTTP::WebSocketHandler.new do |websocket, _context|
           websocket.send(hello_frame)
@@ -93,6 +105,11 @@ module Obsctl
           websocket.send(identified_frame)
         when 6
           request = frame["d"]
+          request_type = request["requestType"].as_s
+          notify_request(request_type)
+          if delay = @request_delays[request_type]?
+            sleep delay
+          end
           websocket.send(response_frame(request))
         end
       end
@@ -108,6 +125,13 @@ module Obsctl
               end
             end
           end
+        end
+      end
+
+      private def notify_request(request_type : String) : Nil
+        select
+        when @request_notifications.send(request_type)
+        else
         end
       end
 

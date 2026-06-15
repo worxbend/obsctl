@@ -79,6 +79,39 @@ describe Obsctl::OBS::Client do
       server.stop
     end
   end
+
+  it "fails an in-flight request when the websocket closes" do
+    server = Obsctl::SpecSupport::FakeObsServer.new(
+      request_delays: {"GetVersion" => 2.seconds},
+      request_timeout_ms: 2_000
+    ).start
+    client = Obsctl::OBS::Client.new(server.config)
+    result = Channel(Exception?).new(1)
+
+    begin
+      client.connect
+      spawn do
+        begin
+          client.version
+          result.send(nil)
+        rescue ex
+          result.send(ex)
+        end
+      end
+
+      server.next_request.should eq("GetVersion")
+      started = Time.instant
+      client.close
+
+      error = result.receive
+      elapsed = Time.instant - started
+      error.should be_a(Obsctl::Domain::ConnectionFailed)
+      elapsed.should be < 1.second
+    ensure
+      client.try(&.close)
+      server.stop
+    end
+  end
 end
 
 private def wait_for_identify_data(server : Obsctl::SpecSupport::FakeObsServer) : JSON::Any
