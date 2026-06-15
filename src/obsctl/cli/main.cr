@@ -29,7 +29,8 @@ module Obsctl
         end
 
         if command == "validate-config"
-          Config::ConfigLoader.new.load(options.config_path)
+          config = Config::ConfigLoader.new.load(options.config_path)
+          write_config_warnings(config)
           puts "config valid: #{options.config_path}"
           return 0
         end
@@ -131,6 +132,12 @@ module Obsctl
 
         config = Config::Config.from_yaml(File.read(config_path))
         IPC::SocketPath.resolve(config.server.socket_path)
+      end
+
+      def self.write_config_warnings(config : Config::Config, io : IO = STDERR) : Nil
+        Config::ConfigSchema.warnings(config).each do |warning|
+          io.puts "warning: #{warning}"
+        end
       end
 
       private def self.server_unavailable_message : String

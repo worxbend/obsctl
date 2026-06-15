@@ -278,3 +278,17 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:24:19Z iteration 16 validation started
+2026-06-15T19:24:31Z iteration 16 committed
+2026-06-15T19:24:33Z iteration 16 pushed
+2026-06-15T19:24:33Z iteration 17 started
+
+## 2026-06-15 Plaintext password validation warning
+
+- Added config-schema warnings for plaintext `connection.password` values without exposing the configured secret.
+- Changed `obsctl validate-config` to print the plaintext-password warning while keeping config loading side-effect free.
+- Added schema and CLI specs for safe warning behavior, and updated README/config/command docs plus `TODO.md`.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

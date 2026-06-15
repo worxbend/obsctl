@@ -649,8 +649,8 @@ Implemented:
   - unknown top-level fields are explicitly rejected to avoid silent data loss
   - top-level `server` and `reconnect` sections are supported
   - legacy `connection.reconnect` is accepted and rewritten as top-level `reconnect`
+  - `validate-config` warns when plaintext `connection.password` is configured without printing the secret value
   - nested unknown fields are not preserved yet
-  - plaintext `password` is supported by the data model but warning behavior is not yet surfaced
 - Logging:
   - logger exists with redaction
   - CLI/TUI do not yet consistently use it
@@ -820,6 +820,7 @@ Partial:
 - config docs
 - protocol docs
 - command docs
+- plaintext password warning on `validate-config`
 - Makefile
 
 Remaining:

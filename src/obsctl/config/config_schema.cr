@@ -46,6 +46,16 @@ module Obsctl
         duplicates(config.audio.inputs.compact_map(&.shortcut), "duplicate audio shortcut")
       end
 
+      def self.warnings(config : Config) : Array(String)
+        warnings = [] of String
+        if password = config.connection.password
+          unless password.empty?
+            warnings << "plaintext connection.password is configured; prefer connection.password_env so secrets stay out of config files"
+          end
+        end
+        warnings
+      end
+
       private def self.duplicates(values : Array(String), message : String) : Nil
         seen = Set(String).new
         values.each do |value|

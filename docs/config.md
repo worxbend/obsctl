@@ -39,6 +39,6 @@ reconnect:
 
 Unknown top-level fields are rejected with a config error. This avoids silently dropping future fields when config files are rewritten. Nested unknown fields are currently ignored by the typed loader and are not preserved on write. Older configs with `connection.reconnect` are still accepted, but new writes use the top-level `reconnect` section.
 
-Passwords should be provided through `connection.password_env`. By default this is `OBS_WEBSOCKET_PASSWORD`, and `validate-config` fails if a configured non-empty env var is missing. Plaintext `connection.password` is supported for compatibility, but to use it intentionally you must set `password_env: ""`. The current CLI does not yet emit a separate warning for plaintext passwords, so avoid storing secrets in the config file.
+Passwords should be provided through `connection.password_env`. By default this is `OBS_WEBSOCKET_PASSWORD`, and `validate-config` fails if a configured non-empty env var is missing. Plaintext `connection.password` is supported for compatibility, but to use it intentionally you must set `password_env: ""`. `validate-config` prints a warning when plaintext `connection.password` is configured and does not echo the secret value.
 
 Scene lookup priority is shortcut, alias, exact OBS name, case-insensitive alias, then case-insensitive OBS name. Ambiguous matches fail without executing an action.

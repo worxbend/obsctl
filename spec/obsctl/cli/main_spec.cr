@@ -21,4 +21,20 @@ describe Obsctl::CLI::Main do
     end
     FileUtils.rm_rf(runtime_dir) if runtime_dir
   end
+
+  it "writes safe config warnings without exposing plaintext passwords" do
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        password_env: "",
+        password: "super-secret"
+      )
+    )
+    io = IO::Memory.new
+
+    Obsctl::CLI::Main.write_config_warnings(config, io)
+
+    stderr = io.to_s
+    stderr.should contain("warning: plaintext connection.password is configured")
+    stderr.should_not contain("super-secret")
+  end
 end
