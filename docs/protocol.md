@@ -19,9 +19,21 @@ Subscribe request:
 ```
 
 The server validates subscription topics. Supported topics are `state`, `events`, and `logs`.
-After a successful subscription, the server replies with an acknowledgement and immediately
-pushes the current `state` snapshot. Later server-side snapshot changes are broadcast as
-`state` events to all subscribed clients.
+After a successful subscription, the server replies with an acknowledgement. Clients that
+subscribe to `state` immediately receive the current snapshot. Later server-side snapshot
+changes are broadcast as `state` events to state subscribers.
+
+OBS events received by the server are broadcast on the `events` topic:
+
+```json
+{"type":"event","topic":"events","data":{"event_type":"CurrentProgramSceneChanged","event_data":{"sceneName":"BRB"}}}
+```
+
+Server log notifications are broadcast on the `logs` topic:
+
+```json
+{"type":"event","topic":"logs","data":{"level":"warn","code":"command_failed","message":"OBS is unavailable","created_at":"2026-06-15T18:00:00Z"}}
+```
 
 Success response:
 

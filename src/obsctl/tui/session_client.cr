@@ -94,6 +94,7 @@ module Obsctl
         @session = nil.as(IPC::ClientSession?)
         @messages = Channel(IPC::Message).new(64)
         @snapshot = nil.as(OBS::State::ObsSnapshot?)
+        @events = [] of OBS::Protocol::Event
         @sequence = 0
       end
 
@@ -155,7 +156,8 @@ module Obsctl
       end
 
       def next_event : OBS::Protocol::Event?
-        nil
+        drain_messages
+        @events.shift?
       end
 
       def next_snapshot : OBS::State::ObsSnapshot?
@@ -215,11 +217,22 @@ module Obsctl
 
       private def apply_event(event : IPC::Event?) : Nil
         return unless event
-        return unless event.topic == "state"
-        data = event.data
-        return unless data
 
-        @snapshot = snapshot_from_json(data)
+        case event.topic
+        when "state"
+          data = event.data
+          return unless data
+
+          @snapshot = snapshot_from_json(data)
+        when "events"
+          data = event.data
+          return unless data
+
+          event_type = data["event_type"]?.try(&.as_s?)
+          return unless event_type
+
+          @events << OBS::Protocol::Event.new(event_type, data["event_data"]?)
+        end
       end
 
       private def snapshot_from_json(data : JSON::Any) : OBS::State::ObsSnapshot

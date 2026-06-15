@@ -88,4 +88,51 @@ describe Obsctl::TUI::IpcSessionClient do
   ensure
     server.try(&.close)
   end
+
+  it "converts pushed IPC event topics into TUI events" do
+    path = File.join(Dir.tempdir, "obsctl-tui-ipc-events-#{Random.rand(1_000_000)}.sock")
+    server = Obsctl::IPC::UnixServer.new(path)
+    client = nil.as(Obsctl::TUI::IpcSessionClient?)
+    ready = Channel(Nil).new
+    done = Channel(Nil).new
+
+    spawn do
+      server.bind
+      ready.send(nil)
+      session = server.accept
+
+      subscribe = session.read_message.as(Obsctl::IPC::Request)
+      session.write_message(Obsctl::IPC::Response.new(subscribe.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
+      session.write_message(Obsctl::IPC::Event.new("state", tui_ipc_snapshot))
+      session.write_message(Obsctl::IPC::Event.new("events", JSON.parse({
+        event_type: "CurrentProgramSceneChanged",
+        event_data: {
+          sceneName: "BRB",
+        },
+      }.to_json)))
+      done.receive
+      session.close
+    ensure
+      server.close
+    end
+
+    ready.receive
+    client = Obsctl::TUI::IpcSessionClient.new(Obsctl::IPC::UnixClient.new(path))
+    client.connect
+    client.snapshot.current_scene.should eq("Main Camera")
+
+    event = nil
+    20.times do
+      event = client.next_event
+      break if event
+      sleep 25.milliseconds
+    end
+
+    event.not_nil!.event_type.should eq("CurrentProgramSceneChanged")
+    event.not_nil!.event_data.not_nil!["sceneName"].as_s.should eq("BRB")
+    done.send(nil)
+  ensure
+    client.try(&.close)
+    server.try(&.close)
+  end
 end

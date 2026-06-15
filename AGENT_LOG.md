@@ -197,3 +197,19 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:54:00Z iteration 11 validation started
+2026-06-15T18:54:10Z iteration 11 committed
+2026-06-15T18:54:13Z iteration 11 pushed
+2026-06-15T18:54:13Z iteration 12 started
+
+## 2026-06-15 Server event/log topic fanout
+
+- Added server-side `events` and `logs` IPC topic broadcasts for OBS events, supervisor connection state, and command failures.
+- Changed subscription acknowledgement behavior so the initial snapshot is pushed only to clients subscribed to `state`.
+- Taught the IPC-backed TUI session client to parse pushed OBS event topic payloads into existing TUI event objects.
+- Added fake OBS event emission helpers and specs covering event fanout, state refresh after OBS events, command failure log fanout, and TUI IPC event parsing.
+- Updated `README.md`, `docs/protocol.md`, and `TODO.md`; next planned slice is request correlation hardening for long-lived IPC clients or termisu evaluation.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)
