@@ -401,12 +401,16 @@ Implemented:
   - `obsctl init`
   - `obsctl validate-config`
   - `obsctl dump-config`
+  - `obsctl reload-config`
   - `obsctl scene <target>`
   - `obsctl mute <target>`
   - `obsctl unmute <target>`
   - `obsctl toggle-mute <target>`
   - `obsctl volume <target> <0-100>`
+  - `obsctl vol <target> <0-100>`
   - `obsctl status`
+  - `obsctl server-status`
+  - non-interactive OBS control commands are thin IPC clients and return exit `3` with startup/service instructions when the local server is missing
 - Command palette parser for:
   - `/help`
   - `/set-scene <target>`
@@ -506,6 +510,10 @@ Implemented:
   - command executor for status/snapshot, scene/audio commands, dump-config, and reload-config
   - subscription acknowledgement with an initial state event
   - IPC remains available when OBS is unavailable
+- CLI IPC proxying:
+  - non-interactive `status`, `server-status`, `scene`, `mute`, `unmute`, `toggle-mute`, `vol`/`volume`, `dump-config`, and `reload-config` commands send typed IPC requests
+  - CLI no longer creates an OBS WebSocket client for normal scriptable OBS-control commands
+  - missing local server prints startup/service instructions and exits `3`
 - Minimal ANSI TUI scaffold:
   - dashboard render
   - scenes panel output
@@ -550,6 +558,8 @@ Implemented:
   - TUI event application behavior
   - TUI reconnect-on-poll behavior
   - CLI scene/audio integration against fake OBS server
+  - CLI scene/audio integration through the local server IPC path
+  - CLI missing-server exit path for thin client commands
   - IPC codec validation
   - IPC socket path resolution
   - IPC Unix socket request/response round trip
@@ -565,6 +575,9 @@ Implemented:
   - IPC command executor can control scene/audio and dump/reload config
   - reconnect loop is basic and does not yet process OBS disconnects after an established connection
   - subscription handling sends an initial state event, but does not yet maintain a client registry for broadcasts
+- CLI:
+  - non-interactive OBS control commands are thin IPC clients
+  - `server-status` exists, but the server status payload is still minimal
 - TUI:
   - currently a simple ANSI dashboard and line-based command loop
   - not yet a full termisu dashboard
@@ -595,7 +608,6 @@ Implemented:
 
 ## Not Yet Implemented
 
-- CLI command proxying through local IPC.
 - TUI subscription through local IPC.
 - Server client registry and broadcast fanout.
 - Full termisu integration.
@@ -681,7 +693,9 @@ Done:
 - `obsctl unmute`
 - `obsctl toggle-mute`
 - `obsctl volume`
+- `obsctl vol`
 - `obsctl status`
+- CLI command execution through local server IPC
 
 Remaining:
 
@@ -767,6 +781,9 @@ Done:
 - IPC specs for codec, path resolution, and socket round trip
 - server runtime integration with IPC accept loop
 - initial server command execution over IPC
+- non-interactive CLI command proxying through local IPC
+- missing-server CLI exit behavior and startup/service instructions
+- `server-status` command path
 
 Remaining:
 
@@ -775,14 +792,12 @@ Remaining:
 
 ## Planned Next
 
-1. Convert non-interactive CLI commands to thin IPC clients; direct OBS access only remains for server/embedded mode.
-2. Add server-status and missing-server CLI behavior with exit code `3` and startup/service instructions.
-3. Add persistent server client registry and state/event broadcast fanout for subscriptions.
-4. Convert TUI to subscribe to server state/events over IPC; remove normal direct OBS access from TUI.
-5. Add systemd user service install/uninstall/status/start/stop/restart support.
-6. Add explicit OBS event subscription options during Identify in server mode.
-7. Add dump-config CLI integration coverage through the server.
-8. Improve close/error handling for pending requests and WebSocket shutdown.
-9. Add raw-mode keyboard handling and a real command palette.
-10. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-11. Add public documentation comments and run lint once dependencies are installed.
+1. Add persistent server client registry and state/event broadcast fanout for subscriptions.
+2. Convert TUI to subscribe to server state/events over IPC; remove normal direct OBS access from TUI.
+3. Add systemd user service install/uninstall/status/start/stop/restart support.
+4. Add explicit OBS event subscription options during Identify in server mode.
+5. Add dump-config CLI integration coverage through the server.
+6. Improve close/error handling for pending requests and WebSocket shutdown.
+7. Add raw-mode keyboard handling and a real command palette.
+8. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+9. Add public documentation comments and run lint once dependencies are installed.
