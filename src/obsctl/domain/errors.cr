@@ -7,6 +7,7 @@ module Obsctl
       Connection   = 3
       ObsRequest   = 4
       CommandParse = 5
+      Ipc          = 6
     end
 
     abstract class ObsctlError < Exception
@@ -74,6 +75,18 @@ module Obsctl
     class CommandParseError < ObsctlError
       def initialize(message : String)
         super(message, ExitCode::CommandParse)
+      end
+    end
+
+    class IpcConnectionFailed < ObsctlError
+      def initialize(message : String)
+        super(message, ExitCode::Ipc)
+      end
+    end
+
+    class IpcProtocolError < ObsctlError
+      def initialize(message : String)
+        super(message, ExitCode::Ipc)
       end
     end
   end
