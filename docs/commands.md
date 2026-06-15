@@ -2,6 +2,12 @@
 
 Palette commands start with `/`. Non-interactive CLI commands map to the same typed command parser.
 
+Global options:
+
+- `--config PATH`
+- `--log-level debug|info|warn|error`
+- `--force`
+
 Required commands:
 
 - `obsctl server`
@@ -45,6 +51,8 @@ Required commands:
 Quoted names are preserved: `/scene "Main Camera"`.
 
 `obsctl server` starts the foreground local server and owns the OBS WebSocket connection. `obsctl server --headless` runs the same server without interactive UI and is intended for a `systemd --user` service.
+
+`--log-level` controls persisted server log verbosity when running `obsctl server`. Server logs are written to `~/.local/state/obsctl/obsctl.log`, and password/authentication fields are redacted before writing.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` with an absolute `ExecStart=<obsctl> server --headless`, then runs `systemctl --user daemon-reload`. The other service subcommands wrap `systemctl --user start|stop|restart|status obsctl.service`; uninstall removes the unit file and reloads systemd.
 

@@ -22,6 +22,10 @@ describe Obsctl::CLI::Main do
     FileUtils.rm_rf(runtime_dir) if runtime_dir
   end
 
+  it "returns command parse error for unsupported log levels" do
+    Obsctl::CLI::Main.run(["--log-level", "trace", "status"]).should eq(5)
+  end
+
   it "writes safe config warnings without exposing plaintext passwords" do
     config = Obsctl::Config::Config.new(
       connection: Obsctl::Config::ConnectionConfig.new(

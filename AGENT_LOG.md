@@ -293,3 +293,20 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:28:56Z iteration 17 validation started
+2026-06-15T19:29:08Z iteration 17 committed
+2026-06-15T19:29:10Z iteration 17 pushed
+2026-06-15T19:29:10Z iteration 18 started
+
+## 2026-06-15 Server log-level wiring
+
+- Added typed runtime log-level parsing and filtering for `--log-level debug|info|warn|error`.
+- Wired CLI server startup to create a runtime logger and persist server lifecycle, supervisor, and command-failure log events with redaction.
+- Added runtime logger specs, CLI invalid-level coverage, and server log persistence coverage.
+- Updated README, command docs, and `TODO.md`; next planned slice remains termisu/public documentation polish.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)
+2026-06-15T19:32:19Z iteration 18 validation started
+2026-06-15T19:32:41Z iteration 18 committed

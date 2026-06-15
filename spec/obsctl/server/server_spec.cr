@@ -2,6 +2,7 @@ require "../../spec_helper"
 require "../../../src/obsctl/server/server"
 require "../../../src/obsctl/ipc/protocol"
 require "../../../src/obsctl/obs/protocol/event_subscription"
+require "../../../src/obsctl/runtime/logger"
 require "../../support/fake_obs_server"
 
 private def temp_socket_path : String
@@ -235,6 +236,53 @@ describe Obsctl::Server::Server do
     logs.try(&.close)
     server.try(&.stop)
     File.delete(path) if path && File.exists?(path)
+  end
+
+  it "persists server log events through the configured runtime logger" do
+    path = temp_socket_path
+    log_path = File.join(Dir.tempdir, "obsctl-server-log-spec-#{Random.rand(1_000_000)}.log")
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: 1,
+        password_env: "",
+        request_timeout_ms: 100
+      ),
+      reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false),
+      scenes: [
+        Obsctl::Config::SceneConfig.new("Main Camera", "main"),
+      ]
+    )
+    logger = Obsctl::Runtime::Logger.new(Obsctl::Runtime::LogLevel::Warn, log_path)
+    server = Obsctl::Server::Server.new(config, "/tmp/obsctl-server-spec.yml", socket_path: path, logger: logger)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    wait_for_socket(path)
+
+    response = Obsctl::IPC::UnixClient.new(path).request(
+      Obsctl::IPC::Request.new(
+        "req-log-failure",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("set_scene", "main")
+      )
+    )
+
+    response.ok.should be_false
+    log = File.read(log_path)
+    log.should contain("level=warn")
+    log.should contain("command_failed")
+    log.should contain("OBS")
+    log.should_not contain("server_start")
+  ensure
+    server.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+    File.delete(log_path) if log_path && File.exists?(log_path)
   end
 
   it "marks OBS disconnected after an established WebSocket closes while IPC stays available" do
