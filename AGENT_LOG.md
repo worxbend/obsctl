@@ -262,3 +262,18 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:18:06Z iteration 15 validation started
+2026-06-15T19:18:18Z iteration 15 committed
+2026-06-15T19:18:20Z iteration 15 pushed
+2026-06-15T19:18:20Z iteration 16 started
+
+## 2026-06-15 TUI panelized ANSI renderer
+
+- Evaluated `termisu`: available as a Crystal shard, but upstream documents it as pre-1.0 and not battle-tested, so this slice avoided adding a new runtime dependency.
+- Replaced the monolithic ANSI renderer body with connection, scenes, grouped scene map, audio, recent logs, and command palette widget renderers.
+- Taught the IPC-backed TUI session client and session model to collect server `logs` topic messages for dashboard display.
+- Added TUI renderer, IPC log-topic, and session log-model specs; updated README, command docs, and `TODO.md`.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

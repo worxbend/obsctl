@@ -547,6 +547,8 @@ Implemented:
   - snapshot refresh after scene/audio commands
   - timer-based event polling in the ANSI TUI loop
   - server-pushed state events update the displayed snapshot
+  - widgetized ANSI panels for connection, scenes, grouped scene map, audio, recent logs, and command palette
+  - recent server log-topic messages are retained in the TUI model and displayed in the dashboard
   - direct OBS session adapter remains available for explicit embedded-style use/tests
   - reconnect attempts use the configured reconnect policy
 - Systemd user service support:
@@ -593,7 +595,9 @@ Implemented:
   - TUI reconnect-on-poll behavior
   - TUI IPC subscription and command forwarding behavior
   - TUI IPC pushed OBS event topic parsing
+  - TUI IPC pushed server log topic parsing
   - TUI command palette input handling and dashboard shortcuts
+  - TUI renderer panel output
   - TUI/CLI command parser coverage for server maintenance commands
   - CLI scene/audio integration against fake OBS server
   - CLI scene/audio integration through the local server IPC path
@@ -628,15 +632,17 @@ Implemented:
   - currently a simple ANSI dashboard with raw key input and a command palette state machine
   - normal mode subscribes to the local server over IPC instead of creating an OBS WebSocket connection
   - not yet a full termisu dashboard
+  - `termisu` is available as a Crystal shard, but its upstream README marks it as pre-1.0 and not battle-tested
   - not yet btop/btm-style keyboard-first layout
-  - refreshes on a timer, but rendering is still full-screen ANSI redraw
+  - refreshes on a timer, but rendering is still full-screen ANSI redraw with panelized widgets
+  - compact recent-log panel displays server log-topic messages
 - OBS client:
   - has a single WebSocket reader channel
   - has a pending request map for request/response coordination
   - fails in-flight pending requests promptly when the WebSocket closes or the reader fiber errors
   - exposes connection state so the server supervisor can detect established WebSocket disconnects
   - event parsing exists and events are routed to a client channel
-  - direct embedded-style TUI sessions can consume the event channel, and normal TUI mode consumes server-pushed IPC state and OBS event topics
+  - direct embedded-style TUI sessions can consume the event channel, and normal TUI mode consumes server-pushed IPC state, OBS event topics, and log topics
   - reconnect policy is still wired into the TUI session for server reconnects, but not into the low-level OBS client itself
 - Config:
   - known fields round-trip
@@ -659,8 +665,7 @@ Implemented:
 ## Not Yet Implemented
 
 - Full termisu integration.
-- Scene map widget with grouped textual graph.
-- Compact log panel with recent errors.
+- Replace ANSI redraw backend with termisu after dependency integration is accepted.
 - Low-level client reconnect loop independent of TUI session.
 - Studio mode support.
 - Stream/record controls and status.
@@ -776,6 +781,7 @@ Partial:
 - minimal dashboard
 - command loop
 - scene/audio display
+- widgetized ANSI connection/scenes/scene-map/audio/log/command panels
 - palette command parser reuse
 - session-owned client adapter
 - snapshot refresh after successful scene/audio commands
@@ -787,13 +793,13 @@ Partial:
 - command palette state for open/edit/backspace/submit/cancel
 - keyboard shortcuts for quit, reload-config, and dump-config
 - input controller specs
+- recent server log display
 
 Remaining:
 
 - termisu app
 - incremental/diff rendering instead of full-screen redraw
-- proper layout panels
-- log panel
+- btop/btm-style layout polish
 
 ### Milestone 7: Realtime Events
 
@@ -872,6 +878,6 @@ Remaining:
 
 ## Planned Next
 
-1. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+1. Replace the widgetized ANSI renderer with a `termisu` backend if the pre-1.0 dependency is acceptable for the project.
 2. Add public documentation comments and run lint once dependencies are installed.
 3. Add CLI-level service smoke coverage if CLI dependency injection is introduced later.

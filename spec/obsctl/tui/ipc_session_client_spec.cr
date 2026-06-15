@@ -136,6 +136,50 @@ describe Obsctl::TUI::IpcSessionClient do
     server.try(&.close)
   end
 
+  it "collects pushed IPC log topics for the dashboard" do
+    path = File.join(Dir.tempdir, "obsctl-tui-ipc-logs-#{Random.rand(1_000_000)}.sock")
+    server = Obsctl::IPC::UnixServer.new(path)
+    client = nil.as(Obsctl::TUI::IpcSessionClient?)
+    ready = Channel(Nil).new
+    done = Channel(Nil).new
+
+    spawn do
+      server.bind
+      ready.send(nil)
+      session = server.accept
+
+      subscribe = session.read_message.as(Obsctl::IPC::Request)
+      session.write_message(Obsctl::IPC::Response.new(subscribe.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
+      session.write_message(Obsctl::IPC::Event.new("state", tui_ipc_snapshot))
+      session.write_message(Obsctl::IPC::Event.new("logs", JSON.parse({
+        level:   "warn",
+        code:    "command_failed",
+        message: "OBS is unavailable",
+      }.to_json)))
+      done.receive
+      session.close
+    ensure
+      server.close
+    end
+
+    ready.receive
+    client = Obsctl::TUI::IpcSessionClient.new(Obsctl::IPC::UnixClient.new(path))
+    client.connect
+
+    log = nil
+    20.times do
+      log = client.next_log
+      break if log
+      sleep 25.milliseconds
+    end
+
+    log.should eq("warn command_failed: OBS is unavailable")
+    done.send(nil)
+  ensure
+    client.try(&.close)
+    server.try(&.close)
+  end
+
   it "correlates overlapping command responses by request id" do
     path = File.join(Dir.tempdir, "obsctl-tui-ipc-correlation-#{Random.rand(1_000_000)}.sock")
     server = Obsctl::IPC::UnixServer.new(path)
