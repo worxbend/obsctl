@@ -551,6 +551,7 @@ Implemented:
   - server-pushed state events update the displayed snapshot
   - widgetized ANSI panels for connection, scenes, grouped scene map, audio, recent logs, and command palette
   - viewport-bounded ANSI rendering using terminal `COLUMNS`/`LINES` when available
+  - incremental ANSI row-diff rendering after the initial TUI paint
   - recent server log-topic messages are retained in the TUI model and displayed in the dashboard
   - direct OBS session adapter remains available for explicit embedded-style use/tests
   - reconnect attempts use the configured reconnect policy
@@ -640,7 +641,7 @@ Implemented:
   - not yet a full termisu dashboard
   - `termisu` is available as a Crystal shard, but its upstream README marks it as pre-1.0 and not battle-tested
   - not yet btop/btm-style keyboard-first layout
-  - refreshes on a timer, but rendering is still full-screen ANSI redraw with panelized widgets
+  - refreshes on a timer and uses row-level ANSI diff rendering after the first paint
   - compact recent-log panel displays server log-topic messages
 - OBS client:
   - has a single WebSocket reader channel
@@ -804,11 +805,11 @@ Partial:
 - input controller specs
 - recent server log display
 - viewport-bounded rendering with line truncation
+- incremental/diff rendering after the initial ANSI paint
 
 Remaining:
 
 - termisu app
-- incremental/diff rendering instead of full-screen redraw
 - btop/btm-style layout polish beyond the current bounded ANSI panels
 
 ### Milestone 7: Realtime Events
@@ -832,11 +833,12 @@ Partial:
 - command docs
 - plaintext password warning on `validate-config`
 - viewport-bounded ANSI TUI rendering
+- incremental ANSI TUI renderer backend
 - Makefile
 
 Remaining:
 
-- termisu or incremental renderer backend
+- termisu renderer backend
 - theme file
 - packaging
 - demo config
@@ -891,6 +893,6 @@ Remaining:
 
 ## Planned Next
 
-1. Replace the widgetized ANSI renderer with a `termisu` backend if the pre-1.0 dependency is acceptable for the project.
-2. Add public documentation comments and run lint once dependencies are installed.
-3. Add CLI-level service smoke coverage if CLI dependency injection is introduced later.
+1. Add public documentation comments and run lint once dependencies are installed.
+2. Add CLI-level service smoke coverage if CLI dependency injection is introduced later.
+3. Revisit a `termisu` backend if the pre-1.0 dependency becomes acceptable for the project.

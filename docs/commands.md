@@ -64,7 +64,7 @@ Non-interactive OBS control commands are IPC clients. They connect to the local 
 
 `obsctl dump-config` and `/dump-config` ask the server to fetch OBS scenes/audio inputs and rewrite the config with a backup. Dump writes preserve `server` and `reconnect` settings and fail with a config error if existing aliases or shortcuts would conflict with discovered OBS names.
 
-`obsctl` and `obsctl tui` run the ANSI TUI as an IPC client in normal mode. The TUI subscribes to server state snapshots, OBS events, and server log topics, then forwards palette commands to the same server-owned command executor used by scriptable CLI commands. The dashboard renders connection, scenes, grouped scene map, audio, recent logs, and command palette panels. Rendering is bounded to the current `COLUMNS`/`LINES` terminal size when those environment values are available, so long scene/audio names and large collections do not overflow the viewport.
+`obsctl` and `obsctl tui` run the ANSI TUI as an IPC client in normal mode. The TUI subscribes to server state snapshots, OBS events, and server log topics, then forwards palette commands to the same server-owned command executor used by scriptable CLI commands. The dashboard renders connection, scenes, grouped scene map, audio, recent logs, and command palette panels. Rendering is bounded to the current `COLUMNS`/`LINES` terminal size when those environment values are available, so long scene/audio names and large collections do not overflow the viewport. After the initial full paint, the ANSI backend emits row-level diffs for changed content instead of clearing the whole screen every refresh.
 
 TUI keyboard input:
 

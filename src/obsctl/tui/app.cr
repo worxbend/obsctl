@@ -58,7 +58,7 @@ module Obsctl
 
       private def render(model : Model) : Nil
         width, height = terminal_size
-        @renderer.render(model, STDOUT, width, height)
+        @renderer.render_incremental(model, STDOUT, width, height)
       end
 
       private def read_input(input : Channel(String?)) : Nil

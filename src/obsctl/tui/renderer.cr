@@ -23,13 +23,37 @@ module Obsctl
         @audio_panel = Widgets::AudioPanel.new
         @log_panel = Widgets::LogPanel.new
         @command_palette = Widgets::CommandPalette.new
+        @previous_frame = [] of String
       end
 
       def render(model : Model, io : IO = STDOUT, width : Int32 = DEFAULT_WIDTH, height : Int32 = DEFAULT_HEIGHT) : Nil
         viewport = Viewport.new(width, height)
-        writer = ViewportWriter.new(io, viewport)
+        frame = build_frame(model, viewport)
 
         io.print "\e[2J\e[H"
+        frame.each { |line| io.puts line }
+        @previous_frame = frame
+      end
+
+      def render_incremental(model : Model, io : IO = STDOUT, width : Int32 = DEFAULT_WIDTH, height : Int32 = DEFAULT_HEIGHT) : Nil
+        viewport = Viewport.new(width, height)
+        frame = build_frame(model, viewport)
+        if @previous_frame.empty?
+          io.print "\e[2J\e[H"
+          frame.each { |line| io.puts line }
+        else
+          write_diff(io, @previous_frame, frame, viewport)
+        end
+        @previous_frame = frame
+      end
+
+      def reset : Nil
+        @previous_frame = [] of String
+      end
+
+      private def build_frame(model : Model, viewport : Viewport) : Array(String)
+        writer = FrameWriter.new(viewport)
+
         writer.write_lines(capture(model, @header), max_lines: 2)
         writer.separator
         writer.write_lines(capture(model, @connection_panel), max_lines: 4)
@@ -47,12 +71,27 @@ module Obsctl
         writer.write_lines(capture(model, @log_panel), max_lines: 5)
         writer.separator
         writer.write_lines(capture(model, @command_palette), max_lines: 2)
+        writer.lines
       end
 
       private def capture(model : Model, widget) : Array(String)
         io = IO::Memory.new
         widget.render(model, io)
         io.to_s.lines(chomp: true)
+      end
+
+      private def write_diff(io : IO, previous : Array(String), current : Array(String), viewport : Viewport) : Nil
+        max_lines = {previous.size, current.size}.max
+        max_lines.times do |index|
+          old_line = previous[index]?
+          new_line = current[index]?
+          next if old_line == new_line
+
+          row = index + 1
+          replacement = new_line || ""
+          io.print "\e[#{row};1H"
+          io.print replacement.ljust(viewport.width)
+        end
       end
 
       private record Viewport, width : Int32, height : Int32 do
@@ -62,9 +101,11 @@ module Obsctl
         end
       end
 
-      private class ViewportWriter
-        def initialize(@io : IO, @viewport : Viewport)
-          @line_count = 0
+      private class FrameWriter
+        getter lines : Array(String)
+
+        def initialize(@viewport : Viewport)
+          @lines = [] of String
         end
 
         def write_lines(lines : Array(String), max_lines : Int32) : Nil
@@ -82,10 +123,9 @@ module Obsctl
         end
 
         private def write_line(line : String) : Nil
-          return if @line_count >= @viewport.height
+          return if @lines.size >= @viewport.height
 
-          @io.puts truncate(line)
-          @line_count += 1
+          @lines << truncate(line)
         end
 
         private def truncate(line : String) : String
