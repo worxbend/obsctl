@@ -34,6 +34,10 @@ module Obsctl
 
       getter events
 
+      def connected? : Bool
+        @identified && !@ws.closed?
+      end
+
       def connect : Nil
         @ws = Connection.new(@config.connection).connect
         @ws.on_message { |message| handle_frame(message) }

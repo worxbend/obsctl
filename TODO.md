@@ -583,6 +583,7 @@ Implemented:
   - stale IPC socket cleanup
   - server IPC startup while OBS is unavailable
   - server-owned OBS scene command through IPC
+  - server state transition to disconnected after an established OBS WebSocket closes
   - server state broadcasts to subscribed IPC clients
   - systemd user service unit generation and installer command behavior
 
@@ -592,7 +593,7 @@ Implemented:
   - foreground/headless runtime exists
   - OBS supervisor owns the OBS WebSocket client
   - IPC command executor can control scene/audio and dump/reload config
-  - reconnect loop is basic and does not yet process OBS disconnects after an established connection
+  - reconnect loop detects established OBS WebSocket disconnects, marks state disconnected, clears the stale client, and retries when reconnect is enabled
   - subscription handling maintains a client registry and broadcasts state updates, but does not yet broadcast distinct OBS/log event topics
 - CLI:
   - non-interactive OBS control commands are thin IPC clients
@@ -608,6 +609,7 @@ Implemented:
   - has a single WebSocket reader channel
   - has a pending request map for request/response coordination
   - fails in-flight pending requests promptly when the WebSocket closes or the reader fiber errors
+  - exposes connection state so the server supervisor can detect established WebSocket disconnects
   - event parsing exists and events are routed to a client channel
   - direct embedded-style TUI sessions can consume the event channel, but normal TUI mode consumes server-pushed IPC state
   - reconnect policy is still wired into the TUI session for server reconnects, but not into the low-level OBS client itself
@@ -678,10 +680,10 @@ Done:
 - explicit event channel
 - explicit event subscription options during Identify
 - pending requests fail promptly on WebSocket close or reader failure
+- established WebSocket disconnects are detected and surfaced by the server supervisor loop
 
 Remaining:
 
-- detect and surface established WebSocket disconnects in the server supervisor loop
 - optional low-level client reconnect loop
 
 ### Milestone 3: Scene Control
@@ -833,7 +835,7 @@ Remaining:
 
 ## Planned Next
 
-1. Detect established OBS WebSocket disconnects in the server supervisor and mark state disconnected/reconnect.
-2. Add raw-mode keyboard handling and a real command palette.
-3. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+1. Add raw-mode keyboard handling and a real command palette.
+2. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+3. Add event/log topic broadcast fanout after server-side producers exist.
 4. Add public documentation comments and run lint once dependencies are installed.

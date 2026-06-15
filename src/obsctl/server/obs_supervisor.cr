@@ -30,7 +30,7 @@ module Obsctl
 
       def with_client(&block : OBS::Client -> T) : T forall T
         client = @client_lock.synchronize { @client }
-        raise Domain::ObsUnavailable.new unless client
+        raise Domain::ObsUnavailable.new unless client && client.connected?
         block.call(client)
       end
 
@@ -48,9 +48,8 @@ module Obsctl
             @state.update(client.snapshot)
             attempt = 0
 
-            until @stopped
-              sleep 1.second
-            end
+            wait_for_disconnect(client)
+            raise Domain::ConnectionFailed.new("OBS WebSocket closed") unless @stopped
           rescue ex : Domain::ObsctlError
             @state.mark_disconnected(ex.message)
             client.close if connected
@@ -66,6 +65,12 @@ module Obsctl
             sleep policy.delay_for(attempt)
             attempt += 1
           end
+        end
+      end
+
+      private def wait_for_disconnect(client : OBS::Client) : Nil
+        until @stopped || !client.connected?
+          sleep 250.milliseconds
         end
       end
     end

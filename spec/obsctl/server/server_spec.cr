@@ -144,6 +144,46 @@ describe Obsctl::Server::Server do
     obs.try(&.stop)
     File.delete(path) if path && File.exists?(path)
   end
+
+  it "marks OBS disconnected after an established WebSocket closes while IPC stays available" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    path = temp_socket_path
+    server = Obsctl::Server::Server.new(obs.config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    until File.exists?(path)
+      Fiber.yield
+    end
+
+    client = Obsctl::IPC::UnixClient.new(path)
+    wait_for_obs_connected(client)
+
+    obs.stop
+    status = wait_for_obs_disconnected(client)
+
+    status["connected"].as_bool.should be_false
+    status["last_error"].as_s.should contain("OBS WebSocket closed")
+
+    response = client.request(
+      Obsctl::IPC::Request.new(
+        "req-scene-after-close",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("set_scene", "screen")
+      )
+    )
+    response.ok.should be_false
+    response.error.not_nil!.code.should eq("OBS_UNAVAILABLE")
+  ensure
+    server.try(&.stop)
+    obs.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
 end
 
 private def wait_for_server_identify_data(server : Obsctl::SpecSupport::FakeObsServer) : JSON::Any
@@ -155,4 +195,30 @@ private def wait_for_server_identify_data(server : Obsctl::SpecSupport::FakeObsS
   end
 
   raise "fake OBS server did not receive Identify data"
+end
+
+private def wait_for_obs_connected(client : Obsctl::IPC::UnixClient) : JSON::Any
+  wait_for_obs_status(client, connected: true)
+end
+
+private def wait_for_obs_disconnected(client : Obsctl::IPC::UnixClient) : JSON::Any
+  wait_for_obs_status(client, connected: false)
+end
+
+private def wait_for_obs_status(client : Obsctl::IPC::UnixClient, connected : Bool) : JSON::Any
+  40.times do
+    response = client.request(
+      Obsctl::IPC::Request.new(
+        "req-status-#{connected}",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("get_obs_status")
+      )
+    )
+    response.ok.should be_true
+    status = response.result.not_nil!
+    return status if status["connected"].as_bool == connected
+    sleep 50.milliseconds
+  end
+
+  raise "server did not report OBS connected=#{connected}"
 end
