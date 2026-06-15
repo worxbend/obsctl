@@ -15,6 +15,8 @@ module Obsctl
         config_path = Config::ConfigPaths.default_path
         log_level = "info"
         force = false
+        command = nil.as(String?)
+        args = [] of String
         parser = OptionParser.new do |opts|
           opts.banner = "Usage: obsctl [--config PATH] [command] [args]"
           opts.on("--config PATH", "Path to config.yml") { |path| config_path = path }
@@ -25,15 +27,36 @@ module Obsctl
             exit 0
           end
         end
-        remaining = argv.dup
-        parser.parse(remaining)
+
+        index = 0
+        while index < argv.size
+          arg = argv[index]
+          if arg.starts_with?("-")
+            option_args = [arg]
+            if requires_value?(arg)
+              index += 1
+              option_args << (argv[index]? || "")
+            end
+            parser.parse(option_args)
+          else
+            command = arg
+            args = argv[(index + 1)..]? || [] of String
+            break
+          end
+          index += 1
+        end
+
         Options.new(
           config_path: config_path,
           log_level: log_level,
           force: force,
-          command: remaining[0]?,
-          args: remaining[1..]? || [] of String
+          command: command,
+          args: args
         )
+      end
+
+      private def requires_value?(arg : String) : Bool
+        arg == "--config" || arg == "--log-level"
       end
     end
   end

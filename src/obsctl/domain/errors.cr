@@ -54,6 +54,12 @@ module Obsctl
       end
     end
 
+    class ObsUnavailable < ObsctlError
+      def initialize(message = "OBS is unavailable")
+        super(message, ExitCode::Connection)
+      end
+    end
+
     class SceneNotFound < ObsctlError
       def initialize(target : String)
         super("scene not found: #{target}", ExitCode::ObsRequest)

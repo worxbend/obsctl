@@ -26,7 +26,7 @@ module Obsctl
             session = accept
             spawn handle(session, handler)
           rescue ex : IO::Error
-            raise unless @closed
+            raise ex unless @closed
           end
         end
       ensure
