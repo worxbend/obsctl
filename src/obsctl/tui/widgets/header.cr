@@ -1,7 +1,9 @@
 require "../model"
 
 module Obsctl::TUI::Widgets
+  # Renders compact application and OBS status headers.
   class Header
+    # Writes the header lines to `io`.
     def render(model : Model, io : IO) : Nil
       snapshot = model.snapshot
       status = snapshot.try(&.connected) ? "connected" : "disconnected"

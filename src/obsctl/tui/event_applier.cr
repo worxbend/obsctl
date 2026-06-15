@@ -3,7 +3,10 @@ require "../obs/state/obs_snapshot"
 
 module Obsctl
   module TUI
+    # Applies server-pushed OBS events to an existing TUI snapshot.
     module EventApplier
+      # Returns an updated snapshot for supported event types, otherwise the
+      # original snapshot.
       def self.apply(snapshot : OBS::State::ObsSnapshot, event : OBS::Protocol::Event) : OBS::State::ObsSnapshot
         case event.event_type
         when "CurrentProgramSceneChanged"

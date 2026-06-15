@@ -9,6 +9,7 @@ require "./widgets/scenes_panel"
 
 module Obsctl
   module TUI
+    # ANSI renderer that turns a TUI model into bounded terminal rows.
     class Renderer
       DEFAULT_WIDTH  = 72
       DEFAULT_HEIGHT = 24
@@ -26,6 +27,7 @@ module Obsctl
         @previous_frame = [] of String
       end
 
+      # Writes a full-screen frame and resets the previous-frame cache.
       def render(model : Model, io : IO = STDOUT, width : Int32 = DEFAULT_WIDTH, height : Int32 = DEFAULT_HEIGHT) : Nil
         viewport = Viewport.new(width, height)
         frame = build_frame(model, viewport)
@@ -35,6 +37,7 @@ module Obsctl
         @previous_frame = frame
       end
 
+      # Writes only changed rows after the first full frame.
       def render_incremental(model : Model, io : IO = STDOUT, width : Int32 = DEFAULT_WIDTH, height : Int32 = DEFAULT_HEIGHT) : Nil
         viewport = Viewport.new(width, height)
         frame = build_frame(model, viewport)
@@ -47,6 +50,7 @@ module Obsctl
         @previous_frame = frame
       end
 
+      # Clears the previous-frame cache so the next incremental render repaints.
       def reset : Nil
         @previous_frame = [] of String
       end

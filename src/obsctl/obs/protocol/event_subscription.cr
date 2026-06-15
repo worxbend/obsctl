@@ -1,6 +1,7 @@
 module Obsctl
   module OBS
     module Protocol
+      # obs-websocket event subscription bit masks.
       module EventSubscription
         NONE         = 0
         GENERAL      = 1 << 0

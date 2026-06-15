@@ -18,6 +18,7 @@ require "../domain/aliases"
 
 module Obsctl
   module OBS
+    # obs-websocket 5.x client used by the server-owned OBS supervisor.
     class Client
       def initialize(
         @config : Config::Config,
@@ -32,12 +33,16 @@ module Obsctl
         @pending_lock = Mutex.new
       end
 
+      # Channel of parsed OBS events from opcode 5 frames.
       getter events
 
+      # Returns true after Identify completes and the underlying socket is open.
       def connected? : Bool
         @identified && !@ws.closed?
       end
 
+      # Opens the WebSocket, performs Hello/Identify/Identified, and starts the
+      # reader fiber used for events and request responses.
       def connect : Nil
         @ws = Connection.new(@config.connection).connect
         @ws.on_message { |message| handle_frame(message) }
@@ -54,12 +59,15 @@ module Obsctl
         @identified = true
       end
 
+      # Closes the WebSocket and marks this client as no longer identified.
       def close : Nil
         @identified = false
         @ws.close unless @ws.closed?
       rescue
       end
 
+      # Sends a typed obs-websocket request frame and waits for the matching
+      # request ID response or timeout.
       def request(request_type : String, data : JSON::Any? = nil) : Protocol::Response
         raise Domain::ConnectionFailed.new("OBS client is not identified") unless @identified
         id = @request_ids.next
@@ -86,34 +94,41 @@ module Obsctl
         @pending_lock.synchronize { @pending.delete(id) } if id
       end
 
+      # Fetches OBS and obs-websocket version metadata.
       def version : JSON::Any
         request(Requests::Version::GET_VERSION).response_data || JSON.parse("{}")
       end
 
+      # Returns the current OBS scene names in OBS order.
       def scene_names : Array(String)
         data = request(Requests::Scenes::GET_SCENE_LIST).response_data || JSON.parse("{}")
         data["scenes"].as_a.map { |scene| scene["sceneName"].as_s }
       end
 
+      # Returns the current OBS program scene name when available.
       def current_scene : String?
         data = request(Requests::Scenes::GET_CURRENT_PROGRAM_SCENE).response_data || JSON.parse("{}")
         data["currentProgramSceneName"]?.try(&.as_s)
       end
 
+      # Changes the current OBS program scene by exact OBS scene name.
       def set_scene(name : String) : Nil
         request(Requests::Scenes::SET_CURRENT_PROGRAM_SCENE, Requests::Scenes.set_current_program_scene(name))
       end
 
+      # Returns current OBS input names.
       def input_names : Array(String)
         data = request(Requests::Audio::GET_INPUT_LIST).response_data || JSON.parse("{}")
         data["inputs"].as_a.map { |input| input["inputName"].as_s }
       end
 
+      # Returns mute state for an OBS input by exact OBS input name.
       def input_muted(name : String) : Bool?
         data = request(Requests::Audio::GET_INPUT_MUTE, Requests::Audio.input_name(name)).response_data || JSON.parse("{}")
         data["inputMuted"]?.try(&.as_bool)
       end
 
+      # Returns OBS input volume in multiplier, dB, and user-facing percent.
       def input_volume(name : String) : NamedTuple(mul: Float64?, db: Float64?, percent: Int32?)
         data = request(Requests::Audio::GET_INPUT_VOLUME, Requests::Audio.input_name(name)).response_data || JSON.parse("{}")
         mul = number(data, "inputVolumeMul")
@@ -122,18 +137,22 @@ module Obsctl
         {mul: mul, db: db, percent: percent}
       end
 
+      # Sets mute state for an OBS input by exact OBS input name.
       def mute(name : String, muted : Bool) : Nil
         request(Requests::Audio::SET_INPUT_MUTE, Requests::Audio.set_mute(name, muted))
       end
 
+      # Toggles mute state for an OBS input by exact OBS input name.
       def toggle_mute(name : String) : Nil
         request(Requests::Audio::TOGGLE_INPUT_MUTE, Requests::Audio.input_name(name))
       end
 
+      # Sets OBS input volume using a user-facing 0-100 percentage.
       def set_volume(name : String, percent : Int32) : Nil
         request(Requests::Audio::SET_INPUT_VOLUME, Requests::Audio.set_volume(name, Domain::Aliases.volume_percent_to_mul(percent)))
       end
 
+      # Fetches a full state snapshot for publication to local IPC clients.
       def snapshot : State::ObsSnapshot
         version_data = version
         current = current_scene

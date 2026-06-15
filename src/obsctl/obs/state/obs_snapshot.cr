@@ -5,6 +5,7 @@ require "./output_state"
 module Obsctl
   module OBS
     module State
+      # Authoritative OBS state snapshot distributed by the local server.
       record ObsSnapshot,
         connected : Bool,
         obs_studio_version : String?,

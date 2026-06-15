@@ -8,25 +8,43 @@ require "../obs/state/obs_snapshot"
 
 module Obsctl
   module TUI
+    # Boundary used by TUI sessions for state, commands, and pushed events.
     abstract class SessionClient
+      # Opens the underlying session and prepares it for commands.
       abstract def connect : Nil
+      # Closes the underlying session.
       abstract def close : Nil
+      # Returns the current full OBS snapshot.
       abstract def snapshot : OBS::State::ObsSnapshot
+      # Requests a scene change by user target.
       abstract def set_scene(target : String) : Nil
+      # Requests a mute-state change by user target.
       abstract def mute(target : String, muted : Bool) : Nil
+      # Requests a mute toggle by user target.
       abstract def toggle_mute(target : String) : Nil
+      # Requests a volume change by user target and 0-100 percent.
       abstract def set_volume(target : String, percent : Int32) : Nil
+      # Returns scene names from the current snapshot/source.
       abstract def scene_names : Array(String)
+      # Returns audio input names from the current snapshot/source.
       abstract def input_names : Array(String)
+      # Returns the next pushed OBS event when available.
       abstract def next_event : OBS::Protocol::Event?
+      # Returns the next pushed state snapshot when available.
       abstract def next_snapshot : OBS::State::ObsSnapshot?
+      # Returns the next pushed server log message when available.
       abstract def next_log : String?
+      # Requests server-side config dumping.
       abstract def dump_config : Nil
+      # Requests server-side config reload.
       abstract def reload_config : Nil
+      # Requests server-owned OBS reconnection.
       abstract def reconnect_obs : Nil
+      # Requests server-side config validation.
       abstract def validate_config : Nil
     end
 
+    # Direct OBS adapter retained for explicit embedded-style sessions and tests.
     class ObsSessionClient < SessionClient
       def initialize(@config : Config::Config)
         @client = OBS::Client.new(@config)
@@ -104,6 +122,7 @@ module Obsctl
       end
     end
 
+    # Normal TUI client that subscribes and sends commands over local IPC.
     class IpcSessionClient < SessionClient
       def initialize(@client : IPC::UnixClient = IPC::UnixClient.new)
         @session = nil.as(IPC::ClientSession?)
@@ -116,6 +135,8 @@ module Obsctl
         @sequence = 0
       end
 
+      # Connects to the local server, subscribes to state/events/logs, and starts
+      # a reader fiber for pushed messages and command responses.
       def connect : Nil
         close
         session = @client.connect
@@ -133,6 +154,7 @@ module Obsctl
         raise Domain::ServerUnavailable.new
       end
 
+      # Closes the IPC session.
       def close : Nil
         @session.try(&.close)
       rescue
@@ -140,6 +162,7 @@ module Obsctl
         @session = nil
       end
 
+      # Returns the latest pushed snapshot, requesting one if none has arrived.
       def snapshot : OBS::State::ObsSnapshot
         drain_messages
         existing = @snapshot
@@ -149,57 +172,70 @@ module Obsctl
         snapshot_from_json(result)
       end
 
+      # Sends a scene-change command to the local server.
       def set_scene(target : String) : Nil
         send_command("set_scene", target)
       end
 
+      # Sends a mute or unmute command to the local server.
       def mute(target : String, muted : Bool) : Nil
         send_command(muted ? "mute" : "unmute", target)
       end
 
+      # Sends a toggle-mute command to the local server.
       def toggle_mute(target : String) : Nil
         send_command("toggle_mute", target)
       end
 
+      # Sends a volume command to the local server.
       def set_volume(target : String, percent : Int32) : Nil
         send_command("set_volume", target, percent)
       end
 
+      # Returns scene names from the latest server snapshot.
       def scene_names : Array(String)
         snapshot.scenes.map(&.name)
       end
 
+      # Returns input names from the latest server snapshot.
       def input_names : Array(String)
         snapshot.audio_inputs.map(&.name)
       end
 
+      # Returns the next queued OBS event from server fanout.
       def next_event : OBS::Protocol::Event?
         drain_messages
         @events.shift?
       end
 
+      # Returns the latest pushed server state snapshot.
       def next_snapshot : OBS::State::ObsSnapshot?
         drain_messages
         @snapshot
       end
 
+      # Returns the next queued server log message.
       def next_log : String?
         drain_messages
         @logs.shift?
       end
 
+      # Requests server-side dump-config execution.
       def dump_config : Nil
         send_command("dump_config")
       end
 
+      # Requests server-side config reload.
       def reload_config : Nil
         send_command("reload_config")
       end
 
+      # Requests explicit OBS reconnection from the server.
       def reconnect_obs : Nil
         send_command("reconnect_obs")
       end
 
+      # Requests server-side config validation.
       def validate_config : Nil
         send_command("validate_config")
       end

@@ -5,6 +5,7 @@ require "../domain/errors"
 
 module Obsctl
   module OBS
+    # Opens the raw obs-websocket transport for an OBS connection config.
     class Connection
       getter websocket
 
@@ -12,6 +13,7 @@ module Obsctl
         @websocket = uninitialized HTTP::WebSocket
       end
 
+      # Connects to OBS and converts low-level connection failures into a domain error.
       def connect : HTTP::WebSocket
         uri = URI.parse("ws://#{@config.host}:#{@config.port}")
         @websocket = HTTP::WebSocket.new(uri)

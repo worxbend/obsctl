@@ -6,11 +6,13 @@ require "./input/keymap"
 
 module Obsctl
   module TUI
+    # Interactive ANSI TUI application loop.
     class App
       def initialize(@config : Config::Config, @config_path : String)
         @renderer = Renderer.new
       end
 
+      # Runs the TUI until the user quits and returns a process exit code.
       def run : Int32
         session = Session.new(@config, @config_path)
         input_controller = Input::Controller.new(Input::Keymap.new(@config.keymap), @config.ui.command_palette_prefix)

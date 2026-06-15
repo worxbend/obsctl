@@ -11,8 +11,10 @@ require "../runtime/reconnect_policy"
 
 module Obsctl
   module TUI
+    # Result of executing one TUI command.
     record SessionResult, model : Model, quit : Bool = false
 
+    # Stateful TUI application session that talks to a `SessionClient`.
     class Session
       getter config
 
@@ -32,10 +34,12 @@ module Obsctl
         @next_reconnect_at = nil.as(Time?)
       end
 
+      # Connects the session client and returns the initial model.
       def start : Model
         connect_with_current_config("Enter command, /quit to exit.")
       end
 
+      # Parses and executes one command-palette line.
       def execute_line(line : String) : SessionResult
         drain_events
         command = @parser.parse(line)
@@ -44,6 +48,7 @@ module Obsctl
         SessionResult.new(model_with_result(ex.message || "command failed"))
       end
 
+      # Drains pushed server state/events/logs and performs scheduled reconnects.
       def poll_events : Model
         changed = drain_events
         return model_with_result("state updated") if changed
@@ -52,6 +57,7 @@ module Obsctl
         model_with_result(@last_result)
       end
 
+      # Executes an already parsed command.
       def execute(command : Domain::Command) : SessionResult
         case command
         when Domain::QuitCommand
@@ -99,6 +105,7 @@ module Obsctl
         SessionResult.new(model_with_result(ex.message || "command failed"))
       end
 
+      # Closes the current session client.
       def close : Nil
         @client.try(&.close)
       rescue

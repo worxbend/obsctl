@@ -1,7 +1,9 @@
 require "../model"
 
 module Obsctl::TUI::Widgets
+  # Renders current server/OBS connection status.
   class ConnectionPanel
+    # Writes the connection panel to `io`.
     def render(model : Model, io : IO) : Nil
       snapshot = model.snapshot
       io.puts "Connection"

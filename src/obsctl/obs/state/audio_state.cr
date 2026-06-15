@@ -1,6 +1,7 @@
 module Obsctl
   module OBS
     module State
+      # Snapshot row for one OBS audio input.
       record AudioState,
         name : String,
         alias : String? = nil,

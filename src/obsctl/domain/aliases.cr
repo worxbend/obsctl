@@ -3,11 +3,15 @@ require "./errors"
 
 module Obsctl
   module Domain
+    # Resolves user targets against configured aliases, shortcuts, and OBS names.
     module Aliases
+      # Resolves a scene target using shortcut, alias, name, then case-insensitive
+      # alias/name matching.
       def self.resolve_scene(config : Config::Config, target : String) : Config::SceneConfig
         resolve(config.scenes, target, "scene") { |entry| {entry.shortcut, entry.alias, entry.name} }
       end
 
+      # Resolves an audio target using the same priority as scene resolution.
       def self.resolve_audio(config : Config::Config, target : String) : Config::AudioInputConfig
         resolve(config.audio.inputs, target, "audio input") { |entry| {entry.shortcut, entry.alias, entry.name} }
       end
@@ -41,6 +45,7 @@ module Obsctl
         end
       end
 
+      # Converts user-facing 0-100 volume to obs-websocket multiplier form.
       def self.volume_percent_to_mul(percent : Int32) : Float64
         percent.to_f64 / 100.0
       end
