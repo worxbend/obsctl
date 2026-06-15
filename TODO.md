@@ -627,7 +627,7 @@ Implemented:
   - subscription handling maintains a client registry and broadcasts state, OBS event, and log topic updates
 - CLI:
   - non-interactive OBS control commands are thin IPC clients
-  - `server-status` exists with PID, connected state, last error, and subscribed client count
+  - `server-status` exists with PID, uptime, socket path, connected state, reconnecting state, last error, and subscribed client count
   - `obs-status`, `reconnect`, and guarded `shutdown-server` are thin IPC client commands
 - TUI:
   - currently a simple ANSI dashboard with raw key input and a command palette state machine
@@ -848,6 +848,7 @@ Done:
 - non-interactive CLI command proxying through local IPC
 - missing-server CLI exit behavior and startup/service instructions
 - `server-status` command path
+- full `server-status` payload and CLI formatting for PID, uptime, socket path, subscribed client count, OBS connection state, reconnecting state, and last error
 - persistent client registry and state broadcast fanout for subscriptions
 - TUI IPC session client with subscription acknowledgement, initial state handling, command forwarding, and server-pushed state updates
 - event/log topic broadcast fanout for server-side OBS events and command failures

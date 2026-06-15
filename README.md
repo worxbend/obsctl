@@ -54,6 +54,8 @@ obsctl service start|stop|restart|status|uninstall
 
 Except for `init`, `validate-config`, `server`, and `service`, scriptable OBS-control commands are thin IPC clients. Start `obsctl server --headless` first; if the server is missing, commands print startup/service instructions and exit `3`. `shutdown-server` is disabled unless `server.allow_remote_shutdown: true` is set.
 
+`obsctl server-status` reports only the local daemon status: PID, uptime, socket path, subscribed client count, OBS connection state, reconnecting state, and last error.
+
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
 The TUI is also a local IPC client in normal mode. It subscribes to server state, OBS event, and log updates, and sends palette commands through the server using the same grammar with a leading slash, for example `/scene main`, `/mute mic`, `/vol mic 70`, `/validate-config`, and `/reconnect`. The current ANSI dashboard is split into connection, scenes, scene map, audio, recent logs, and command palette panels. In a terminal, `/` or `:` opens the command palette, `Esc` cancels editing, `Enter` submits, `q` quits from the dashboard, `r` reloads config, and `D` dumps config through the server.
