@@ -165,3 +165,19 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:47:44Z iteration 9 validation started
+2026-06-15T18:47:53Z iteration 9 committed
+2026-06-15T18:47:56Z iteration 9 pushed
+2026-06-15T18:47:56Z iteration 10 started
+
+## 2026-06-15 Server OBS disconnect detection
+
+- Added OBS client connection-state reporting and changed the server supervisor to monitor established WebSocket sessions after the initial snapshot.
+- Server state now transitions to disconnected when OBS closes after a successful connection, clears the stale client, keeps IPC available, and retries when reconnect is enabled.
+- Hardened the fake OBS server so tests can close accepted WebSocket sessions deterministically.
+- Added server coverage proving IPC status remains available after an established OBS disconnect and scene commands return `OBS_UNAVAILABLE`.
+- Updated `TODO.md`; next planned slice is raw-mode keyboard handling and a real command palette.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

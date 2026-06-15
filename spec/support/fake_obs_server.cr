@@ -20,6 +20,7 @@ module Obsctl
       @mutex = Mutex.new
       @identify_data = nil.as(JSON::Any?)
       @request_notifications = Channel(String).new(16)
+      @websockets = [] of HTTP::WebSocket
 
       def initialize(
         @scenes : Array(String) = ["Main Camera", "Screen Share", "BRB"],
@@ -45,6 +46,15 @@ module Obsctl
 
       def stop : Nil
         @server.close
+        sockets = @mutex.synchronize do
+          existing = @websockets.dup
+          @websockets.clear
+          existing
+        end
+        sockets.each do |websocket|
+          websocket.close
+        rescue
+        end
       rescue
       end
 
@@ -90,6 +100,10 @@ module Obsctl
 
       private def websocket_handler : HTTP::WebSocketHandler
         HTTP::WebSocketHandler.new do |websocket, _context|
+          @mutex.synchronize { @websockets << websocket }
+          websocket.on_close do
+            @mutex.synchronize { @websockets.delete(websocket) }
+          end
           websocket.send(hello_frame)
           websocket.on_message do |message|
             handle_message(websocket, message)
