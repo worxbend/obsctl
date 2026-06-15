@@ -3,6 +3,7 @@ require "../domain/errors"
 
 module Obsctl
   module Config
+    # Reconnect policy loaded from the top-level `reconnect` config section.
     record ReconnectConfig,
       enabled : Bool = true,
       endless : Bool = true,
@@ -11,12 +12,14 @@ module Obsctl
       multiplier : Float64 = 1.8,
       jitter_ms : Int32 = 250
 
+    # Local daemon options that affect server IPC and lifecycle behavior.
     record ServerConfig,
       socket_path : String? = nil,
       pid_file : String? = nil,
       allow_remote_shutdown : Bool = false,
       start_embedded_if_missing : Bool = true
 
+    # obs-websocket connection settings read only by server or embedded clients.
     record ConnectionConfig,
       host : String = "127.0.0.1",
       port : Int32 = 4455,
@@ -26,12 +29,14 @@ module Obsctl
       request_timeout_ms : Int32 = 2500,
       reconnect : ReconnectConfig? = nil
 
+    # TUI presentation settings that are safe for clients to consume.
     record UiConfig,
       refresh_interval_ms : Int32 = 250,
       command_palette_prefix : String = "/",
       show_icons : Bool = true,
       theme : String = "default"
 
+    # User configuration for one OBS scene and its local aliases.
     record SceneConfig,
       name : String,
       alias : String? = nil,
@@ -39,6 +44,7 @@ module Obsctl
       group : String? = nil,
       stale : Bool = false
 
+    # User configuration for one OBS audio input and its local aliases.
     record AudioInputConfig,
       name : String,
       alias : String? = nil,
@@ -46,14 +52,17 @@ module Obsctl
       kind : String = "input",
       stale : Bool = false
 
+    # Collection of configured OBS audio inputs.
     record AudioConfig, inputs : Array(AudioInputConfig) = [] of AudioInputConfig
 
+    # Keyboard bindings used by the ANSI TUI controller.
     record KeymapConfig,
       quit : Array(String) = ["q", "ctrl+c"],
       command_palette : Array(String) = ["/", ":"],
       reload_config : Array(String) = ["r"],
       dump_config : Array(String) = ["D"]
 
+    # Parsed obsctl configuration with canonical top-level server and reconnect sections.
     class Config
       ALLOWED_TOP_LEVEL_KEYS = Set{
         "version",
@@ -75,6 +84,8 @@ module Obsctl
       property audio : AudioConfig
       property keymap : KeymapConfig
 
+      # Builds a config object, migrating legacy `connection.reconnect` into the
+      # canonical top-level `reconnect` field when present.
       def initialize(
         @version : Int32 = 1,
         @server : ServerConfig = ServerConfig.new,
@@ -90,10 +101,13 @@ module Obsctl
         end
       end
 
+      # Returns the built-in default configuration used by `obsctl init`.
       def self.default : self
         new
       end
 
+      # Parses YAML into the typed config model and rejects unsupported top-level
+      # keys so writes cannot silently discard user data.
       def self.from_yaml(yaml : String) : self
         any = YAML.parse(yaml)
         root = any.as_h
@@ -117,6 +131,8 @@ module Obsctl
         )
       end
 
+      # Writes the config in the canonical schema, including top-level
+      # `server` and `reconnect` sections.
       def to_yaml(io : IO) : Nil
         YAML.build(io) do |yaml|
           yaml.mapping do
@@ -199,6 +215,7 @@ module Obsctl
         end
       end
 
+      # Serializes the config to canonical YAML.
       def to_yaml : String
         String.build { |io| to_yaml(io) }
       end

@@ -571,6 +571,9 @@ Implemented:
   - reconnect policy
   - scheduler
   - event loop placeholder
+- Public documentation comments:
+  - IPC, server, runtime, and systemd service public boundary types
+  - config, OBS, domain, and TUI public boundary types
 - Documentation:
   - `README.md`
   - `docs/config.md`
@@ -835,6 +838,7 @@ Partial:
 - viewport-bounded ANSI TUI rendering
 - incremental ANSI TUI renderer backend
 - public documentation comments for IPC, server, runtime, and systemd service public boundary types
+- public documentation comments for config, OBS, domain, and TUI public boundary types
 - Makefile
 
 Remaining:
@@ -844,7 +848,6 @@ Remaining:
 - packaging
 - demo config
 - ameba lint wiring after dependency install
-- public module documentation comments for config, OBS, domain, and TUI surfaces
 
 ### Milestone 9: Local IPC
 
@@ -894,6 +897,6 @@ Remaining:
 
 ## Planned Next
 
-1. Continue public documentation comments for config, OBS, domain, and TUI public APIs.
-2. Add CLI-level service smoke coverage if CLI dependency injection is introduced later.
-3. Revisit a `termisu` backend if the pre-1.0 dependency becomes acceptable for the project.
+1. Add CLI-level service smoke coverage if CLI dependency injection is introduced later.
+2. Revisit a `termisu` backend if the pre-1.0 dependency becomes acceptable for the project.
+3. Prepare demo config and packaging polish.

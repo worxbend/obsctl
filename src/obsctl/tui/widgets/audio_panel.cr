@@ -1,7 +1,9 @@
 require "../model"
 
 module Obsctl::TUI::Widgets
+  # Renders OBS audio input state rows.
   class AudioPanel
+    # Writes the audio panel to `io`.
     def render(model : Model, io : IO) : Nil
       io.puts "Audio"
       inputs = model.snapshot.try(&.audio_inputs) || [] of ::Obsctl::OBS::State::AudioState

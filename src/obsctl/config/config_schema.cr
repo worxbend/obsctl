@@ -3,7 +3,10 @@ require "../domain/errors"
 
 module Obsctl
   module Config
+    # Validates loaded config and returns safe warnings for non-fatal issues.
     module ConfigSchema
+      # Raises `Domain::ConfigInvalid` when config values would make runtime
+      # behavior ambiguous, unsafe, or impossible.
       def self.validate!(config : Config) : Nil
         raise Domain::ConfigInvalid.new("unsupported config version: #{config.version}") unless config.version == 1
         raise Domain::ConfigInvalid.new("host cannot be empty") if config.connection.host.blank?
@@ -46,6 +49,8 @@ module Obsctl
         duplicates(config.audio.inputs.compact_map(&.shortcut), "duplicate audio shortcut")
       end
 
+      # Returns secret-safe warnings for valid configs that still deserve user
+      # attention, such as plaintext password storage.
       def self.warnings(config : Config) : Array(String)
         warnings = [] of String
         if password = config.connection.password

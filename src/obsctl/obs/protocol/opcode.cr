@@ -1,6 +1,7 @@
 module Obsctl
   module OBS
     module Protocol
+      # Known obs-websocket 5.x opcodes used by obsctl.
       enum Opcode
         Hello           = 0
         Identify        = 1

@@ -1,7 +1,9 @@
 require "../model"
 
 module Obsctl::TUI::Widgets
+  # Renders grouped scene names with the active scene marker.
   class SceneMapPanel
+    # Writes the scene map panel to `io`.
     def render(model : Model, io : IO) : Nil
       io.puts "Scene Map"
       scenes = model.snapshot.try(&.scenes) || [] of ::Obsctl::OBS::State::SceneState

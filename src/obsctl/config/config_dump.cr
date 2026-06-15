@@ -3,7 +3,10 @@ require "../domain/errors"
 
 module Obsctl
   module Config
+    # Merges discovered OBS resources into existing user config.
     module ConfigDump
+      # Preserves user aliases/shortcuts/groups, marks missing resources stale,
+      # adds newly discovered resources, and validates collisions before write.
       def self.merge(config : Config, scene_names : Array(String), input_names : Array(String)) : Config
         scene_set = scene_names.to_set
         input_set = input_names.to_set

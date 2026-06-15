@@ -388,3 +388,16 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:51:23Z iteration 23 validation started
+2026-06-15T19:51:35Z iteration 23 committed
+2026-06-15T19:51:37Z iteration 23 pushed
+2026-06-15T19:51:37Z iteration 24 started
+
+## 2026-06-15 Config/OBS/domain/TUI documentation pass
+
+- Added focused public documentation comments for config schema/value types, OBS client/protocol/state helpers, domain command/error/alias types, and TUI session/input/rendering/widget boundaries.
+- Updated `TODO.md` to mark the config, OBS, domain, and TUI public API documentation slice complete and move planned next work to optional service smoke coverage, termisu evaluation, demo config, and packaging polish.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)
