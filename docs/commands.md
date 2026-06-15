@@ -4,6 +4,8 @@ Palette commands start with `/`. Non-interactive CLI commands map to the same ty
 
 Required commands:
 
+- `obsctl server`
+- `obsctl server --headless`
 - `/help`
 - `/set-scene <alias|shortcut|obs-name>`
 - `/scene <alias|shortcut|obs-name>`
@@ -19,3 +21,5 @@ Required commands:
 - `/quit`
 
 Quoted names are preserved: `/scene "Main Camera"`.
+
+`obsctl server` starts the foreground local server and owns the OBS WebSocket connection. `obsctl server --headless` runs the same server without interactive UI and is intended for a future `systemd --user` service.

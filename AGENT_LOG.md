@@ -33,3 +33,20 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:11:16Z iteration 1 validation started
+2026-06-15T18:11:23Z iteration 1 committed
+2026-06-15T18:11:25Z iteration 1 pushed
+2026-06-15T18:11:25Z iteration 2 started
+
+## 2026-06-15 Server runtime scaffold
+
+- Added `src/obsctl/server/` with foreground/headless server options, state store, OBS supervisor fiber, command executor, and Unix socket IPC session handling.
+- Wired `obsctl server` and `obsctl server --headless` into the CLI while leaving existing direct CLI commands unchanged for the next proxy-conversion slice.
+- Adjusted CLI option parsing so command-specific flags such as `server --headless` are preserved for command handlers.
+- Added server specs covering IPC availability when OBS is unavailable and scene changes through the server-owned OBS client.
+- Fixed Unix server accept-loop re-raise now that the blocking listen path is compiled by server runtime.
+- Updated `TODO.md` and command docs; next planned slice is CLI command proxying through local IPC.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

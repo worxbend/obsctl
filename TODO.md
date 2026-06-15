@@ -497,6 +497,15 @@ Implemented:
   - stale socket cleanup before server bind
   - active socket detection before server bind
   - socket mode tightened to `0600`
+- Server runtime scaffold:
+  - `obsctl server`
+  - `obsctl server --headless`
+  - foreground Unix socket IPC accept loop
+  - authoritative state store with disconnected snapshot
+  - OBS supervisor fiber that owns the OBS WebSocket client
+  - command executor for status/snapshot, scene/audio commands, dump-config, and reload-config
+  - subscription acknowledgement with an initial state event
+  - IPC remains available when OBS is unavailable
 - Minimal ANSI TUI scaffold:
   - dashboard render
   - scenes panel output
@@ -545,9 +554,17 @@ Implemented:
   - IPC socket path resolution
   - IPC Unix socket request/response round trip
   - stale IPC socket cleanup
+  - server IPC startup while OBS is unavailable
+  - server-owned OBS scene command through IPC
 
 ## Partial
 
+- Server:
+  - foreground/headless runtime exists
+  - OBS supervisor owns the OBS WebSocket client
+  - IPC command executor can control scene/audio and dump/reload config
+  - reconnect loop is basic and does not yet process OBS disconnects after an established connection
+  - subscription handling sends an initial state event, but does not yet maintain a client registry for broadcasts
 - TUI:
   - currently a simple ANSI dashboard and line-based command loop
   - not yet a full termisu dashboard
@@ -578,9 +595,9 @@ Implemented:
 
 ## Not Yet Implemented
 
-- `server/` foreground/headless runtime.
 - CLI command proxying through local IPC.
 - TUI subscription through local IPC.
+- Server client registry and broadcast fanout.
 - Full termisu integration.
 - Command palette UI with proper in-place editing.
 - Keyboard shortcuts outside line-based command input.
@@ -748,21 +765,24 @@ Done:
 - Unix client/session wrappers
 - Unix server primitive with stale socket cleanup and active socket detection
 - IPC specs for codec, path resolution, and socket round trip
+- server runtime integration with IPC accept loop
+- initial server command execution over IPC
 
 Remaining:
 
-- integrate IPC into the server runtime
+- add persistent client registry and broadcast fanout for subscriptions
 - add request correlation helpers for long-lived clients if needed by TUI subscriptions
 
 ## Planned Next
 
-1. Introduce `server/` with foreground `obsctl server --headless`, authoritative state store, command executor, and OBS supervisor.
-2. Convert non-interactive CLI commands to thin IPC clients; direct OBS access only remains for server/embedded mode.
-3. Convert TUI to subscribe to server state/events over IPC; remove normal direct OBS access from TUI.
-4. Add systemd user service install/uninstall/status/start/stop/restart support.
-5. Add explicit OBS event subscription options during Identify in server mode.
-6. Add dump-config CLI integration coverage through the server.
-7. Improve close/error handling for pending requests and WebSocket shutdown.
-8. Add raw-mode keyboard handling and a real command palette.
-9. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-10. Add public documentation comments and run lint once dependencies are installed.
+1. Convert non-interactive CLI commands to thin IPC clients; direct OBS access only remains for server/embedded mode.
+2. Add server-status and missing-server CLI behavior with exit code `3` and startup/service instructions.
+3. Add persistent server client registry and state/event broadcast fanout for subscriptions.
+4. Convert TUI to subscribe to server state/events over IPC; remove normal direct OBS access from TUI.
+5. Add systemd user service install/uninstall/status/start/stop/restart support.
+6. Add explicit OBS event subscription options during Identify in server mode.
+7. Add dump-config CLI integration coverage through the server.
+8. Improve close/error handling for pending requests and WebSocket shutdown.
+9. Add raw-mode keyboard handling and a real command palette.
+10. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+11. Add public documentation comments and run lint once dependencies are installed.

@@ -5,6 +5,8 @@ require "../config/config_writer"
 require "../config/config_schema"
 require "../domain/command_parser"
 require "../domain/errors"
+require "../server/server"
+require "../server/server_options"
 require "../tui/app"
 
 module Obsctl
@@ -27,6 +29,12 @@ module Obsctl
           Config::ConfigLoader.new.load(options.config_path)
           puts "config valid: #{options.config_path}"
           return 0
+        end
+
+        if command == "server"
+          config = Config::ConfigLoader.new.load(options.config_path)
+          server_options = Server::ServerOptions.new(headless: options.args.includes?("--headless"))
+          return Server::Server.new(config, options.config_path, server_options).run
         end
 
         config = load_config_for(command, options.config_path)
