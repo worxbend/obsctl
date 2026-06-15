@@ -63,7 +63,10 @@ CLI client mode:
 - `obsctl server --headless`: starts foreground headless server for systemd service execution.
 - `obsctl server --daemon`: optional later; prefer systemd user services.
 - `obsctl status`: sends status request to local server.
+- `obsctl obs-status`: sends OBS status request to local server.
 - `obsctl server-status`: checks only the local obsctl server, not OBS.
+- `obsctl reconnect`: asks the server to reconnect its OBS WebSocket session.
+- `obsctl shutdown-server`: asks the server to stop; disabled unless `server.allow_remote_shutdown` is true.
 - `obsctl scene <alias|shortcut|obs-name>`: sends scene-change request to server.
 - `obsctl mute <audio-target>`: sends mute request to server.
 - `obsctl unmute <audio-target>`: sends unmute request to server.
@@ -409,7 +412,10 @@ Implemented:
   - `obsctl volume <target> <0-100>`
   - `obsctl vol <target> <0-100>`
   - `obsctl status`
+  - `obsctl obs-status`
   - `obsctl server-status`
+  - `obsctl reconnect`
+  - `obsctl shutdown-server` (guarded by `server.allow_remote_shutdown`)
   - non-interactive OBS control commands are thin IPC clients and return exit `3` with startup/service instructions when the local server is missing
 - Command palette parser for:
   - `/help`
@@ -422,6 +428,10 @@ Implemented:
   - `/dump-config`
   - `/reload-config`
   - `/status`
+  - `/obs-status`
+  - `/server-status`
+  - `/validate-config`
+  - `/reconnect`
   - `/connect`
   - `/disconnect`
   - `/quit`
@@ -511,13 +521,14 @@ Implemented:
   - authoritative state store with disconnected snapshot
   - OBS supervisor fiber that owns the OBS WebSocket client
   - command executor for status/snapshot, scene/audio commands, dump-config, and reload-config
+  - command executor for validate-config, OBS reconnect requests, and guarded shutdown
   - subscription acknowledgement with an initial state event
   - persistent client registry for subscribed IPC sessions
   - state snapshot broadcast fanout after server-side OBS state changes
   - IPC remains available when OBS is unavailable
   - configured `server.socket_path` is honored by server, CLI clients, and TUI clients
 - CLI IPC proxying:
-  - non-interactive `status`, `server-status`, `scene`, `mute`, `unmute`, `toggle-mute`, `vol`/`volume`, `dump-config`, and `reload-config` commands send typed IPC requests
+  - non-interactive `status`, `obs-status`, `server-status`, `reconnect`, `shutdown-server`, `scene`, `mute`, `unmute`, `toggle-mute`, `vol`/`volume`, `dump-config`, and `reload-config` commands send typed IPC requests
   - CLI no longer creates an OBS WebSocket client for normal scriptable OBS-control commands
   - missing local server prints startup/service instructions and exits `3`
 - Minimal ANSI TUI scaffold:
@@ -532,6 +543,7 @@ Implemented:
   - normal TUI sessions subscribe to server state over local IPC
   - TUI scene/audio commands are sent to the server over IPC
   - TUI `/reload-config` and `/dump-config` are server-performed IPC commands
+  - TUI `/validate-config` and `/reconnect` are server-performed IPC commands
   - snapshot refresh after scene/audio commands
   - timer-based event polling in the ANSI TUI loop
   - server-pushed state events update the displayed snapshot
@@ -582,6 +594,7 @@ Implemented:
   - TUI IPC subscription and command forwarding behavior
   - TUI IPC pushed OBS event topic parsing
   - TUI command palette input handling and dashboard shortcuts
+  - TUI/CLI command parser coverage for server maintenance commands
   - CLI scene/audio integration against fake OBS server
   - CLI scene/audio integration through the local server IPC path
   - CLI dump-config integration through the local server IPC path
@@ -595,6 +608,7 @@ Implemented:
   - server state transition to disconnected after an established OBS WebSocket closes
   - server state broadcasts to subscribed IPC clients
   - server OBS event and log topic broadcasts to subscribed IPC clients
+  - server-side validate-config and guarded shutdown behavior
   - systemd user service unit generation and installer command behavior
 
 ## Partial
@@ -603,11 +617,13 @@ Implemented:
   - foreground/headless runtime exists
   - OBS supervisor owns the OBS WebSocket client
   - IPC command executor can control scene/audio and dump/reload config
+  - IPC command executor validates config, handles explicit OBS reconnect requests, and rejects shutdown unless `server.allow_remote_shutdown` is enabled
   - reconnect loop detects established OBS WebSocket disconnects, marks state disconnected, clears the stale client, and retries when reconnect is enabled
   - subscription handling maintains a client registry and broadcasts state, OBS event, and log topic updates
 - CLI:
   - non-interactive OBS control commands are thin IPC clients
   - `server-status` exists with PID, connected state, last error, and subscribed client count
+  - `obs-status`, `reconnect`, and guarded `shutdown-server` are thin IPC client commands
 - TUI:
   - currently a simple ANSI dashboard with raw key input and a command palette state machine
   - normal mode subscribes to the local server over IPC instead of creating an OBS WebSocket connection
@@ -726,6 +742,9 @@ Done:
 - `obsctl volume`
 - `obsctl vol`
 - `obsctl status`
+- `obsctl obs-status`
+- `obsctl reconnect`
+- guarded `obsctl shutdown-server`
 - CLI command execution through local server IPC
 
 Remaining:
@@ -785,6 +804,7 @@ Partial:
 - input volume changed events
 - OBS event topic fanout from the server to IPC subscribers
 - reconnect handling wired into runtime
+- explicit OBS reconnect request command through IPC
 
 ### Milestone 8: Polish
 
@@ -826,6 +846,7 @@ Done:
 - TUI IPC session client parsing of pushed OBS event topics
 - TUI IPC request correlation for overlapping long-lived client commands, including out-of-order responses
 - configured `server.socket_path` is honored by thin CLI/TUI clients
+- IPC command executor supports `validate_config`, `reconnect_obs`, and guarded `shutdown_server`
 
 Remaining:
 

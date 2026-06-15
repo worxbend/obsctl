@@ -22,6 +22,8 @@ module Obsctl
       abstract def next_snapshot : OBS::State::ObsSnapshot?
       abstract def dump_config : Nil
       abstract def reload_config : Nil
+      abstract def reconnect_obs : Nil
+      abstract def validate_config : Nil
     end
 
     class ObsSessionClient < SessionClient
@@ -86,6 +88,14 @@ module Obsctl
       end
 
       def reload_config : Nil
+      end
+
+      def reconnect_obs : Nil
+        close
+        connect
+      end
+
+      def validate_config : Nil
       end
     end
 
@@ -173,6 +183,14 @@ module Obsctl
 
       def reload_config : Nil
         send_command("reload_config")
+      end
+
+      def reconnect_obs : Nil
+        send_command("reconnect_obs")
+      end
+
+      def validate_config : Nil
+        send_command("validate_config")
       end
 
       private def send_command(name : String, target : String? = nil, percent : Int32? = nil) : JSON::Any

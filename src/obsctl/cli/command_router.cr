@@ -1,5 +1,6 @@
 require "../config/config"
 require "../config/config_loader"
+require "../config/config_schema"
 require "../config/config_writer"
 require "../config/config_dump"
 require "../domain/aliases"
@@ -59,8 +60,13 @@ module Obsctl
             Config::ConfigWriter.new.write(@config_path, merged, backup: true)
             Domain::CommandResult.ok("config dumped: #{@config_path}")
           end
+        when Domain::ValidateConfigCommand
+          Config::ConfigSchema.validate!(@config)
+          Domain::CommandResult.ok("config valid: #{@config_path}")
         when Domain::ReloadConfigCommand
           Domain::CommandResult.ok("config reload is handled by the caller")
+        when Domain::ReconnectCommand
+          Domain::CommandResult.ok("reconnect is handled by the server")
         when Domain::ConnectCommand
           with_client { }
           Domain::CommandResult.ok("connected")
@@ -85,7 +91,7 @@ module Obsctl
       end
 
       private def help_text : String
-        "/help /set-scene <target> /scene <target> /mute <target> /unmute <target> /toggle-mute <target> /vol <target> <0-100> /dump-config /reload-config /status /connect /disconnect /quit"
+        "/help /set-scene <target> /scene <target> /mute <target> /unmute <target> /toggle-mute <target> /vol <target> <0-100> /status /server-status /obs-status /reconnect /validate-config /dump-config /reload-config /connect /disconnect /quit"
       end
     end
   end

@@ -34,7 +34,10 @@ Scriptable commands:
 obsctl server
 obsctl server --headless
 obsctl status
+obsctl obs-status
 obsctl server-status
+obsctl reconnect
+obsctl shutdown-server
 obsctl scene <alias-or-name>
 obsctl mute <alias-or-name>
 obsctl unmute <alias-or-name>
@@ -47,11 +50,11 @@ obsctl service install
 obsctl service start|stop|restart|status|uninstall
 ```
 
-Except for `init`, `validate-config`, `server`, and `service`, scriptable OBS-control commands are thin IPC clients. Start `obsctl server --headless` first; if the server is missing, commands print startup/service instructions and exit `3`.
+Except for `init`, `validate-config`, `server`, and `service`, scriptable OBS-control commands are thin IPC clients. Start `obsctl server --headless` first; if the server is missing, commands print startup/service instructions and exit `3`. `shutdown-server` is disabled unless `server.allow_remote_shutdown: true` is set.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
-The TUI is also a local IPC client in normal mode. It subscribes to server state, OBS event, and log updates, and sends palette commands through the server using the same grammar with a leading slash, for example `/scene main`, `/mute mic`, and `/vol mic 70`. In a terminal, `/` or `:` opens the command palette, `Esc` cancels editing, `Enter` submits, `q` quits from the dashboard, `r` reloads config, and `D` dumps config through the server.
+The TUI is also a local IPC client in normal mode. It subscribes to server state, OBS event, and log updates, and sends palette commands through the server using the same grammar with a leading slash, for example `/scene main`, `/mute mic`, `/vol mic 70`, `/validate-config`, and `/reconnect`. In a terminal, `/` or `:` opens the command palette, `Esc` cancels editing, `Enter` submits, `q` quits from the dashboard, `r` reloads config, and `D` dumps config through the server.
 
 `dump-config` is performed by the local server, which owns the OBS connection, reads scenes and audio inputs, and writes a generated config. Existing config files are backed up before dump writes.
 

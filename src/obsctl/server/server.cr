@@ -52,7 +52,9 @@ module Obsctl
             session.write_message(IPC::Response.new(request.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
             session.write_message(IPC::Event.new("state", @state.snapshot_json)) if request.topics.includes?("state")
           elsif request.command?
-            session.write_message(@executor.execute(request))
+            response = @executor.execute(request)
+            session.write_message(response)
+            schedule_shutdown if response.ok && request.command.try(&.name) == "shutdown_server"
           else
             session.write_message(IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new("INVALID_REQUEST", "unsupported request type")))
           end
@@ -63,6 +65,13 @@ module Obsctl
       ensure
         @registry.remove(session)
         session.close
+      end
+
+      private def schedule_shutdown : Nil
+        spawn(name: "obsctl-ipc-shutdown") do
+          sleep 10.milliseconds
+          stop
+        end
       end
     end
   end

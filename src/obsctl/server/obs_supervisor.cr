@@ -40,6 +40,17 @@ module Obsctl
         block.call(client)
       end
 
+      def reconnect : Nil
+        client = @client_lock.synchronize do
+          existing = @client
+          @client = nil
+          existing
+        end
+        @state.mark_disconnected("OBS reconnect requested")
+        publish_log("info", "obs_reconnect_requested", "OBS reconnect requested")
+        client.try(&.close)
+      end
+
       private def run : Nil
         policy = Runtime::ReconnectPolicy.new(@config.reconnect)
         attempt = 0

@@ -45,6 +45,17 @@ module Obsctl
           server_status
         when "get_obs_status", "get_snapshot", "status"
           @state.snapshot_json
+        when "validate_config"
+          Config::ConfigLoader.new.load(@config_path)
+          object({"message" => "config valid: #{@config_path}"})
+        when "reconnect_obs"
+          @supervisor.reconnect
+          object({"message" => "OBS reconnect requested"})
+        when "shutdown_server"
+          unless @config.server.allow_remote_shutdown
+            raise Domain::CommandParseError.new("remote shutdown is disabled")
+          end
+          object({"message" => "server shutdown requested"})
         when "set_scene"
           target = required_target(command)
           scene = Domain::Aliases.resolve_scene(@config, target)
@@ -134,7 +145,7 @@ module Obsctl
         when Domain::AliasAmbiguous
           "ALIAS_AMBIGUOUS"
         when Domain::CommandParseError
-          "COMMAND_PARSE_ERROR"
+          error.message == "remote shutdown is disabled" ? "SHUTDOWN_DISABLED" : "COMMAND_PARSE_ERROR"
         when Domain::ConfigInvalid, Domain::ConfigNotFound
           "CONFIG_ERROR"
         else
