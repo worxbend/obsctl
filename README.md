@@ -1,41 +1,47 @@
-# SDKMAN utils CLI (!WIP)
-### CLI wrapper around SDKMAN which provides which makes it possible to make installation, cleaning and version selection faster.
+# obsctl-cr
 
----
+`obsctl-cr` is a Crystal 1.20 CLI/TUI for controlling OBS Studio through obs-websocket 5.x.
 
-TODO: Write a description here
+## Build
 
----
+```sh
+make build
+```
 
-## Installation
+The release binary target is `bin/obsctl`.
 
-TODO: Write installation instructions here
+## Quick Start
 
-## Usage
+```sh
+bin/obsctl init
+export OBS_WEBSOCKET_PASSWORD='your password'
+bin/obsctl validate-config
+bin/obsctl dump-config
+bin/obsctl scene 1
+bin/obsctl
+```
 
-TODO: Write usage instructions here
+Default config path on Linux is `~/.config/obsctl/config.yml`. Override with `--config` or `OBSCTL_CONFIG`.
 
-## Development
+Use `connection.password_env` for OBS WebSocket passwords. Plaintext `connection.password` is supported only when `password_env: ""` is configured, and the CLI does not yet emit a separate plaintext-password warning.
 
-TODO: Write development instructions here
+## Commands
 
-## Contributing
+Scriptable commands:
 
-1. Fork it (<https://github.com/limpid-kzonix/sdkman-utils-cli>)
-2. Create your feature branch (`git checkout -b feature/<ISSUE_NUMBER>-<SHORT_NAME>`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create a new Pull Request
+```sh
+obsctl status
+obsctl scene <alias-or-name>
+obsctl mute <alias-or-name>
+obsctl unmute <alias-or-name>
+obsctl toggle-mute <alias-or-name>
+obsctl volume <alias-or-name> <0-100>
+obsctl dump-config
+obsctl validate-config
+```
 
-#### To make it easier to review, we have these PR requirements:
- - Every PR must have exactly one issue associated with it.
- - Write a clear explanation of what the code is doing when opening the pull request, and optionally add comments to the PR.
- - Make sure there are tests - or ask for help on how the code should be tested in the Issue!
- - Keep PRs small and to the point. For extra code-health changes, either file a separate issue, or make it a separate PR that can be easily reviewed.
- - Use micro-commits. This makes it easier and faster to review.
- - Add a screenshot for UX changes (this is part of the PR checklist)
+TUI palette commands use the same grammar with a leading slash, for example `/scene main`, `/mute mic`, and `/vol mic 70`.
 
+`dump-config` can bootstrap a missing config file by connecting to OBS, reading scenes and audio inputs, and writing a generated config. Existing config files are backed up before dump writes.
 
-## Contributors
-
-- [Alexander Balyshyn](https://github.com/limpid-kzonix) - creator and maintainer
+Config files reject unknown top-level fields so future settings are not silently lost during rewrites.

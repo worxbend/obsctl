@@ -1,5 +1,6 @@
-/docs/
-/lib/
 /bin/
+/lib/
 /.shards/
+/.crystal/
 *.dwarf
+*.log
