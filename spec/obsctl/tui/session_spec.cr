@@ -8,7 +8,12 @@ private class FakeSessionClient < Obsctl::TUI::SessionClient
   getter volumes = [] of NamedTuple(name: String, percent: Int32)
   getter closed = false
 
-  def initialize(@snapshots : Array(Obsctl::OBS::State::ObsSnapshot), @scene_names : Array(String), @input_names : Array(String))
+  def initialize(
+    @snapshots : Array(Obsctl::OBS::State::ObsSnapshot),
+    @scene_names : Array(String),
+    @input_names : Array(String),
+    @events : Array(Obsctl::OBS::Protocol::Event) = [] of Obsctl::OBS::Protocol::Event,
+  )
     @connected = false
   end
 
@@ -47,6 +52,47 @@ private class FakeSessionClient < Obsctl::TUI::SessionClient
   def input_names : Array(String)
     @input_names
   end
+
+  def next_event : Obsctl::OBS::Protocol::Event?
+    @events.shift?
+  end
+end
+
+private class FailingSessionClient < Obsctl::TUI::SessionClient
+  def connect : Nil
+    raise Obsctl::Domain::ConnectionFailed.new("temporary connection failure")
+  end
+
+  def close : Nil
+  end
+
+  def snapshot : Obsctl::OBS::State::ObsSnapshot
+    raise Obsctl::Domain::ConnectionFailed.new("not connected")
+  end
+
+  def set_scene(name : String) : Nil
+  end
+
+  def mute(name : String, muted : Bool) : Nil
+  end
+
+  def toggle_mute(name : String) : Nil
+  end
+
+  def set_volume(name : String, percent : Int32) : Nil
+  end
+
+  def scene_names : Array(String)
+    [] of String
+  end
+
+  def input_names : Array(String)
+    [] of String
+  end
+
+  def next_event : Obsctl::OBS::Protocol::Event?
+    nil
+  end
 end
 
 private def tui_config(scene_alias = "main", audio_alias = "mic")
@@ -60,6 +106,25 @@ private def tui_config(scene_alias = "main", audio_alias = "mic")
     audio: Obsctl::Config::AudioConfig.new([
       Obsctl::Config::AudioInputConfig.new(name: "Mic/Aux", alias: audio_alias, shortcut: "m"),
     ])
+  )
+end
+
+private def reconnecting_tui_config
+  config = tui_config
+  Obsctl::Config::Config.new(
+    connection: Obsctl::Config::ConnectionConfig.new(
+      password_env: "OBSCTL_TUI_TEST_PASSWORD",
+      reconnect: Obsctl::Config::ReconnectConfig.new(
+        enabled: true,
+        initial_delay_ms: 0,
+        max_delay_ms: 0,
+        multiplier: 1.0
+      )
+    ),
+    ui: config.ui,
+    scenes: config.scenes,
+    audio: config.audio,
+    keymap: config.keymap
   )
 end
 
@@ -77,6 +142,10 @@ private def snapshot(current_scene : String, muted = false, volume = 70)
       Obsctl::OBS::State::AudioState.new(name: "Mic/Aux", alias: "mic", shortcut: "m", muted: muted, volume_percent: volume),
     ]
   )
+end
+
+private def event(type : String, data)
+  Obsctl::OBS::Protocol::Event.new(type, JSON.parse(data.to_json))
 end
 
 private def new_session(config, path, client)
@@ -166,5 +235,46 @@ describe Obsctl::TUI::Session do
       File.delete(path) if path && File.exists?(path)
       Dir.glob("#{path}.bak.*").each { |backup| File.delete(backup) }
     end
+  end
+
+  it "updates the model from queued scene and audio events" do
+    client = FakeSessionClient.new(
+      [snapshot("Main Camera", false, 70)],
+      ["Main Camera", "BRB"],
+      ["Mic/Aux"],
+      [
+        event("CurrentProgramSceneChanged", {"sceneName" => "BRB"}),
+        event("InputMuteStateChanged", {"inputName" => "Mic/Aux", "inputMuted" => true}),
+        event("InputVolumeChanged", {"inputName" => "Mic/Aux", "inputVolumeMul" => 0.25, "inputVolumeDb" => -12.0}),
+      ]
+    )
+    session = new_session(tui_config, "/tmp/obsctl-tui-session.yml", client)
+
+    session.start
+    model = session.poll_events
+
+    model.last_result.should eq("state updated")
+    model.snapshot.try(&.current_scene).should eq("BRB")
+    model.snapshot.try(&.scenes.find { |scene| scene.name == "BRB" }.try(&.active)).should eq(true)
+    model.snapshot.try(&.audio_inputs.first.muted).should eq(true)
+    model.snapshot.try(&.audio_inputs.first.volume_percent).should eq(25)
+  end
+
+  it "reconnects on poll when the configured reconnect delay has elapsed" do
+    clients = [
+      FailingSessionClient.new.as(Obsctl::TUI::SessionClient),
+      FakeSessionClient.new([snapshot("Main Camera")], ["Main Camera", "BRB"], ["Mic/Aux"]).as(Obsctl::TUI::SessionClient),
+    ]
+    session = Obsctl::TUI::Session.new(reconnecting_tui_config, "/tmp/obsctl-tui-session.yml", ->(_config : Obsctl::Config::Config) {
+      clients.shift
+    })
+
+    disconnected = session.start
+    reconnected = session.poll_events
+
+    disconnected.snapshot.try(&.connected).should eq(false)
+    disconnected.last_result.should eq("temporary connection failure")
+    reconnected.last_result.should eq("reconnected")
+    reconnected.snapshot.try(&.connected).should eq(true)
   end
 end

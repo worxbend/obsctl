@@ -49,7 +49,7 @@ module Obsctl
           connection: Config::ConnectionConfig.new(
             host: @host,
             port: @port,
-            password_env: nil,
+            password_env: "",
             request_timeout_ms: 500
           ),
           scenes: [
