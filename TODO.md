@@ -574,6 +574,7 @@ Implemented:
   - TUI IPC subscription and command forwarding behavior
   - CLI scene/audio integration against fake OBS server
   - CLI scene/audio integration through the local server IPC path
+  - CLI dump-config integration through the local server IPC path
   - CLI missing-server exit path for thin client commands
   - IPC codec validation
   - IPC socket path resolution
@@ -621,7 +622,7 @@ Implemented:
   - no guided host/port/password prompt yet
   - no optional connect-and-dump flow yet
 - Tests:
-  - CLI scene/audio fake-server specs exist, but dump-config CLI fake-server coverage is still missing
+  - CLI scene/audio/dump-config fake-server specs exist
   - TUI session and IPC client specs exist, but no raw keyboard/input specs yet
 
 ## Not Yet Implemented
@@ -728,11 +729,11 @@ Done:
 - backup before write
 - atomic write
 - bootstrap missing config path
+- integration test against fake OBS server through the local server IPC path
 
 Remaining:
 
 - conflict reporting for duplicate aliases/shortcuts discovered during dump
-- integration test against fake OBS server
 
 ### Milestone 6: TUI MVP
 
@@ -829,8 +830,7 @@ Remaining:
 
 ## Planned Next
 
-1. Add dump-config CLI integration coverage through the server.
-2. Improve close/error handling for pending requests and WebSocket shutdown.
-3. Add raw-mode keyboard handling and a real command palette.
-4. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-5. Add public documentation comments and run lint once dependencies are installed.
+1. Improve close/error handling for pending requests and WebSocket shutdown.
+2. Add raw-mode keyboard handling and a real command palette.
+3. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+4. Add public documentation comments and run lint once dependencies are installed.

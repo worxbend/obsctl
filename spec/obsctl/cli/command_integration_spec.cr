@@ -9,6 +9,7 @@ private def with_fake_cli_config(server : Obsctl::SpecSupport::FakeObsServer, &)
   yield path
 ensure
   File.delete(path) if path && File.exists?(path)
+  Dir.glob("#{path}.bak.*").each { |backup| File.delete(backup) } if path
 end
 
 private def with_cli_runtime(&)
@@ -88,6 +89,41 @@ describe Obsctl::CLI::Main do
 
           server.input("Mic/Aux").try(&.muted).should eq(true)
           server.input("Desktop Audio").try(&.volume_mul).should eq(0.8)
+        end
+      end
+    ensure
+      obsctl_server.try(&.stop)
+      server.stop if server
+    end
+  end
+
+  it "dumps config through the local server IPC path" do
+    server = Obsctl::SpecSupport::FakeObsServer.new(
+      inputs: [
+        Obsctl::SpecSupport::FakeObsServer::AudioInput.new("Mic/Aux", "input", false, 0.7, -3.0),
+        Obsctl::SpecSupport::FakeObsServer::AudioInput.new("Desktop Audio", "output", true, 0.4, -8.0),
+        Obsctl::SpecSupport::FakeObsServer::AudioInput.new("Browser Alerts", "input", false, 0.5, -6.0),
+      ]
+    ).start
+    obsctl_server = nil
+    begin
+      with_fake_cli_config(server) do |path|
+        with_cli_runtime do
+          obsctl_server = start_cli_server(server.config, path)
+
+          exit_code = 1
+          20.times do
+            exit_code = Obsctl::CLI::Main.run(["--config", path, "dump-config"])
+            break if exit_code == 0
+            sleep 50.milliseconds
+          end
+
+          exit_code.should eq(0)
+          dumped = Obsctl::Config::ConfigLoader.new.load(path)
+          dumped.scenes.find { |scene| scene.name == "Main Camera" }.try(&.alias).should eq("main")
+          dumped.scenes.find { |scene| scene.name == "BRB" }.should_not be_nil
+          dumped.audio.inputs.find { |input| input.name == "Browser Alerts" }.should_not be_nil
+          Dir.glob("#{path}.bak.*").empty?.should be_false
         end
       end
     ensure
