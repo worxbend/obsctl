@@ -2,6 +2,393 @@
 
 This tracker is grounded in the initial project brief. It records what is implemented, what is partial, what remains, and the next planned work.
 
+## Major Architecture Update: Local Client/Server
+
+`obsctl-cr` must evolve from a direct CLI/TUI-to-OBS application into a local client/server application.
+
+Core process model:
+
+```text
+OBS Studio <----obs-websocket----> obsctl server <----local IPC----> obsctl TUI
+                                                    <----local IPC----> obsctl CLI
+```
+
+Critical rule:
+
+- There must be exactly one OBS WebSocket owner per user session: the `obsctl server`.
+- CLI and TUI clients must not create their own OBS WebSocket connection in normal mode.
+- Direct OBS access is allowed only inside server mode or explicit embedded-server mode.
+
+### Runtime Modes
+
+Server mode:
+
+- `obsctl server`
+- Runs a long-lived local daemon process.
+- Connects to OBS WebSocket.
+- Maintains authoritative OBS state.
+- Reconnects forever when enabled.
+- Accepts local client commands from CLI/TUI sessions.
+- Can run headlessly as a `systemd --user` service.
+
+TUI mode:
+
+- `obsctl`
+- `obsctl tui`
+- Starts an interactive TUI client.
+- Connects to the local `obsctl server`.
+- If no server is running, shows a server-unavailable screen with options:
+  - start embedded server
+  - start headless server
+  - show service install command
+  - generate config
+  - retry
+  - quit
+- The TUI does not talk directly to OBS unless explicitly running in embedded/server mode.
+
+CLI client mode:
+
+- `obsctl scene main`
+- `obsctl mute mic`
+- `obsctl vol mic 70`
+- `obsctl status`
+- Parses shell arguments, connects to local IPC, sends a command, prints the response, and exits.
+- Does not silently start the server unless explicitly configured, because implicit daemon startup is surprising for scripts.
+
+### Updated Command Behavior
+
+- `obsctl`: starts TUI client.
+- `obsctl tui`: starts TUI client.
+- `obsctl server`: starts foreground server, useful for debugging.
+- `obsctl server --headless`: starts foreground headless server for systemd service execution.
+- `obsctl server --daemon`: optional later; prefer systemd user services.
+- `obsctl status`: sends status request to local server.
+- `obsctl server-status`: checks only the local obsctl server, not OBS.
+- `obsctl scene <alias|shortcut|obs-name>`: sends scene-change request to server.
+- `obsctl mute <audio-target>`: sends mute request to server.
+- `obsctl unmute <audio-target>`: sends unmute request to server.
+- `obsctl toggle-mute <audio-target>`: sends toggle mute request to server.
+- `obsctl vol <audio-target> <0-100>`: sends volume request to server.
+- `obsctl dump-config`: sends dump-config request to server; server reads OBS state and writes config.
+- `obsctl reload-config`: sends reload-config request to server.
+
+### Local IPC
+
+Primary transport:
+
+- Unix domain socket.
+- Default socket path: `$XDG_RUNTIME_DIR/obsctl/obsctl.sock`.
+- Fallback socket path: `/tmp/obsctl-$UID/obsctl.sock`.
+- Do not use TCP for local IPC by default.
+
+Reasons:
+
+- lower overhead
+- safer local-only access
+- systemd user service friendly
+- simple permission model
+- avoids exposing the control API over the network
+
+Protocol:
+
+- Newline-delimited JSON over Unix socket.
+- One JSON object per line.
+
+Client command request:
+
+```json
+{"id":"req-000001","type":"command","command":{"name":"set_scene","target":"main"}}
+```
+
+Server success response:
+
+```json
+{"id":"req-000001","type":"response","ok":true,"result":{"message":"Scene changed to Main Camera"}}
+```
+
+Server error response:
+
+```json
+{"id":"req-000002","type":"response","ok":false,"error":{"code":"SCENE_NOT_FOUND","message":"Scene alias not found: cam"}}
+```
+
+TUI subscription request:
+
+```json
+{"id":"req-000003","type":"subscribe","topics":["state","events","logs"]}
+```
+
+Pushed state event:
+
+```json
+{"type":"event","topic":"state","data":{"connected":true,"current_scene":"Main Camera","scenes":[],"audio_inputs":[]}}
+```
+
+### Server Responsibilities
+
+The server is the only process that owns:
+
+- OBS WebSocket connection
+- OBS authentication
+- reconnect loop
+- authoritative OBS state cache
+- config loading and validation
+- alias resolution
+- command execution
+- dump-config logic
+- OBS event subscription
+- local IPC socket
+- client session registry
+
+The CLI and TUI are thin clients.
+
+CLI client responsibilities:
+
+- parse shell arguments
+- resolve Unix socket path
+- connect to local server
+- send typed command
+- print response
+- exit with mapped exit code
+- if server is missing, print startup/service instructions and exit `3`
+
+TUI client responsibilities:
+
+- connect to Unix socket
+- subscribe to state/events/logs
+- render dashboard
+- parse command palette input
+- send commands to server
+- render command responses
+
+### Updated Module Layout Target
+
+```text
+src/
+  obsctl.cr
+  obsctl/
+    cli/
+      main.cr
+      options.cr
+      command_router.cr
+      client_commands.cr
+    server/
+      server.cr
+      server_options.cr
+      lifecycle.cr
+      client_registry.cr
+      command_executor.cr
+      state_store.cr
+      obs_supervisor.cr
+      systemd.cr
+    ipc/
+      socket_path.cr
+      unix_server.cr
+      unix_client.cr
+      protocol.cr
+      request.cr
+      response.cr
+      event.cr
+      codec.cr
+      client_session.cr
+    config/
+    obs/
+    domain/
+    tui/
+    service/
+      systemd_user_service.cr
+      service_installer.cr
+    runtime/
+      reconnect_policy.cr
+      logger.cr
+      signal_handler.cr
+    support/
+```
+
+### Server Lifecycle
+
+Startup:
+
+1. Resolve config path.
+2. Load config.
+3. Validate config.
+4. Create runtime directory, usually `$XDG_RUNTIME_DIR/obsctl`.
+5. Create Unix socket, usually `$XDG_RUNTIME_DIR/obsctl/obsctl.sock`.
+6. Refuse to start if another server responds on the socket.
+7. Remove stale socket if no process is listening.
+8. Start IPC accept loop.
+9. Start OBS supervisor.
+10. Connect to OBS.
+11. Authenticate.
+12. Fetch initial snapshot.
+13. Broadcast state to subscribed clients.
+14. Continue until SIGINT/SIGTERM.
+
+Shutdown:
+
+- stop accepting IPC clients
+- close client sessions
+- close OBS WebSocket
+- remove socket file
+- flush logs
+
+### OBS Supervisor
+
+Implement an `ObsSupervisor` fiber.
+
+Responsibilities:
+
+- maintain connection state
+- reconnect endlessly when enabled
+- expose current state snapshot
+- serialize OBS requests
+- process OBS events
+- broadcast state changes to IPC subscribers
+
+Reconnect behavior:
+
+- enabled by default in server mode
+- endless retry
+- exponential backoff with max delay
+- optional jitter
+- reset backoff after successful connection
+- never crash server because OBS is closed
+- keep local IPC available when OBS is unavailable
+
+State when OBS is down:
+
+- server remains alive
+- TUI shows OBS disconnected
+- CLI commands fail with `OBS_UNAVAILABLE`
+- status still works
+- server keeps retrying
+
+### IPC Command Model
+
+Define typed IPC commands:
+
+- `Ping`
+- `GetServerStatus`
+- `GetObsStatus`
+- `GetSnapshot`
+- `Subscribe`
+- `SetScene(target)`
+- `Mute(target)`
+- `Unmute(target)`
+- `ToggleMute(target)`
+- `SetVolume(target, percent)`
+- `DumpConfig`
+- `ReloadConfig`
+- `ValidateConfig`
+- `ShutdownServer`
+
+`ShutdownServer` must be disabled by default or require explicit config:
+
+```yaml
+server:
+  allow_remote_shutdown: false
+```
+
+Even though IPC is local, treat commands as external input and validate everything.
+
+### Systemd User Service
+
+Add commands:
+
+- `obsctl service install`
+- `obsctl service uninstall`
+- `obsctl service status`
+- `obsctl service start`
+- `obsctl service stop`
+- `obsctl service restart`
+
+Install writes:
+
+```text
+~/.config/systemd/user/obsctl.service
+```
+
+Service template:
+
+```ini
+[Unit]
+Description=obsctl OBS WebSocket control daemon
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/absolute/path/to/obsctl server --headless
+Restart=always
+RestartSec=3
+Environment=RUST_BACKTRACE=0
+
+[Install]
+WantedBy=default.target
+```
+
+Rules:
+
+- Detect the current executable path for `ExecStart`.
+- Prefer absolute path.
+- Do not hardcode `%h/.local/bin` if the binary is elsewhere.
+- Run `systemctl --user daemon-reload` after writing the service.
+- Do not require `sudo`; this is a user service.
+
+### Config Additions Target
+
+```yaml
+version: 1
+
+server:
+  socket_path: null
+  pid_file: null
+  allow_remote_shutdown: false
+  start_embedded_if_missing: true
+
+connection:
+  host: "127.0.0.1"
+  port: 4455
+  password_env: "OBS_WEBSOCKET_PASSWORD"
+  connect_timeout_ms: 3000
+  request_timeout_ms: 2500
+
+reconnect:
+  enabled: true
+  endless: true
+  initial_delay_ms: 500
+  max_delay_ms: 10000
+  multiplier: 1.8
+  jitter_ms: 250
+```
+
+Current config still has reconnect nested under `connection`; migration or compatibility handling is required.
+
+### Headless Server Acceptance Criteria
+
+Headless server must:
+
+- run without TUI
+- run under `systemd --user`
+- keep IPC socket alive
+- connect to OBS when OBS becomes available
+- reconnect endlessly after OBS restart
+- keep serving local CLI/TUI clients while OBS is disconnected
+- expose meaningful status
+- never leak password/auth data
+- clean stale socket on startup
+
+Given `obsctl server --headless` is running:
+
+- `obsctl status` returns server and OBS status.
+- `obsctl scene main` changes scene through the server.
+- `obsctl mute mic` mutes through the server.
+- `obsctl tui` attaches to the already-running server.
+- closing TUI does not stop the server.
+- restarting OBS does not kill the server.
+- server reconnects when OBS returns.
+- dump-config is performed by the server, not by the CLI client.
+
 ## Current Status
 
 Implemented:
@@ -101,6 +488,15 @@ Implemented:
   - scene list with alias/shortcut/group/active flag
   - audio list with alias/shortcut/mute/volume state
   - timestamp and last error field
+- Local IPC primitives:
+  - typed command requests, subscribe requests, responses, errors, and events
+  - newline-delimited JSON codec
+  - Unix socket path resolution using `$XDG_RUNTIME_DIR/obsctl/obsctl.sock`
+  - fallback Unix socket path `/tmp/obsctl-$UID/obsctl.sock`
+  - Unix client, Unix server, and client session wrappers
+  - stale socket cleanup before server bind
+  - active socket detection before server bind
+  - socket mode tightened to `0600`
 - Minimal ANSI TUI scaffold:
   - dashboard render
   - scenes panel output
@@ -145,6 +541,10 @@ Implemented:
   - TUI event application behavior
   - TUI reconnect-on-poll behavior
   - CLI scene/audio integration against fake OBS server
+  - IPC codec validation
+  - IPC socket path resolution
+  - IPC Unix socket request/response round trip
+  - stale IPC socket cleanup
 
 ## Partial
 
@@ -178,6 +578,9 @@ Implemented:
 
 ## Not Yet Implemented
 
+- `server/` foreground/headless runtime.
+- CLI command proxying through local IPC.
+- TUI subscription through local IPC.
 - Full termisu integration.
 - Command palette UI with proper in-place editing.
 - Keyboard shortcuts outside line-based command input.
@@ -335,11 +738,31 @@ Remaining:
 - ameba lint wiring after dependency install
 - public module documentation comments
 
+### Milestone 9: Local IPC
+
+Done:
+
+- typed IPC request/response/event models
+- newline-delimited JSON codec
+- Unix socket path resolver
+- Unix client/session wrappers
+- Unix server primitive with stale socket cleanup and active socket detection
+- IPC specs for codec, path resolution, and socket round trip
+
+Remaining:
+
+- integrate IPC into the server runtime
+- add request correlation helpers for long-lived clients if needed by TUI subscriptions
+
 ## Planned Next
 
-1. Add explicit OBS event subscription options during Identify.
-2. Add dump-config CLI integration coverage against the fake OBS server.
-3. Improve close/error handling for pending requests and WebSocket shutdown.
-4. Add raw-mode keyboard handling and a real command palette.
-5. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-6. Add public documentation comments and run lint once dependencies are installed.
+1. Introduce `server/` with foreground `obsctl server --headless`, authoritative state store, command executor, and OBS supervisor.
+2. Convert non-interactive CLI commands to thin IPC clients; direct OBS access only remains for server/embedded mode.
+3. Convert TUI to subscribe to server state/events over IPC; remove normal direct OBS access from TUI.
+4. Add systemd user service install/uninstall/status/start/stop/restart support.
+5. Add explicit OBS event subscription options during Identify in server mode.
+6. Add dump-config CLI integration coverage through the server.
+7. Improve close/error handling for pending requests and WebSocket shutdown.
+8. Add raw-mode keyboard handling and a real command palette.
+9. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+10. Add public documentation comments and run lint once dependencies are installed.
