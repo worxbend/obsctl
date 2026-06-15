@@ -14,6 +14,7 @@ private class FakeSessionClient < Obsctl::TUI::SessionClient
     @scene_names : Array(String),
     @input_names : Array(String),
     @events : Array(Obsctl::OBS::Protocol::Event) = [] of Obsctl::OBS::Protocol::Event,
+    @logs : Array(String) = [] of String,
   )
     @connected = false
   end
@@ -60,6 +61,10 @@ private class FakeSessionClient < Obsctl::TUI::SessionClient
 
   def next_snapshot : Obsctl::OBS::State::ObsSnapshot?
     nil
+  end
+
+  def next_log : String?
+    @logs.shift?
   end
 
   def dump_config : Nil
@@ -112,6 +117,10 @@ private class FailingSessionClient < Obsctl::TUI::SessionClient
   end
 
   def next_snapshot : Obsctl::OBS::State::ObsSnapshot?
+    nil
+  end
+
+  def next_log : String?
     nil
   end
 
@@ -287,6 +296,22 @@ describe Obsctl::TUI::Session do
     model.snapshot.try(&.scenes.find { |scene| scene.name == "BRB" }.try(&.active)).should eq(true)
     model.snapshot.try(&.audio_inputs.first.muted).should eq(true)
     model.snapshot.try(&.audio_inputs.first.volume_percent).should eq(25)
+  end
+
+  it "adds queued server logs to the model" do
+    client = FakeSessionClient.new(
+      [snapshot("Main Camera")],
+      ["Main Camera", "BRB"],
+      ["Mic/Aux"],
+      logs: ["warn command_failed: OBS is unavailable"]
+    )
+    session = new_session(tui_config, "/tmp/obsctl-tui-session.yml", client)
+
+    session.start
+    model = session.poll_events
+
+    model.last_result.should eq("state updated")
+    model.logs.should eq(["warn command_failed: OBS is unavailable"])
   end
 
   it "reconnects on poll when the configured reconnect delay has elapsed" do

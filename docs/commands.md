@@ -52,7 +52,7 @@ Non-interactive OBS control commands are IPC clients. They connect to the local 
 
 `obsctl validate-config` validates the local config file directly and does not require a running server. The TUI palette command `/validate-config` asks the running server to validate its configured file.
 
-`obsctl` and `obsctl tui` run the ANSI TUI as an IPC client in normal mode. The TUI subscribes to server state snapshots and forwards palette commands to the same server-owned command executor used by scriptable CLI commands.
+`obsctl` and `obsctl tui` run the ANSI TUI as an IPC client in normal mode. The TUI subscribes to server state snapshots, OBS events, and server log topics, then forwards palette commands to the same server-owned command executor used by scriptable CLI commands. The dashboard renders connection, scenes, grouped scene map, audio, recent logs, and command palette panels.
 
 TUI keyboard input:
 

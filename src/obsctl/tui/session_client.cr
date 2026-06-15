@@ -20,6 +20,7 @@ module Obsctl
       abstract def input_names : Array(String)
       abstract def next_event : OBS::Protocol::Event?
       abstract def next_snapshot : OBS::State::ObsSnapshot?
+      abstract def next_log : String?
       abstract def dump_config : Nil
       abstract def reload_config : Nil
       abstract def reconnect_obs : Nil
@@ -84,6 +85,10 @@ module Obsctl
         nil
       end
 
+      def next_log : String?
+        nil
+      end
+
       def dump_config : Nil
       end
 
@@ -107,6 +112,7 @@ module Obsctl
         @pending_lock = Mutex.new
         @snapshot = nil.as(OBS::State::ObsSnapshot?)
         @events = [] of OBS::Protocol::Event
+        @logs = [] of String
         @sequence = 0
       end
 
@@ -175,6 +181,11 @@ module Obsctl
       def next_snapshot : OBS::State::ObsSnapshot?
         drain_messages
         @snapshot
+      end
+
+      def next_log : String?
+        drain_messages
+        @logs.shift?
       end
 
       def dump_config : Nil
@@ -261,6 +272,23 @@ module Obsctl
           return unless event_type
 
           @events << OBS::Protocol::Event.new(event_type, data["event_data"]?)
+        when "logs"
+          data = event.data
+          return unless data
+
+          @logs << log_message(data)
+        end
+      end
+
+      private def log_message(data : JSON::Any) : String
+        level = data["level"]?.try(&.as_s?) || "info"
+        code = data["code"]?.try(&.as_s?)
+        message = data["message"]?.try(&.as_s?) || "server log"
+
+        if code
+          "#{level} #{code}: #{message}"
+        else
+          "#{level}: #{message}"
         end
       end
 

@@ -27,6 +27,7 @@ module Obsctl
         @snapshot = nil.as(OBS::State::ObsSnapshot?)
         @client = nil.as(SessionClient?)
         @last_result = nil.as(String?)
+        @logs = [] of String
         @reconnect_attempt = 0
         @next_reconnect_at = nil.as(Time?)
       end
@@ -164,7 +165,7 @@ module Obsctl
 
       private def model_with_result(message : String?) : Model
         @last_result = message
-        Model.new(snapshot: @snapshot, last_result: message)
+        Model.new(snapshot: @snapshot, last_result: message, logs: @logs.dup)
       end
 
       private def drain_events : Bool
@@ -186,7 +187,19 @@ module Obsctl
           @snapshot = current_snapshot
           changed = true
         end
+
+        while log = client.next_log
+          append_log(log)
+          changed = true
+        end
         changed
+      end
+
+      private def append_log(message : String) : Nil
+        @logs << message
+        while @logs.size > 8
+          @logs.shift
+        end
       end
 
       private def reconnect_due? : Bool
