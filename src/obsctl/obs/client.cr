@@ -6,6 +6,7 @@ require "./protocol/request_id"
 require "./protocol/request"
 require "./protocol/response"
 require "./protocol/event"
+require "./protocol/event_subscription"
 require "./protocol/message"
 require "./requests/version"
 require "./requests/scenes"
@@ -18,7 +19,10 @@ require "../domain/aliases"
 module Obsctl
   module OBS
     class Client
-      def initialize(@config : Config::Config)
+      def initialize(
+        @config : Config::Config,
+        @event_subscriptions : Int32? = nil,
+      )
         @request_ids = Protocol::RequestId.new
         @identified = false
         @ws = uninitialized HTTP::WebSocket
@@ -158,6 +162,9 @@ module Obsctl
         data = hello["d"]
         identify_data = {} of String => JSON::Any
         identify_data["rpcVersion"] = JSON::Any.new(data["rpcVersion"].as_i64)
+        if event_subscriptions = @event_subscriptions
+          identify_data["eventSubscriptions"] = JSON::Any.new(event_subscriptions.to_i64)
+        end
 
         if auth = data["authentication"]?
           password = password_from_config

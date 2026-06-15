@@ -117,3 +117,18 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:37:13Z iteration 6 validation started
+2026-06-15T18:37:21Z iteration 6 committed
+2026-06-15T18:37:24Z iteration 6 pushed
+2026-06-15T18:37:24Z iteration 7 started
+
+## 2026-06-15 OBS Identify event subscriptions
+
+- Added protocol constants for obs-websocket event subscription masks and wired server-owned OBS clients to Identify with an explicit General + Scenes + Inputs subscription mask.
+- Extended the fake OBS server to record Identify payloads without blocking the handshake.
+- Added OBS client and server specs proving explicit `eventSubscriptions` are sent, plus protocol coverage for the server default mask.
+- Updated `docs/protocol.md` and `TODO.md`; next planned slice is dump-config CLI integration coverage through the server.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

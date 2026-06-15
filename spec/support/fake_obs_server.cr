@@ -18,6 +18,7 @@ module Obsctl
 
       @server : HTTP::Server
       @mutex = Mutex.new
+      @identify_data = nil.as(JSON::Any?)
 
       def initialize(
         @scenes : Array(String) = ["Main Camera", "Screen Share", "BRB"],
@@ -71,6 +72,10 @@ module Obsctl
         @mutex.synchronize { @inputs.find { |input| input.name == name } }
       end
 
+      def identify_data : JSON::Any?
+        @mutex.synchronize { @identify_data }
+      end
+
       private def websocket_handler : HTTP::WebSocketHandler
         HTTP::WebSocketHandler.new do |websocket, _context|
           websocket.send(hello_frame)
@@ -84,6 +89,7 @@ module Obsctl
         frame = JSON.parse(message)
         case frame["op"].as_i
         when 1
+          @mutex.synchronize { @identify_data = frame["d"] }
           websocket.send(identified_frame)
         when 6
           request = frame["d"]

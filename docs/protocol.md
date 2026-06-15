@@ -53,4 +53,6 @@ The client follows obs-websocket 5.x ordering:
 6. Match `RequestResponse` opcode `7` by `requestId`.
 7. Consume `Event` opcode `5` for realtime updates.
 
+Server mode sends an explicit Identify `eventSubscriptions` mask for the OBS event categories it currently consumes: `General`, `Scenes`, and `Inputs`. High-volume events such as input volume meters are not subscribed by default.
+
 Authentication uses `password + salt`, SHA256, Base64, then `base64_secret + challenge`, SHA256, Base64. Passwords and generated authentication strings must not be logged.

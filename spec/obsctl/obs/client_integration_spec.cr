@@ -1,6 +1,7 @@
 require "../../spec_helper"
 require "../../support/fake_obs_server"
 require "../../../src/obsctl/obs/client"
+require "../../../src/obsctl/obs/protocol/event_subscription"
 
 describe Obsctl::OBS::Client do
   it "connects to fake obs-websocket and builds a snapshot" do
@@ -60,4 +61,33 @@ describe Obsctl::OBS::Client do
       server.stop
     end
   end
+
+  it "sends explicit event subscriptions when configured" do
+    server = Obsctl::SpecSupport::FakeObsServer.new.start
+    client = Obsctl::OBS::Client.new(
+      server.config,
+      event_subscriptions: Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT
+    )
+
+    begin
+      client.connect
+      identify = wait_for_identify_data(server)
+
+      identify["eventSubscriptions"].as_i.should eq(Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT)
+    ensure
+      client.try(&.close)
+      server.stop
+    end
+  end
+end
+
+private def wait_for_identify_data(server : Obsctl::SpecSupport::FakeObsServer) : JSON::Any
+  20.times do
+    if data = server.identify_data
+      return data
+    end
+    sleep 50.milliseconds
+  end
+
+  raise "fake OBS server did not receive Identify data"
 end
