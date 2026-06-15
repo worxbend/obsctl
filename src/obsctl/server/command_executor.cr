@@ -18,6 +18,7 @@ module Obsctl
         @config_path : String,
         @state : StateStore,
         @supervisor : ObsSupervisor,
+        @client_count : Proc(Int32)? = nil,
       )
       end
 
@@ -96,6 +97,7 @@ module Obsctl
         snapshot = @state.snapshot
         object({
           "pid"           => Process.pid,
+          "client_count"  => @client_count.try(&.call) || 0,
           "obs_connected" => snapshot.connected,
           "last_error"    => snapshot.last_error,
         })

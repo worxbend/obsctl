@@ -7,6 +7,7 @@ module Obsctl
       getter socket
 
       def initialize(@socket : UNIXSocket, @codec : Codec = Codec.new)
+        @write_lock = Mutex.new
       end
 
       def read_message : Message?
@@ -16,8 +17,10 @@ module Obsctl
       end
 
       def write_message(message : Message) : Nil
-        socket << @codec.encode(message)
-        socket.flush
+        @write_lock.synchronize do
+          socket << @codec.encode(message)
+          socket.flush
+        end
       end
 
       def close : Nil

@@ -85,4 +85,59 @@ describe Obsctl::Server::Server do
     obs.try(&.stop)
     File.delete(path) if path && File.exists?(path)
   end
+
+  it "broadcasts state changes to subscribed IPC clients" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    path = temp_socket_path
+    server = Obsctl::Server::Server.new(obs.config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    until File.exists?(path)
+      Fiber.yield
+    end
+
+    subscriber = Obsctl::IPC::UnixClient.new(path).connect
+    subscriber.write_message(
+      Obsctl::IPC::Request.new(
+        "req-subscribe",
+        Obsctl::IPC::Request::TYPE_SUBSCRIBE,
+        nil,
+        ["state"]
+      )
+    )
+
+    subscriber.read_message.as(Obsctl::IPC::Response).ok.should be_true
+    subscriber.read_message.as(Obsctl::IPC::Event).topic.should eq("state")
+
+    client = Obsctl::IPC::UnixClient.new(path)
+    response = nil
+    20.times do
+      response = client.request(
+        Obsctl::IPC::Request.new(
+          "req-broadcast-scene",
+          Obsctl::IPC::Request::TYPE_COMMAND,
+          Obsctl::IPC::CommandPayload.new("set_scene", "screen")
+        )
+      )
+      break if response.try(&.ok)
+      sleep 50.milliseconds
+    end
+
+    response.not_nil!.ok.should be_true
+
+    event = subscriber.read_message.as(Obsctl::IPC::Event)
+    event.topic.should eq("state")
+    event.data.not_nil!["current_scene"].as_s.should eq("Screen Share")
+  ensure
+    subscriber.try(&.close)
+    server.try(&.stop)
+    obs.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
 end

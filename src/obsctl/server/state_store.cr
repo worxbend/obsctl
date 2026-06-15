@@ -6,7 +6,7 @@ require "../obs/state/audio_state"
 module Obsctl
   module Server
     class StateStore
-      def initialize
+      def initialize(@on_update : Proc(JSON::Any, Nil)? = nil)
         @snapshot = disconnected_snapshot
         @lock = Mutex.new
       end
@@ -17,12 +17,14 @@ module Obsctl
 
       def update(snapshot : OBS::State::ObsSnapshot) : Nil
         @lock.synchronize { @snapshot = snapshot }
+        publish_snapshot(snapshot)
       end
 
       def mark_disconnected(error : String? = nil) : Nil
+        next_snapshot = nil
         @lock.synchronize do
           current = @snapshot
-          @snapshot = OBS::State::ObsSnapshot.new(
+          next_snapshot = OBS::State::ObsSnapshot.new(
             connected: false,
             obs_studio_version: current.obs_studio_version,
             obs_websocket_version: current.obs_websocket_version,
@@ -33,7 +35,9 @@ module Obsctl
             last_error: error,
             updated_at: Time.utc
           )
+          @snapshot = next_snapshot.not_nil!
         end
+        publish_snapshot(next_snapshot.not_nil!)
       end
 
       def snapshot_json : JSON::Any
@@ -73,6 +77,10 @@ module Obsctl
 
       private def snapshot_to_json(snapshot : OBS::State::ObsSnapshot) : JSON::Any
         self.class.snapshot_to_json(snapshot)
+      end
+
+      private def publish_snapshot(snapshot : OBS::State::ObsSnapshot) : Nil
+        @on_update.try(&.call(snapshot_to_json(snapshot)))
       end
 
       private def disconnected_snapshot : OBS::State::ObsSnapshot
