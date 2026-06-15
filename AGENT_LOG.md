@@ -182,3 +182,17 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:50:31Z iteration 10 validation started
+2026-06-15T18:50:41Z iteration 10 committed
+2026-06-15T18:50:43Z iteration 10 pushed
+2026-06-15T18:50:43Z iteration 11 started
+
+## 2026-06-15 TUI raw command palette input
+
+- Added a testable TUI input controller with command palette open/edit/backspace/submit/cancel behavior and dashboard shortcuts for quit, reload-config, and dump-config.
+- Changed the ANSI TUI app loop to read raw character input when attached to a TTY while preserving non-TTY character input.
+- Added command palette input specs and updated README, command docs, and `TODO.md`; next planned slice is evaluating termisu/proper widgets or event/log topic fanout.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

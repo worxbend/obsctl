@@ -521,8 +521,10 @@ Implemented:
   - dashboard render
   - scenes panel output
   - audio panel output
-  - command loop
+  - raw character input loop when attached to a TTY
   - palette commands routed through the same parser as CLI
+  - command palette open/edit/backspace/submit/cancel handling
+  - dashboard shortcuts for quit, reload-config, and dump-config
   - basic first-run config creation when interactive config is missing
   - normal TUI sessions subscribe to server state over local IPC
   - TUI scene/audio commands are sent to the server over IPC
@@ -573,6 +575,7 @@ Implemented:
   - TUI event application behavior
   - TUI reconnect-on-poll behavior
   - TUI IPC subscription and command forwarding behavior
+  - TUI command palette input handling and dashboard shortcuts
   - CLI scene/audio integration against fake OBS server
   - CLI scene/audio integration through the local server IPC path
   - CLI dump-config integration through the local server IPC path
@@ -599,11 +602,10 @@ Implemented:
   - non-interactive OBS control commands are thin IPC clients
   - `server-status` exists with PID, connected state, last error, and subscribed client count
 - TUI:
-  - currently a simple ANSI dashboard and line-based command loop
+  - currently a simple ANSI dashboard with raw key input and a command palette state machine
   - normal mode subscribes to the local server over IPC instead of creating an OBS WebSocket connection
   - not yet a full termisu dashboard
   - not yet btop/btm-style keyboard-first layout
-  - does not yet do raw-mode key handling
   - refreshes on a timer, but rendering is still full-screen ANSI redraw
 - OBS client:
   - has a single WebSocket reader channel
@@ -627,13 +629,11 @@ Implemented:
   - no optional connect-and-dump flow yet
 - Tests:
   - CLI scene/audio/dump-config fake-server specs exist
-  - TUI session and IPC client specs exist, but no raw keyboard/input specs yet
+  - TUI session, IPC client, and command palette input specs exist
 
 ## Not Yet Implemented
 
 - Full termisu integration.
-- Command palette UI with proper in-place editing.
-- Keyboard shortcuts outside line-based command input.
 - Scene map widget with grouped textual graph.
 - Compact log panel with recent errors.
 - Low-level client reconnect loop independent of TUI session.
@@ -754,14 +754,16 @@ Partial:
 - `/dump-config` with model refresh
 - server state subscription over local IPC in normal mode
 - scene/audio/dump/reload commands forwarded to the server in normal mode
+- raw-mode key input in terminal sessions
+- command palette state for open/edit/backspace/submit/cancel
+- keyboard shortcuts for quit, reload-config, and dump-config
+- input controller specs
 
 Remaining:
 
 - termisu app
-- raw keyboard handling
 - incremental/diff rendering instead of full-screen redraw
 - proper layout panels
-- command palette editing
 - log panel
 
 ### Milestone 7: Realtime Events
@@ -835,7 +837,6 @@ Remaining:
 
 ## Planned Next
 
-1. Add raw-mode keyboard handling and a real command palette.
-2. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-3. Add event/log topic broadcast fanout after server-side producers exist.
-4. Add public documentation comments and run lint once dependencies are installed.
+1. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+2. Add event/log topic broadcast fanout after server-side producers exist.
+3. Add public documentation comments and run lint once dependencies are installed.

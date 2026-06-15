@@ -1,6 +1,8 @@
 require "./model"
 require "./renderer"
 require "./session"
+require "./input/controller"
+require "./input/keymap"
 
 module Obsctl
   module TUI
@@ -11,34 +13,70 @@ module Obsctl
 
       def run : Int32
         session = Session.new(@config, @config_path)
+        input_controller = Input::Controller.new(Input::Keymap.new(@config.keymap), @config.ui.command_palette_prefix)
         model = session.start
-        @renderer.render(model)
+        @renderer.render(model_with_command_line(model, input_controller.command_line))
         input = Channel(String?).new
 
         spawn do
-          STDIN.each_line { |line| input.send(line) }
+          read_input(input)
           input.send(nil)
         end
 
         loop do
           select
-          when line = input.receive
-            break unless line
+          when key = input.receive
+            break unless key
 
-            result = session.execute_line(line.strip)
-            break if result.quit
-            model = result.model
-            @renderer.render(model)
+            action = input_controller.handle(key)
+            case action.kind
+            when Input::ActionKind::Quit
+              break
+            when Input::ActionKind::Submit
+              command = action.command
+              next unless command
+
+              result = session.execute_line(command)
+              break if result.quit
+              model = result.model
+              @renderer.render(model_with_command_line(model, input_controller.command_line))
+            when Input::ActionKind::Render
+              @renderer.render(model_with_command_line(model, input_controller.command_line))
+            when Input::ActionKind::None
+            end
           when timeout(@config.ui.refresh_interval_ms.milliseconds)
             refreshed = session.poll_events
             if refreshed != model
               model = refreshed
-              @renderer.render(model)
+              @renderer.render(model_with_command_line(model, input_controller.command_line))
             end
           end
         end
         session.close
         0
+      end
+
+      private def read_input(input : Channel(String?)) : Nil
+        if STDIN.tty?
+          STDIN.raw { read_chars(input) }
+        else
+          read_chars(input)
+        end
+      end
+
+      private def read_chars(input : Channel(String?)) : Nil
+        while char = STDIN.read_char
+          input.send(char.to_s)
+        end
+      end
+
+      private def model_with_command_line(model : Model, command_line : String) : Model
+        Model.new(
+          snapshot: model.snapshot,
+          command_line: command_line,
+          last_result: model.last_result,
+          logs: model.logs
+        )
       end
     end
   end

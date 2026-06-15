@@ -51,7 +51,7 @@ Except for `init`, `validate-config`, `server`, and `service`, scriptable OBS-co
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
-The TUI is also a local IPC client in normal mode. It subscribes to server state updates and sends palette commands through the server, using the same grammar with a leading slash, for example `/scene main`, `/mute mic`, and `/vol mic 70`.
+The TUI is also a local IPC client in normal mode. It subscribes to server state updates and sends palette commands through the server, using the same grammar with a leading slash, for example `/scene main`, `/mute mic`, and `/vol mic 70`. In a terminal, `/` or `:` opens the command palette, `Esc` cancels editing, `Enter` submits, `q` quits from the dashboard, `r` reloads config, and `D` dumps config through the server.
 
 `dump-config` is performed by the local server, which owns the OBS connection, reads scenes and audio inputs, and writes a generated config. Existing config files are backed up before dump writes.
 
