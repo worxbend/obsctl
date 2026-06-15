@@ -613,6 +613,7 @@ Implemented:
   - CLI dump-config integration through the local server IPC path
   - CLI dump-config conflict failure through the local server IPC path
   - CLI missing-server exit path for thin client commands
+  - CLI-level systemd service smoke coverage with a fake command runner hook
   - IPC codec validation
   - IPC socket path resolution
   - IPC Unix socket request/response round trip
@@ -685,7 +686,6 @@ Implemented:
 - Volume meter events.
 - `ameba` lint execution in this environment.
 - Release packaging beyond `make release`.
-- Broader public API/module documentation comments for config, OBS, domain, and TUI surfaces.
 - Unknown config field preservation.
 
 ## Milestone Tracking
@@ -890,13 +890,13 @@ Done:
 - service unit generation with absolute `obsctl server --headless` ExecStart
 - `systemctl --user daemon-reload` after install/uninstall
 - service generation and installer specs
+- CLI-level smoke coverage with a fake command runner hook
 
 Remaining:
 
-- add CLI-level smoke coverage with a fake command runner hook if CLI dependency injection is introduced later
+- none currently
 
 ## Planned Next
 
-1. Add CLI-level service smoke coverage if CLI dependency injection is introduced later.
+1. Prepare demo config and packaging polish.
 2. Revisit a `termisu` backend if the pre-1.0 dependency becomes acceptable for the project.
-3. Prepare demo config and packaging polish.
