@@ -1,6 +1,7 @@
 require "../../spec_helper"
 require "../../../src/obsctl/server/server"
 require "../../../src/obsctl/ipc/protocol"
+require "../../../src/obsctl/obs/protocol/event_subscription"
 require "../../support/fake_obs_server"
 
 private def temp_socket_path : String
@@ -65,6 +66,9 @@ describe Obsctl::Server::Server do
     end
 
     client = Obsctl::IPC::UnixClient.new(path)
+    identify = wait_for_server_identify_data(obs)
+    identify["eventSubscriptions"].as_i.should eq(Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT)
+
     response = nil
     20.times do
       response = client.request(
@@ -140,4 +144,15 @@ describe Obsctl::Server::Server do
     obs.try(&.stop)
     File.delete(path) if path && File.exists?(path)
   end
+end
+
+private def wait_for_server_identify_data(server : Obsctl::SpecSupport::FakeObsServer) : JSON::Any
+  20.times do
+    if data = server.identify_data
+      return data
+    end
+    sleep 50.milliseconds
+  end
+
+  raise "fake OBS server did not receive Identify data"
 end

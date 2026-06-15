@@ -1,6 +1,19 @@
 require "../../spec_helper"
+require "../../../src/obsctl/obs/protocol/event_subscription"
 require "../../../src/obsctl/obs/requests/audio"
 require "../../../src/obsctl/obs/requests/scenes"
+
+describe Obsctl::OBS::Protocol::EventSubscription do
+  it "defines the server event subscription mask explicitly" do
+    mask = Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT
+
+    mask.should eq(
+      Obsctl::OBS::Protocol::EventSubscription::GENERAL |
+      Obsctl::OBS::Protocol::EventSubscription::SCENES |
+      Obsctl::OBS::Protocol::EventSubscription::INPUTS
+    )
+  end
+end
 
 describe Obsctl::OBS::Protocol::Request do
   it "serializes request frames" do

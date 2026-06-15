@@ -1,6 +1,7 @@
 require "../config/config"
 require "../domain/errors"
 require "../obs/client"
+require "../obs/protocol/event_subscription"
 require "../runtime/reconnect_policy"
 require "./state_store"
 
@@ -38,7 +39,7 @@ module Obsctl
         attempt = 0
 
         until @stopped
-          client = OBS::Client.new(@config)
+          client = OBS::Client.new(@config, event_subscriptions: OBS::Protocol::EventSubscription::SERVER_DEFAULT)
           connected = false
           begin
             client.connect

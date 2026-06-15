@@ -484,6 +484,7 @@ Implemented:
   - `ToggleInputMute`
   - `GetInputVolume`
   - `SetInputVolume`
+- OBS Identify in server mode sends an explicit event subscription mask for General, Scenes, and Inputs events.
 - Snapshot model:
   - connection status
   - OBS Studio version
@@ -630,7 +631,6 @@ Implemented:
 - Keyboard shortcuts outside line-based command input.
 - Scene map widget with grouped textual graph.
 - Compact log panel with recent errors.
-- Explicit OBS event subscription options during Identify.
 - Low-level client reconnect loop independent of TUI session.
 - Studio mode support.
 - Stream/record controls and status.
@@ -673,11 +673,11 @@ Done:
 - pending response map keyed by request ID
 - fake OBS WebSocket integration test server
 - explicit event channel
+- explicit event subscription options during Identify
 
 Remaining:
 
 - more robust close/error handling
-- explicit event subscription options during Identify
 - optional low-level client reconnect loop
 
 ### Milestone 3: Scene Control
@@ -829,9 +829,8 @@ Remaining:
 
 ## Planned Next
 
-1. Add explicit OBS event subscription options during Identify in server mode.
-2. Add dump-config CLI integration coverage through the server.
-3. Improve close/error handling for pending requests and WebSocket shutdown.
-4. Add raw-mode keyboard handling and a real command palette.
-5. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-6. Add public documentation comments and run lint once dependencies are installed.
+1. Add dump-config CLI integration coverage through the server.
+2. Improve close/error handling for pending requests and WebSocket shutdown.
+3. Add raw-mode keyboard handling and a real command palette.
+4. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+5. Add public documentation comments and run lint once dependencies are installed.
