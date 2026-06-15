@@ -16,6 +16,7 @@ The release binary target is `bin/obsctl`.
 bin/obsctl init
 export OBS_WEBSOCKET_PASSWORD='your password'
 bin/obsctl validate-config
+bin/obsctl server --headless
 bin/obsctl dump-config
 bin/obsctl scene 1
 bin/obsctl
@@ -30,18 +31,24 @@ Use `connection.password_env` for OBS WebSocket passwords. Plaintext `connection
 Scriptable commands:
 
 ```sh
+obsctl server
+obsctl server --headless
 obsctl status
+obsctl server-status
 obsctl scene <alias-or-name>
 obsctl mute <alias-or-name>
 obsctl unmute <alias-or-name>
 obsctl toggle-mute <alias-or-name>
-obsctl volume <alias-or-name> <0-100>
+obsctl vol|volume <alias-or-name> <0-100>
 obsctl dump-config
+obsctl reload-config
 obsctl validate-config
 ```
 
+Except for `init`, `validate-config`, and `server`, scriptable commands are thin IPC clients. Start `obsctl server --headless` first; if the server is missing, commands print startup/service instructions and exit `3`.
+
 TUI palette commands use the same grammar with a leading slash, for example `/scene main`, `/mute mic`, and `/vol mic 70`.
 
-`dump-config` can bootstrap a missing config file by connecting to OBS, reading scenes and audio inputs, and writing a generated config. Existing config files are backed up before dump writes.
+`dump-config` is performed by the local server, which owns the OBS connection, reads scenes and audio inputs, and writes a generated config. Existing config files are backed up before dump writes.
 
 Config files reject unknown top-level fields so future settings are not silently lost during rewrites.

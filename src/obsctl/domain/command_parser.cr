@@ -27,6 +27,9 @@ module Obsctl
         when "status"
           expect_count(tokens, 1)
           StatusCommand.new
+        when "server-status"
+          expect_count(tokens, 1)
+          ServerStatusCommand.new
         when "connect"
           expect_count(tokens, 1)
           ConnectCommand.new

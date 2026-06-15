@@ -51,3 +51,18 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:17:10Z iteration 2 validation started
+2026-06-15T18:17:17Z iteration 2 committed
+2026-06-15T18:17:19Z iteration 2 pushed
+2026-06-15T18:17:19Z iteration 3 started
+
+## 2026-06-15 CLI IPC proxying
+
+- Added `CLI::ClientCommands` to send non-interactive OBS-control commands over local Unix socket IPC instead of creating an OBS WebSocket client.
+- Added `server-status`, `vol` alias support, remote IPC error mapping, and missing-server startup/service guidance with exit code `3`.
+- Updated CLI integration specs so scene/audio commands run through an `obsctl server` instance backed by the fake OBS server.
+- Updated `README.md`, `docs/commands.md`, and `TODO.md`; next planned slice is server client registry and broadcast fanout for subscriptions.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

@@ -60,6 +60,18 @@ module Obsctl
       end
     end
 
+    class ServerUnavailable < ObsctlError
+      def initialize(message = "obsctl server is not running")
+        super(message, ExitCode::Connection)
+      end
+    end
+
+    class RemoteCommandFailed < ObsctlError
+      def initialize(message : String, exit_code : ExitCode)
+        super(message, exit_code)
+      end
+    end
+
     class SceneNotFound < ObsctlError
       def initialize(target : String)
         super("scene not found: #{target}", ExitCode::ObsRequest)

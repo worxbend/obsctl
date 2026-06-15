@@ -14,4 +14,8 @@ describe Obsctl::Domain::CommandParser do
       parser.parse("/vol mic 101")
     end
   end
+
+  it "parses server status commands" do
+    parser.parse("/server-status").should be_a(Obsctl::Domain::ServerStatusCommand)
+  end
 end

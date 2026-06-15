@@ -1,5 +1,6 @@
 require "./options"
 require "./command_router"
+require "./client_commands"
 require "../config/config_loader"
 require "../config/config_writer"
 require "../config/config_schema"
@@ -37,17 +38,19 @@ module Obsctl
           return Server::Server.new(config, options.config_path, server_options).run
         end
 
-        config = load_config_for(command, options.config_path)
-
         if command.nil?
+          config = load_config_for(command, options.config_path)
           return TUI::App.new(config, options.config_path).run
         end
 
         palette_line = cli_to_palette(command, options.args)
         parsed = Domain::CommandParser.new.parse(palette_line)
-        result = CommandRouter.new(config, options.config_path).execute(parsed)
+        result = ClientCommands.new.execute(parsed)
         puts result.message
         result.ok ? 0 : 1
+      rescue ex : Domain::ServerUnavailable
+        STDERR.puts server_unavailable_message
+        ex.exit_code.value
       rescue ex : Domain::ObsctlError
         STDERR.puts ex.message
         ex.exit_code.value
@@ -68,8 +71,12 @@ module Obsctl
           "/toggle-mute #{quote_arg(args[0]?)}"
         when "volume"
           "/vol #{quote_arg(args[0]?)} #{quote_arg(args[1]?)}"
+        when "vol"
+          "/vol #{quote_arg(args[0]?)} #{quote_arg(args[1]?)}"
         when "status"
           "/status"
+        when "server-status"
+          "/server-status"
         when "dump-config"
           "/dump-config"
         else
@@ -97,6 +104,15 @@ module Obsctl
         end
 
         Config::ConfigLoader.new.load(path)
+      end
+
+      private def self.server_unavailable_message : String
+        "obsctl server is not running.\n" \
+        "Start it with:\n" \
+        "  obsctl server --headless\n" \
+        "Or install service:\n" \
+        "  obsctl service install\n" \
+        "  systemctl --user enable --now obsctl.service"
       end
     end
   end

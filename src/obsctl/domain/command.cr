@@ -18,6 +18,9 @@ module Obsctl
     struct StatusCommand < Command
     end
 
+    struct ServerStatusCommand < Command
+    end
+
     struct ConnectCommand < Command
     end
 
