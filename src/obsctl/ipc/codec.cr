@@ -6,13 +6,17 @@ require "./event"
 
 module Obsctl
   module IPC
+    # Union of messages that can cross the newline-delimited IPC transport.
     alias Message = Request | Response | Event
 
+    # Encodes and decodes newline-delimited JSON IPC messages.
     class Codec
+      # Encodes a single IPC message and appends the frame delimiter.
       def encode(message : Message) : String
         message.to_json + "\n"
       end
 
+      # Decodes a single IPC frame into a typed message.
       def decode(line : String) : Message
         payload = line.strip
         raise Domain::IpcProtocolError.new("empty IPC frame") if payload.empty?
