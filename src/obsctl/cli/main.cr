@@ -16,7 +16,7 @@ require "../tui/app"
 module Obsctl
   module CLI
     module Main
-      def self.run(argv : Array(String)) : Int32
+      def self.run(argv : Array(String), service_installer : Service::ServiceInstaller? = nil) : Int32
         options = OptionsParser.new.parse(argv)
         log_level = Runtime::LogLevel.parse(options.log_level)
         command = options.command
@@ -50,7 +50,7 @@ module Obsctl
           if options.args.size > 1
             raise Domain::CommandParseError.new("wrong argument count for service")
           end
-          puts Service::ServiceInstaller.new.run(action)
+          puts (service_installer || Service::ServiceInstaller.new).run(action)
           return 0
         end
 

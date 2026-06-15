@@ -1,6 +1,15 @@
 require "../../spec_helper"
 require "../../../src/obsctl/cli/main"
 
+private class FakeCliSystemCommandRunner < Obsctl::Service::SystemCommandRunner
+  getter calls = [] of Tuple(String, Array(String))
+
+  def run(command : String, args : Array(String)) : Process::Status
+    @calls << {command, args}
+    Process::Status.new(0)
+  end
+end
+
 describe Obsctl::CLI::Main do
   it "returns config error for missing config when command requires config" do
     path = "/tmp/obsctl-missing-#{Random.rand(1_000_000)}.yml"
@@ -24,6 +33,37 @@ describe Obsctl::CLI::Main do
 
   it "returns command parse error for unsupported log levels" do
     Obsctl::CLI::Main.run(["--log-level", "trace", "status"]).should eq(5)
+  end
+
+  it "smoke tests service install through the CLI boundary" do
+    dir = File.join(Dir.tempdir, "obsctl-cli-service-#{Random.rand(1_000_000)}")
+    service_path = File.join(dir, "obsctl.service")
+    runner = FakeCliSystemCommandRunner.new
+    installer = Obsctl::Service::ServiceInstaller.new(
+      service_path: service_path,
+      executable_path: "/tmp/obsctl",
+      runner: runner
+    )
+
+    Obsctl::CLI::Main.run(["service", "install"], installer).should eq(0)
+
+    File.read(service_path).should contain("ExecStart=/tmp/obsctl server --headless")
+    runner.calls.should eq([{"systemctl", ["--user", "daemon-reload"]}])
+  ensure
+    FileUtils.rm_rf(dir) if dir
+  end
+
+  it "smoke tests service control through the CLI boundary" do
+    runner = FakeCliSystemCommandRunner.new
+    installer = Obsctl::Service::ServiceInstaller.new(
+      service_path: "/tmp/obsctl.service",
+      executable_path: "/tmp/obsctl",
+      runner: runner
+    )
+
+    Obsctl::CLI::Main.run(["service", "start"], installer).should eq(0)
+
+    runner.calls.should eq([{"systemctl", ["--user", "start", "obsctl.service"]}])
   end
 
   it "writes safe config warnings without exposing plaintext passwords" do

@@ -402,3 +402,17 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:58:38Z iteration 24 validation started
+2026-06-15T19:58:50Z iteration 24 committed
+2026-06-15T19:58:53Z iteration 24 pushed
+2026-06-15T19:58:53Z iteration 25 started
+
+## 2026-06-15 CLI service smoke coverage
+
+- Added a narrow `CLI::Main.run` service-installer injection point so CLI-level service command tests can use the existing fake system command runner without invoking real `systemctl`.
+- Added CLI smoke specs for `obsctl service install` and `obsctl service start`, covering unit generation and `systemctl --user` command dispatch through the CLI boundary.
+- Updated `TODO.md` to mark Milestone 10 service smoke coverage complete and move planned next work to demo config/packaging polish or optional termisu evaluation.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)
