@@ -343,3 +343,17 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:40:40Z iteration 20 validation started
+2026-06-15T19:40:52Z iteration 20 committed
+2026-06-15T19:40:54Z iteration 20 pushed
+2026-06-15T19:40:54Z iteration 21 started
+
+## 2026-06-15 TUI viewport-bounded renderer
+
+- Added viewport-aware ANSI TUI rendering with width/height bounds, terminal `COLUMNS`/`LINES` sizing, fixed panel budgets, and line truncation for long scene/audio/log content.
+- Added renderer coverage proving output stays within the requested viewport.
+- Updated README, command docs, and `TODO.md`; next planned slice remains termisu/incremental renderer evaluation or public documentation polish.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

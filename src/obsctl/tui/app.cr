@@ -15,7 +15,7 @@ module Obsctl
         session = Session.new(@config, @config_path)
         input_controller = Input::Controller.new(Input::Keymap.new(@config.keymap), @config.ui.command_palette_prefix)
         model = session.start
-        @renderer.render(model_with_command_line(model, input_controller.command_line))
+        render(model_with_command_line(model, input_controller.command_line))
         input = Channel(String?).new
 
         spawn do
@@ -39,21 +39,26 @@ module Obsctl
               result = session.execute_line(command)
               break if result.quit
               model = result.model
-              @renderer.render(model_with_command_line(model, input_controller.command_line))
+              render(model_with_command_line(model, input_controller.command_line))
             when Input::ActionKind::Render
-              @renderer.render(model_with_command_line(model, input_controller.command_line))
+              render(model_with_command_line(model, input_controller.command_line))
             when Input::ActionKind::None
             end
           when timeout(@config.ui.refresh_interval_ms.milliseconds)
             refreshed = session.poll_events
             if refreshed != model
               model = refreshed
-              @renderer.render(model_with_command_line(model, input_controller.command_line))
+              render(model_with_command_line(model, input_controller.command_line))
             end
           end
         end
         session.close
         0
+      end
+
+      private def render(model : Model) : Nil
+        width, height = terminal_size
+        @renderer.render(model, STDOUT, width, height)
       end
 
       private def read_input(input : Channel(String?)) : Nil
@@ -77,6 +82,13 @@ module Obsctl
           last_result: model.last_result,
           logs: model.logs
         )
+      end
+
+      private def terminal_size : Tuple(Int32, Int32)
+        {
+          ENV["COLUMNS"]?.try(&.to_i?) || Renderer::DEFAULT_WIDTH,
+          ENV["LINES"]?.try(&.to_i?) || Renderer::DEFAULT_HEIGHT,
+        }
       end
     end
   end
