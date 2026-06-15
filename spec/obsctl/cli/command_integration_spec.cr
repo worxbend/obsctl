@@ -177,4 +177,41 @@ describe Obsctl::CLI::Main do
       server.stop if server
     end
   end
+
+  it "returns a config error when server-side dump would create alias conflicts" do
+    server = Obsctl::SpecSupport::FakeObsServer.new(
+      scenes: ["Main Camera", "BRB"]
+    ).start
+    obsctl_server = nil
+    begin
+      config = Obsctl::Config::Config.new(
+        connection: server.config.connection,
+        scenes: [
+          Obsctl::Config::SceneConfig.new("Main Camera", "brb"),
+        ],
+        reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false)
+      )
+
+      with_fake_cli_config_for(config) do |path|
+        original = File.read(path)
+        with_cli_runtime do
+          obsctl_server = start_cli_server(config, path)
+
+          exit_code = 1
+          20.times do
+            exit_code = Obsctl::CLI::Main.run(["--config", path, "dump-config"])
+            break if exit_code == 2
+            sleep 50.milliseconds
+          end
+
+          exit_code.should eq(2)
+          File.read(path).should eq(original)
+          Dir.glob("#{path}.bak.*").empty?.should be_true
+        end
+      end
+    ensure
+      obsctl_server.try(&.stop)
+      server.stop if server
+    end
+  end
 end

@@ -42,3 +42,5 @@ Unknown top-level fields are rejected with a config error. This avoids silently 
 Passwords should be provided through `connection.password_env`. By default this is `OBS_WEBSOCKET_PASSWORD`, and `validate-config` fails if a configured non-empty env var is missing. Plaintext `connection.password` is supported for compatibility, but to use it intentionally you must set `password_env: ""`. `validate-config` prints a warning when plaintext `connection.password` is configured and does not echo the secret value.
 
 Scene lookup priority is shortcut, alias, exact OBS name, case-insensitive alias, then case-insensitive OBS name. Ambiguous matches fail without executing an action.
+
+`dump-config` preserves existing aliases, shortcuts, groups, stale markers, and top-level daemon settings such as `server` and `reconnect`. Before writing, it reports duplicate aliases/shortcuts and alias/shortcut collisions with discovered OBS scene or audio names so a dump cannot save a config that would make later command lookup ambiguous.

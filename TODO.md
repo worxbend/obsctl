@@ -460,10 +460,12 @@ Implemented:
   - `init` refuses to overwrite unless `--force` is passed
 - Dump config merge:
   - preserves existing aliases/shortcuts/groups
+  - preserves top-level `server` and `reconnect` daemon settings
   - adds missing OBS scenes/audio inputs
   - marks removed OBS objects as `stale: true`
   - backs up existing config before writing
   - can bootstrap a missing config file before connecting
+  - reports duplicate aliases/shortcuts and alias/shortcut collisions with discovered OBS names before writing
 - Alias/shortcut lookup priority:
   - exact shortcut
   - exact alias
@@ -603,6 +605,7 @@ Implemented:
   - CLI scene/audio integration against fake OBS server
   - CLI scene/audio integration through the local server IPC path
   - CLI dump-config integration through the local server IPC path
+  - CLI dump-config conflict failure through the local server IPC path
   - CLI missing-server exit path for thin client commands
   - IPC codec validation
   - IPC socket path resolution
@@ -650,6 +653,7 @@ Implemented:
   - unknown top-level fields are explicitly rejected to avoid silent data loss
   - top-level `server` and `reconnect` sections are supported
   - legacy `connection.reconnect` is accepted and rewritten as top-level `reconnect`
+  - dump-config preserves top-level `server` and `reconnect` settings and rejects alias/shortcut conflicts before writing
   - `validate-config` warns when plaintext `connection.password` is configured without printing the secret value
   - nested unknown fields are not preserved yet
 - Logging:
@@ -770,10 +774,12 @@ Done:
 - atomic write
 - bootstrap missing config path
 - integration test against fake OBS server through the local server IPC path
+- conflict reporting for duplicate aliases/shortcuts discovered during dump
+- preservation of top-level `server` and `reconnect` settings during dump writes
 
 Remaining:
 
-- conflict reporting for duplicate aliases/shortcuts discovered during dump
+- none currently
 
 ### Milestone 6: TUI MVP
 
