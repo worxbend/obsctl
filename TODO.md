@@ -523,12 +523,13 @@ Implemented:
   - command loop
   - palette commands routed through the same parser as CLI
   - basic first-run config creation when interactive config is missing
-  - session-owned OBS client adapter
+  - normal TUI sessions subscribe to server state over local IPC
+  - TUI scene/audio commands are sent to the server over IPC
+  - TUI `/reload-config` and `/dump-config` are server-performed IPC commands
   - snapshot refresh after scene/audio commands
-  - `/reload-config` reloads config and reconnects
-  - `/dump-config` writes merged config and refreshes the model
   - timer-based event polling in the ANSI TUI loop
-  - scene/audio OBS events update the displayed snapshot
+  - server-pushed state events update the displayed snapshot
+  - direct OBS session adapter remains available for explicit embedded-style use/tests
   - reconnect attempts use the configured reconnect policy
 - Runtime scaffolding:
   - logger with secret redaction
@@ -559,6 +560,7 @@ Implemented:
   - TUI session command refresh behavior
   - TUI event application behavior
   - TUI reconnect-on-poll behavior
+  - TUI IPC subscription and command forwarding behavior
   - CLI scene/audio integration against fake OBS server
   - CLI scene/audio integration through the local server IPC path
   - CLI missing-server exit path for thin client commands
@@ -583,6 +585,7 @@ Implemented:
   - `server-status` exists with PID, connected state, last error, and subscribed client count
 - TUI:
   - currently a simple ANSI dashboard and line-based command loop
+  - normal mode subscribes to the local server over IPC instead of creating an OBS WebSocket connection
   - not yet a full termisu dashboard
   - not yet btop/btm-style keyboard-first layout
   - does not yet do raw-mode key handling
@@ -591,8 +594,8 @@ Implemented:
   - has a single WebSocket reader channel
   - has a pending request map for request/response coordination
   - event parsing exists and events are routed to a client channel
-  - event channel is consumed by the TUI session
-  - reconnect policy is wired into the TUI session, but not into the low-level client itself
+  - direct embedded-style TUI sessions can consume the event channel, but normal TUI mode consumes server-pushed IPC state
+  - reconnect policy is still wired into the TUI session for server reconnects, but not into the low-level OBS client itself
 - Config:
   - known fields round-trip
   - unknown top-level fields are explicitly rejected to avoid silent data loss
@@ -607,11 +610,10 @@ Implemented:
   - no optional connect-and-dump flow yet
 - Tests:
   - CLI scene/audio fake-server specs exist, but dump-config CLI fake-server coverage is still missing
-  - TUI session specs exist, but no raw keyboard/input specs yet
+  - TUI session and IPC client specs exist, but no raw keyboard/input specs yet
 
 ## Not Yet Implemented
 
-- TUI subscription through local IPC.
 - Full termisu integration.
 - Command palette UI with proper in-place editing.
 - Keyboard shortcuts outside line-based command input.
@@ -733,6 +735,8 @@ Partial:
 - snapshot refresh after successful scene/audio commands
 - `/reload-config`
 - `/dump-config` with model refresh
+- server state subscription over local IPC in normal mode
+- scene/audio/dump/reload commands forwarded to the server in normal mode
 
 Remaining:
 
@@ -787,19 +791,19 @@ Done:
 - missing-server CLI exit behavior and startup/service instructions
 - `server-status` command path
 - persistent client registry and state broadcast fanout for subscriptions
+- TUI IPC session client with subscription acknowledgement, initial state handling, command forwarding, and server-pushed state updates
 
 Remaining:
 
 - add event/log topic broadcast fanout after server-side producers exist
-- add request correlation helpers for long-lived clients if needed by TUI subscriptions
+- harden request correlation helpers for long-lived clients if concurrent TUI requests are added later
 
 ## Planned Next
 
-1. Convert TUI to subscribe to server state/events over IPC; remove normal direct OBS access from TUI.
-2. Add systemd user service install/uninstall/status/start/stop/restart support.
-3. Add explicit OBS event subscription options during Identify in server mode.
-4. Add dump-config CLI integration coverage through the server.
-5. Improve close/error handling for pending requests and WebSocket shutdown.
-6. Add raw-mode keyboard handling and a real command palette.
-7. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-8. Add public documentation comments and run lint once dependencies are installed.
+1. Add systemd user service install/uninstall/status/start/stop/restart support.
+2. Add explicit OBS event subscription options during Identify in server mode.
+3. Add dump-config CLI integration coverage through the server.
+4. Improve close/error handling for pending requests and WebSocket shutdown.
+5. Add raw-mode keyboard handling and a real command palette.
+6. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+7. Add public documentation comments and run lint once dependencies are installed.

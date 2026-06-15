@@ -1,10 +1,7 @@
 require "./model"
 require "./event_applier"
 require "./session_client"
-require "../config/config_dump"
 require "../config/config_loader"
-require "../config/config_writer"
-require "../domain/aliases"
 require "../domain/command"
 require "../domain/command_parser"
 require "../domain/command_result"
@@ -22,7 +19,7 @@ module Obsctl
         @config : Config::Config,
         @config_path : String,
         @client_factory : Proc(Config::Config, SessionClient) = ->(config : Config::Config) {
-          ObsSessionClient.new(config).as(SessionClient)
+          IpcSessionClient.new.as(SessionClient)
         },
       )
         @parser = Domain::CommandParser.new
@@ -73,25 +70,20 @@ module Obsctl
           @snapshot = disconnected_snapshot(nil)
           SessionResult.new(model_with_result("disconnected"))
         when Domain::SetSceneCommand
-          scene = Domain::Aliases.resolve_scene(@config, command.target)
-          connected_client.set_scene(scene.name)
-          SessionResult.new(refresh_after_success("scene set: #{scene.name}"))
+          connected_client.set_scene(command.target)
+          SessionResult.new(refresh_after_success("scene set: #{command.target}"))
         when Domain::MuteCommand
-          input = Domain::Aliases.resolve_audio(@config, command.target)
-          connected_client.mute(input.name, true)
-          SessionResult.new(refresh_after_success("muted: #{input.name}"))
+          connected_client.mute(command.target, true)
+          SessionResult.new(refresh_after_success("muted: #{command.target}"))
         when Domain::UnmuteCommand
-          input = Domain::Aliases.resolve_audio(@config, command.target)
-          connected_client.mute(input.name, false)
-          SessionResult.new(refresh_after_success("unmuted: #{input.name}"))
+          connected_client.mute(command.target, false)
+          SessionResult.new(refresh_after_success("unmuted: #{command.target}"))
         when Domain::ToggleMuteCommand
-          input = Domain::Aliases.resolve_audio(@config, command.target)
-          connected_client.toggle_mute(input.name)
-          SessionResult.new(refresh_after_success("toggled mute: #{input.name}"))
+          connected_client.toggle_mute(command.target)
+          SessionResult.new(refresh_after_success("toggled mute: #{command.target}"))
         when Domain::VolumeCommand
-          input = Domain::Aliases.resolve_audio(@config, command.target)
-          connected_client.set_volume(input.name, command.percent)
-          SessionResult.new(refresh_after_success("volume set: #{input.name} #{command.percent}%"))
+          connected_client.set_volume(command.target, command.percent)
+          SessionResult.new(refresh_after_success("volume set: #{command.target} #{command.percent}%"))
         else
           SessionResult.new(model_with_result("unsupported command"))
         end
@@ -107,16 +99,14 @@ module Obsctl
       end
 
       private def reload_config : SessionResult
-        @config = Config::ConfigLoader.new.load(@config_path)
-        close
-        SessionResult.new(connect_with_current_config("config reloaded: #{@config_path}"))
+        connected_client.reload_config
+        @config = Config::ConfigLoader.new.load(@config_path) if File.exists?(@config_path)
+        SessionResult.new(refresh_after_success("config reloaded: #{@config_path}"))
       end
 
       private def dump_config : SessionResult
-        client = connected_client
-        merged = Config::ConfigDump.merge(@config, client.scene_names, client.input_names)
-        Config::ConfigWriter.new.write(@config_path, merged, backup: true)
-        @config = merged
+        connected_client.dump_config
+        @config = Config::ConfigLoader.new.load(@config_path) if File.exists?(@config_path)
         SessionResult.new(refresh_after_success("config dumped: #{@config_path}"))
       end
 
@@ -161,9 +151,16 @@ module Obsctl
         changed = false
         client = @client
         snapshot = @snapshot
-        return false unless client && snapshot
+        return false unless client
 
-        current_snapshot = snapshot
+        if next_snapshot = client.next_snapshot
+          @snapshot = next_snapshot
+          changed = next_snapshot != snapshot
+        end
+
+        current_snapshot = @snapshot
+        return changed unless current_snapshot
+
         while event = client.next_event
           current_snapshot = EventApplier.apply(current_snapshot, event)
           @snapshot = current_snapshot

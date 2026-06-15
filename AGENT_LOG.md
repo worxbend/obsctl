@@ -84,3 +84,19 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:26:57Z iteration 4 validation started
+2026-06-15T18:27:06Z iteration 4 committed
+2026-06-15T18:27:08Z iteration 4 pushed
+2026-06-15T18:27:08Z iteration 5 started
+
+## 2026-06-15 TUI IPC client
+
+- Added an IPC-backed TUI session client that subscribes to server state, parses pushed snapshots, and forwards scene/audio/dump/reload commands to the server.
+- Changed normal TUI startup to use the IPC client by default; the direct OBS session adapter remains available for embedded-style use/tests.
+- Routed `obsctl tui` to the same TUI startup path as bare `obsctl`.
+- Added TUI IPC subscription/command-forwarding coverage and updated existing session specs for the client boundary.
+- Updated `README.md`, `docs/commands.md`, and `TODO.md`; next planned slice is systemd user service command support.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

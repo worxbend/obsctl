@@ -38,7 +38,7 @@ module Obsctl
           return Server::Server.new(config, options.config_path, server_options).run
         end
 
-        if command.nil?
+        if command.nil? || command == "tui"
           config = load_config_for(command, options.config_path)
           return TUI::App.new(config, options.config_path).run
         end
@@ -98,7 +98,7 @@ module Obsctl
           return Config::Config.default
         end
 
-        if command.nil? && !File.exists?(path)
+        if (command.nil? || command == "tui") && !File.exists?(path)
           Config::ConfigWriter.new.write_default(path)
           STDERR.puts "created default config: #{path}"
         end

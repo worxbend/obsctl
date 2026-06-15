@@ -1,4 +1,5 @@
 require "../../spec_helper"
+require "../../../src/obsctl/config/config_writer"
 require "../../../src/obsctl/tui/session"
 
 private class FakeSessionClient < Obsctl::TUI::SessionClient
@@ -29,20 +30,20 @@ private class FakeSessionClient < Obsctl::TUI::SessionClient
     @snapshots.shift
   end
 
-  def set_scene(name : String) : Nil
-    @set_scenes << name
+  def set_scene(target : String) : Nil
+    @set_scenes << target
   end
 
-  def mute(name : String, muted : Bool) : Nil
-    @mutes << {name: name, muted: muted}
+  def mute(target : String, muted : Bool) : Nil
+    @mutes << {name: target, muted: muted}
   end
 
-  def toggle_mute(name : String) : Nil
-    @toggles << name
+  def toggle_mute(target : String) : Nil
+    @toggles << target
   end
 
-  def set_volume(name : String, percent : Int32) : Nil
-    @volumes << {name: name, percent: percent}
+  def set_volume(target : String, percent : Int32) : Nil
+    @volumes << {name: target, percent: percent}
   end
 
   def scene_names : Array(String)
@@ -55,6 +56,16 @@ private class FakeSessionClient < Obsctl::TUI::SessionClient
 
   def next_event : Obsctl::OBS::Protocol::Event?
     @events.shift?
+  end
+
+  def next_snapshot : Obsctl::OBS::State::ObsSnapshot?
+    nil
+  end
+
+  def dump_config : Nil
+  end
+
+  def reload_config : Nil
   end
 end
 
@@ -70,16 +81,16 @@ private class FailingSessionClient < Obsctl::TUI::SessionClient
     raise Obsctl::Domain::ConnectionFailed.new("not connected")
   end
 
-  def set_scene(name : String) : Nil
+  def set_scene(target : String) : Nil
   end
 
-  def mute(name : String, muted : Bool) : Nil
+  def mute(target : String, muted : Bool) : Nil
   end
 
-  def toggle_mute(name : String) : Nil
+  def toggle_mute(target : String) : Nil
   end
 
-  def set_volume(name : String, percent : Int32) : Nil
+  def set_volume(target : String, percent : Int32) : Nil
   end
 
   def scene_names : Array(String)
@@ -92,6 +103,16 @@ private class FailingSessionClient < Obsctl::TUI::SessionClient
 
   def next_event : Obsctl::OBS::Protocol::Event?
     nil
+  end
+
+  def next_snapshot : Obsctl::OBS::State::ObsSnapshot?
+    nil
+  end
+
+  def dump_config : Nil
+  end
+
+  def reload_config : Nil
   end
 end
 
@@ -166,8 +187,8 @@ describe Obsctl::TUI::Session do
     session.start
     result = session.execute_line("/scene 2")
 
-    client.set_scenes.should eq(["BRB"])
-    result.model.last_result.should eq("scene set: BRB")
+    client.set_scenes.should eq(["2"])
+    result.model.last_result.should eq("scene set: 2")
     result.model.snapshot.try(&.current_scene).should eq("BRB")
   end
 
@@ -183,8 +204,8 @@ describe Obsctl::TUI::Session do
     muted = session.execute_line("/mute mic")
     volume = session.execute_line("/vol m 25")
 
-    client.mutes.should eq([{name: "Mic/Aux", muted: true}])
-    client.volumes.should eq([{name: "Mic/Aux", percent: 25}])
+    client.mutes.should eq([{name: "mic", muted: true}])
+    client.volumes.should eq([{name: "m", percent: 25}])
     muted.model.snapshot.try(&.audio_inputs.first.muted).should eq(true)
     volume.model.snapshot.try(&.audio_inputs.first.volume_percent).should eq(25)
   end
@@ -224,13 +245,9 @@ describe Obsctl::TUI::Session do
 
       session.start
       result = session.execute_line("/dump-config")
-      written = Obsctl::Config::ConfigLoader.new.load(path)
 
       result.model.last_result.should eq("config dumped: #{path}")
       result.model.snapshot.try(&.connected).should eq(true)
-      written.scenes.map(&.name).should contain("Screen Share")
-      written.audio.inputs.map(&.name).should contain("Desktop Audio")
-      written.scenes.find { |scene| scene.name == "Main Camera" }.try(&.alias).should eq("main")
     ensure
       File.delete(path) if path && File.exists?(path)
       Dir.glob("#{path}.bak.*").each { |backup| File.delete(backup) }
