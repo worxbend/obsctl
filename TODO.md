@@ -550,6 +550,7 @@ Implemented:
   - timer-based event polling in the ANSI TUI loop
   - server-pushed state events update the displayed snapshot
   - widgetized ANSI panels for connection, scenes, grouped scene map, audio, recent logs, and command palette
+  - viewport-bounded ANSI rendering using terminal `COLUMNS`/`LINES` when available
   - recent server log-topic messages are retained in the TUI model and displayed in the dashboard
   - direct OBS session adapter remains available for explicit embedded-style use/tests
   - reconnect attempts use the configured reconnect policy
@@ -601,6 +602,7 @@ Implemented:
   - TUI IPC pushed server log topic parsing
   - TUI command palette input handling and dashboard shortcuts
   - TUI renderer panel output
+  - TUI renderer viewport bounds and line truncation
   - TUI/CLI command parser coverage for server maintenance commands
   - CLI scene/audio integration against fake OBS server
   - CLI scene/audio integration through the local server IPC path
@@ -801,12 +803,13 @@ Partial:
 - keyboard shortcuts for quit, reload-config, and dump-config
 - input controller specs
 - recent server log display
+- viewport-bounded rendering with line truncation
 
 Remaining:
 
 - termisu app
 - incremental/diff rendering instead of full-screen redraw
-- btop/btm-style layout polish
+- btop/btm-style layout polish beyond the current bounded ANSI panels
 
 ### Milestone 7: Realtime Events
 
@@ -828,11 +831,12 @@ Partial:
 - protocol docs
 - command docs
 - plaintext password warning on `validate-config`
+- viewport-bounded ANSI TUI rendering
 - Makefile
 
 Remaining:
 
-- better rendering
+- termisu or incremental renderer backend
 - theme file
 - packaging
 - demo config

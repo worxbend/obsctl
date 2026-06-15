@@ -41,4 +41,50 @@ describe Obsctl::TUI::Renderer do
     output.should contain("warn command_failed: OBS is unavailable")
     output.should contain("> /scene main")
   end
+
+  it "bounds rendered output to the requested viewport" do
+    scenes = (1..20).map do |index|
+      Obsctl::OBS::State::SceneState.new(
+        name: "Very Long Scene Name #{index} With Extra Words",
+        alias: "scene-#{index}",
+        shortcut: index.to_s,
+        group: "Group #{index % 3}",
+        active: index == 1
+      )
+    end
+    audio_inputs = (1..12).map do |index|
+      Obsctl::OBS::State::AudioState.new(
+        name: "Very Long Audio Input #{index} With Extra Words",
+        alias: "audio-#{index}",
+        shortcut: "a#{index}",
+        muted: index.even?,
+        volume_percent: 50
+      )
+    end
+    snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+      connected: true,
+      obs_studio_version: "31.0.0",
+      obs_websocket_version: "5.5.0",
+      current_scene: "Very Long Scene Name 1 With Extra Words",
+      scenes: scenes,
+      audio_inputs: audio_inputs
+    )
+    model = Obsctl::TUI::Model.new(
+      snapshot: snapshot,
+      command_line: "/scene \"Very Long Scene Name 1 With Extra Words\"",
+      last_result: "ready",
+      logs: (1..10).map { |index| "warn long log entry #{index} with extra detail" }
+    )
+    io = IO::Memory.new
+
+    Obsctl::TUI::Renderer.new.render(model, io, width: 50, height: 14)
+    output = io.to_s.sub("\e[2J\e[H", "")
+    lines = output.lines(chomp: true)
+
+    lines.size.should be <= 14
+    lines.each do |line|
+      line.size.should be <= 50
+    end
+    output.should contain("~")
+  end
 end
