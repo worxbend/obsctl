@@ -32,8 +32,16 @@ module Obsctl
         case command
         when Domain::StatusCommand
           IPC::CommandPayload.new("get_obs_status")
+        when Domain::ObsStatusCommand
+          IPC::CommandPayload.new("get_obs_status")
         when Domain::ServerStatusCommand
           IPC::CommandPayload.new("get_server_status")
+        when Domain::ValidateConfigCommand
+          IPC::CommandPayload.new("validate_config")
+        when Domain::ReconnectCommand
+          IPC::CommandPayload.new("reconnect_obs")
+        when Domain::ShutdownServerCommand
+          IPC::CommandPayload.new("shutdown_server")
         when Domain::SetSceneCommand
           IPC::CommandPayload.new("set_scene", command.target)
         when Domain::MuteCommand
@@ -57,7 +65,7 @@ module Obsctl
         return "ok" unless result
 
         case command
-        when Domain::StatusCommand
+        when Domain::StatusCommand, Domain::ObsStatusCommand
           format_obs_status(result)
         when Domain::ServerStatusCommand
           format_server_status(result)
@@ -106,6 +114,8 @@ module Obsctl
           raise Domain::ConfigInvalid.new(error.message)
         when "OBS_UNAVAILABLE"
           raise Domain::ObsUnavailable.new(error.message)
+        when "SHUTDOWN_DISABLED"
+          raise Domain::RemoteCommandFailed.new(error.message, Domain::ExitCode::CommandParse)
         when "SCENE_NOT_FOUND", "AUDIO_INPUT_NOT_FOUND", "ALIAS_AMBIGUOUS", "REQUEST_FAILED"
           raise Domain::RemoteCommandFailed.new(error.message, Domain::ExitCode::ObsRequest)
         else

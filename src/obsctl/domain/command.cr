@@ -21,6 +21,18 @@ module Obsctl
     struct ServerStatusCommand < Command
     end
 
+    struct ObsStatusCommand < Command
+    end
+
+    struct ValidateConfigCommand < Command
+    end
+
+    struct ReconnectCommand < Command
+    end
+
+    struct ShutdownServerCommand < Command
+    end
+
     struct ConnectCommand < Command
     end
 

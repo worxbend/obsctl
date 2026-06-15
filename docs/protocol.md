@@ -12,6 +12,12 @@ Command request:
 {"id":"req-000001","type":"command","command":{"name":"set_scene","target":"main"}}
 ```
 
+Supported command names are `ping`, `get_server_status`, `get_obs_status`,
+`get_snapshot`, `set_scene`, `mute`, `unmute`, `toggle_mute`, `set_volume`,
+`dump_config`, `reload_config`, `validate_config`, `reconnect_obs`, and
+`shutdown_server`. `shutdown_server` returns `SHUTDOWN_DISABLED` unless
+`server.allow_remote_shutdown` is enabled in the server config.
+
 Subscribe request:
 
 ```json

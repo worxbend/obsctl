@@ -246,3 +246,18 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:10:23Z iteration 14 validation started
+2026-06-15T19:10:34Z iteration 14 committed
+2026-06-15T19:10:36Z iteration 14 pushed
+2026-06-15T19:10:36Z iteration 15 started
+
+## 2026-06-15 Server maintenance IPC commands
+
+- Added missing server-side IPC maintenance commands for config validation, explicit OBS reconnect requests, and guarded server shutdown.
+- Wired `/obs-status`, `/validate-config`, `/reconnect`, and `/shutdown-server` through the shared command parser and thin client command mapper while keeping `obsctl validate-config` as a local config-file check.
+- Added server specs for IPC config validation, default shutdown rejection, and enabled shutdown lifecycle behavior, plus parser coverage for the new maintenance commands.
+- Updated README, command docs, protocol docs, and `TODO.md`; next planned slice remains termisu/proper widget evaluation or public API documentation polish.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

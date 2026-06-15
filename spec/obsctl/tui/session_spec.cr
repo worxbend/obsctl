@@ -67,6 +67,12 @@ private class FakeSessionClient < Obsctl::TUI::SessionClient
 
   def reload_config : Nil
   end
+
+  def reconnect_obs : Nil
+  end
+
+  def validate_config : Nil
+  end
 end
 
 private class FailingSessionClient < Obsctl::TUI::SessionClient
@@ -113,6 +119,12 @@ private class FailingSessionClient < Obsctl::TUI::SessionClient
   end
 
   def reload_config : Nil
+  end
+
+  def reconnect_obs : Nil
+  end
+
+  def validate_config : Nil
   end
 end
 

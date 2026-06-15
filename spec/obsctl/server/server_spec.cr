@@ -276,6 +276,131 @@ describe Obsctl::Server::Server do
     obs.try(&.stop)
     File.delete(path) if path && File.exists?(path)
   end
+
+  it "validates config through IPC without connecting clients directly to OBS" do
+    path = temp_socket_path
+    config_path = File.join(Dir.tempdir, "obsctl-server-validate-#{Random.rand(1_000_000)}.yml")
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: 1,
+        password_env: "",
+        request_timeout_ms: 100
+      ),
+      reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false)
+    )
+    Obsctl::Config::ConfigWriter.new.write(config_path, config)
+    server = Obsctl::Server::Server.new(config, config_path, socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    wait_for_socket(path)
+
+    response = Obsctl::IPC::UnixClient.new(path).request(
+      Obsctl::IPC::Request.new(
+        "req-validate",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("validate_config")
+      )
+    )
+
+    response.ok.should be_true
+    response.result.not_nil!["message"].as_s.should contain("config valid")
+  ensure
+    server.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+    File.delete(config_path) if config_path && File.exists?(config_path)
+  end
+
+  it "keeps remote shutdown disabled by default" do
+    path = temp_socket_path
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: 1,
+        password_env: "",
+        request_timeout_ms: 100
+      ),
+      reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false)
+    )
+    server = Obsctl::Server::Server.new(config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    wait_for_socket(path)
+
+    response = Obsctl::IPC::UnixClient.new(path).request(
+      Obsctl::IPC::Request.new(
+        "req-shutdown-disabled",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("shutdown_server")
+      )
+    )
+
+    response.ok.should be_false
+    response.error.not_nil!.code.should eq("SHUTDOWN_DISABLED")
+    File.exists?(path).should be_true
+  ensure
+    server.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
+  it "honors explicitly enabled remote shutdown after responding" do
+    path = temp_socket_path
+    config = Obsctl::Config::Config.new(
+      server: Obsctl::Config::ServerConfig.new(allow_remote_shutdown: true),
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: 1,
+        password_env: "",
+        request_timeout_ms: 100
+      ),
+      reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false)
+    )
+    server = Obsctl::Server::Server.new(config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+    stopped = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+      stopped.send(nil)
+    end
+
+    ready.receive
+    wait_for_socket(path)
+
+    response = Obsctl::IPC::UnixClient.new(path).request(
+      Obsctl::IPC::Request.new(
+        "req-shutdown-enabled",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("shutdown_server")
+      )
+    )
+
+    response.ok.should be_true
+    response.result.not_nil!["message"].as_s.should contain("shutdown requested")
+
+    select
+    when stopped.receive
+    when timeout(2.seconds)
+      raise "server did not stop after shutdown request"
+    end
+    File.exists?(path).should be_false
+  ensure
+    server.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
 end
 
 private def subscribe(path : String, topics : Array(String), id : String) : Obsctl::IPC::ClientSession
@@ -338,4 +463,13 @@ private def wait_for_obs_status(client : Obsctl::IPC::UnixClient, connected : Bo
   end
 
   raise "server did not report OBS connected=#{connected}"
+end
+
+private def wait_for_socket(path : String) : Nil
+  40.times do
+    return if File.exists?(path)
+    sleep 25.milliseconds
+  end
+
+  raise "server socket was not created: #{path}"
 end

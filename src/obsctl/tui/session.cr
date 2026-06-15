@@ -60,6 +60,12 @@ module Obsctl
           SessionResult.new(model_with_result(help_text))
         when Domain::StatusCommand
           SessionResult.new(refresh_after_success("status refreshed"))
+        when Domain::ObsStatusCommand
+          SessionResult.new(refresh_after_success("OBS status refreshed"))
+        when Domain::ValidateConfigCommand
+          validate_config
+        when Domain::ReconnectCommand
+          reconnect_obs
         when Domain::ReloadConfigCommand
           reload_config
         when Domain::DumpConfigCommand
@@ -109,6 +115,19 @@ module Obsctl
         connected_client.dump_config
         @config = Config::ConfigLoader.new.load(@config_path) if File.exists?(@config_path)
         SessionResult.new(refresh_after_success("config dumped: #{@config_path}"))
+      end
+
+      private def validate_config : SessionResult
+        connected_client.validate_config
+        SessionResult.new(model_with_result("config valid: #{@config_path}"))
+      end
+
+      private def reconnect_obs : SessionResult
+        connected_client.reconnect_obs
+        @snapshot = connected_client.snapshot
+        SessionResult.new(model_with_result("OBS reconnect requested"))
+      rescue ex : Domain::ObsctlError
+        SessionResult.new(model_with_result(ex.message || "OBS reconnect failed"))
       end
 
       private def connect_with_current_config(message : String) : Model
@@ -203,7 +222,7 @@ module Obsctl
       end
 
       private def help_text : String
-        "/help /set-scene <target> /scene <target> /mute <target> /unmute <target> /toggle-mute <target> /vol <target> <0-100> /dump-config /reload-config /status /connect /disconnect /quit"
+        "/help /set-scene <target> /scene <target> /mute <target> /unmute <target> /toggle-mute <target> /vol <target> <0-100> /status /server-status /obs-status /reconnect /validate-config /dump-config /reload-config /connect /disconnect /quit"
       end
     end
   end

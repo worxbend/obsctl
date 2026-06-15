@@ -30,6 +30,18 @@ module Obsctl
         when "server-status"
           expect_count(tokens, 1)
           ServerStatusCommand.new
+        when "obs-status"
+          expect_count(tokens, 1)
+          ObsStatusCommand.new
+        when "validate-config"
+          expect_count(tokens, 1)
+          ValidateConfigCommand.new
+        when "reconnect"
+          expect_count(tokens, 1)
+          ReconnectCommand.new
+        when "shutdown-server"
+          expect_count(tokens, 1)
+          ShutdownServerCommand.new
         when "connect"
           expect_count(tokens, 1)
           ConnectCommand.new
