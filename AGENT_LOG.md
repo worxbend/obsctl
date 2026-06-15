@@ -133,3 +133,17 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:40:24Z iteration 7 validation started
+2026-06-15T18:40:32Z iteration 7 committed
+2026-06-15T18:40:35Z iteration 7 pushed
+2026-06-15T18:40:35Z iteration 8 started
+
+## 2026-06-15 Dump-config CLI integration coverage
+
+- Added CLI integration coverage proving `obsctl dump-config` is sent through the local server IPC path while the server owns the fake OBS WebSocket connection.
+- Verified dump-config preserves existing aliases, discovers missing OBS scenes/audio inputs, writes the config, and creates a backup.
+- Updated `TODO.md`; next planned slice is pending request/WebSocket close error handling.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)
