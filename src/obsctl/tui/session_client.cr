@@ -93,6 +93,8 @@ module Obsctl
       def initialize(@client : IPC::UnixClient = IPC::UnixClient.new)
         @session = nil.as(IPC::ClientSession?)
         @messages = Channel(IPC::Message).new(64)
+        @pending_responses = Hash(String, Channel(IPC::Response)).new
+        @pending_lock = Mutex.new
         @snapshot = nil.as(OBS::State::ObsSnapshot?)
         @events = [] of OBS::Protocol::Event
         @sequence = 0
@@ -175,33 +177,42 @@ module Obsctl
 
       private def send_command(name : String, target : String? = nil, percent : Int32? = nil) : JSON::Any
         session = @session || raise Domain::ServerUnavailable.new
+        request = nil.as(IPC::Request?)
         request = IPC::Request.new(next_id, IPC::Request::TYPE_COMMAND, IPC::CommandPayload.new(name, target, percent))
+        responses = Channel(IPC::Response).new(1)
+        @pending_lock.synchronize { @pending_responses[request.id] = responses }
         session.write_message(request)
 
-        loop do
-          select
-          when message = @messages.receive
-            case message
-            when IPC::Response
-              next unless message.id == request.id
-              raise_response_error(message) unless message.ok
-              return message.result || JSON.parse("{}")
-            when IPC::Event
-              apply_event(message)
-            end
-          when timeout(5.seconds)
-            raise Domain::IpcProtocolError.new("timed out waiting for server response")
-          end
+        select
+        when response = responses.receive
+          raise_response_error(response) unless response.ok
+          response.result || JSON.parse("{}")
+        when timeout(5.seconds)
+          raise Domain::IpcProtocolError.new("timed out waiting for server response")
         end
       rescue ex : IO::Error
         raise Domain::IpcConnectionFailed.new(ex.message || "IPC connection failed")
+      ensure
+        if request
+          @pending_lock.synchronize { @pending_responses.delete(request.id) }
+        end
       end
 
       private def read_messages(session : IPC::ClientSession) : Nil
         while message = session.read_message
-          @messages.send(message)
+          case message
+          when IPC::Response
+            dispatch_response(message)
+          when IPC::Event
+            @messages.send(message)
+          end
         end
       rescue
+      end
+
+      private def dispatch_response(response : IPC::Response) : Nil
+        channel = @pending_lock.synchronize { @pending_responses[response.id]? }
+        channel.try(&.send(response))
       end
 
       private def drain_messages : Nil

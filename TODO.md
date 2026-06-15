@@ -816,10 +816,11 @@ Done:
 - TUI IPC session client with subscription acknowledgement, initial state handling, command forwarding, and server-pushed state updates
 - event/log topic broadcast fanout for server-side OBS events and command failures
 - TUI IPC session client parsing of pushed OBS event topics
+- TUI IPC request correlation for overlapping long-lived client commands, including out-of-order responses
 
 Remaining:
 
-- harden request correlation helpers for long-lived clients if concurrent TUI requests are added later
+- none currently
 
 ### Milestone 10: Systemd User Service
 
@@ -842,5 +843,5 @@ Remaining:
 ## Planned Next
 
 1. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-2. Harden request correlation helpers for long-lived clients if concurrent TUI requests are added later.
-3. Add public documentation comments and run lint once dependencies are installed.
+2. Add public documentation comments and run lint once dependencies are installed.
+3. Add CLI-level service smoke coverage if CLI dependency injection is introduced later.
