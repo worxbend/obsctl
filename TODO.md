@@ -362,7 +362,7 @@ reconnect:
   jitter_ms: 250
 ```
 
-Current config still has reconnect nested under `connection`; migration or compatibility handling is required.
+Top-level `reconnect` is now canonical. Legacy `connection.reconnect` remains accepted for compatibility and is rewritten as top-level `reconnect` on config writes.
 
 ### Headless Server Acceptance Criteria
 
@@ -436,6 +436,8 @@ Implemented:
   - unsupported version
   - invalid host
   - invalid port
+  - invalid server socket/pid paths
+  - invalid reconnect delay policy values
   - missing configured password env var
   - invalid UI refresh interval
   - duplicate scene aliases
@@ -513,6 +515,7 @@ Implemented:
   - persistent client registry for subscribed IPC sessions
   - state snapshot broadcast fanout after server-side OBS state changes
   - IPC remains available when OBS is unavailable
+  - configured `server.socket_path` is honored by server, CLI clients, and TUI clients
 - CLI IPC proxying:
   - non-interactive `status`, `server-status`, `scene`, `mute`, `unmute`, `toggle-mute`, `vol`/`volume`, `dump-config`, and `reload-config` commands send typed IPC requests
   - CLI no longer creates an OBS WebSocket client for normal scriptable OBS-control commands
@@ -557,6 +560,8 @@ Implemented:
 - Specs currently covering:
   - config load/write
   - config validation
+  - top-level `server` and `reconnect` config parsing/writing
+  - legacy `connection.reconnect` compatibility
   - config writer backups
   - config dump merge
   - command parser
@@ -620,6 +625,8 @@ Implemented:
 - Config:
   - known fields round-trip
   - unknown top-level fields are explicitly rejected to avoid silent data loss
+  - top-level `server` and `reconnect` sections are supported
+  - legacy `connection.reconnect` is accepted and rewritten as top-level `reconnect`
   - nested unknown fields are not preserved yet
   - plaintext `password` is supported by the data model but warning behavior is not yet surfaced
 - Logging:
@@ -658,6 +665,7 @@ Done:
 - shard project
 - OptionParser
 - config path resolution
+- top-level server/reconnect config schema compatibility
 - init command
 - validate-config command
 - specs
@@ -817,6 +825,7 @@ Done:
 - event/log topic broadcast fanout for server-side OBS events and command failures
 - TUI IPC session client parsing of pushed OBS event topics
 - TUI IPC request correlation for overlapping long-lived client commands, including out-of-order responses
+- configured `server.socket_path` is honored by thin CLI/TUI clients
 
 Remaining:
 

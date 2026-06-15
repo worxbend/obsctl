@@ -5,9 +5,17 @@ module Obsctl
   module Config
     record ReconnectConfig,
       enabled : Bool = true,
+      endless : Bool = true,
       initial_delay_ms : Int32 = 500,
-      max_delay_ms : Int32 = 5000,
-      multiplier : Float64 = 1.8
+      max_delay_ms : Int32 = 10_000,
+      multiplier : Float64 = 1.8,
+      jitter_ms : Int32 = 250
+
+    record ServerConfig,
+      socket_path : String? = nil,
+      pid_file : String? = nil,
+      allow_remote_shutdown : Bool = false,
+      start_embedded_if_missing : Bool = true
 
     record ConnectionConfig,
       host : String = "127.0.0.1",
@@ -16,7 +24,7 @@ module Obsctl
       password : String? = nil,
       connect_timeout_ms : Int32 = 3000,
       request_timeout_ms : Int32 = 2500,
-      reconnect : ReconnectConfig = ReconnectConfig.new
+      reconnect : ReconnectConfig? = nil
 
     record UiConfig,
       refresh_interval_ms : Int32 = 250,
@@ -49,7 +57,9 @@ module Obsctl
     class Config
       ALLOWED_TOP_LEVEL_KEYS = Set{
         "version",
+        "server",
         "connection",
+        "reconnect",
         "ui",
         "scenes",
         "audio",
@@ -57,7 +67,9 @@ module Obsctl
       }
 
       property version : Int32
+      property server : ServerConfig
       property connection : ConnectionConfig
+      property reconnect : ReconnectConfig
       property ui : UiConfig
       property scenes : Array(SceneConfig)
       property audio : AudioConfig
@@ -65,12 +77,17 @@ module Obsctl
 
       def initialize(
         @version : Int32 = 1,
+        @server : ServerConfig = ServerConfig.new,
         @connection : ConnectionConfig = ConnectionConfig.new,
+        @reconnect : ReconnectConfig = ReconnectConfig.new,
         @ui : UiConfig = UiConfig.new,
         @scenes : Array(SceneConfig) = [] of SceneConfig,
         @audio : AudioConfig = AudioConfig.new,
         @keymap : KeymapConfig = KeymapConfig.new,
       )
+        if legacy_reconnect = @connection.reconnect
+          @reconnect = legacy_reconnect
+        end
       end
 
       def self.default : self
@@ -81,14 +98,18 @@ module Obsctl
         any = YAML.parse(yaml)
         root = any.as_h
         reject_unknown_top_level_keys!(root)
-        connection = parse_connection(root["connection"]?)
+        server = parse_server(root["server"]?)
+        connection = parse_connection(root["connection"]?, include_legacy_reconnect: false)
+        reconnect = parse_reconnect(root["reconnect"]?, root["connection"]?)
         ui = parse_ui(root["ui"]?)
         scenes = parse_scenes(root["scenes"]?)
         audio = parse_audio(root["audio"]?)
         keymap = parse_keymap(root["keymap"]?)
         new(
           version: root["version"]?.try(&.as_i).try(&.to_i32) || 1,
+          server: server,
           connection: connection,
+          reconnect: reconnect,
           ui: ui,
           scenes: scenes,
           audio: audio,
@@ -100,6 +121,13 @@ module Obsctl
         YAML.build(io) do |yaml|
           yaml.mapping do
             yaml.scalar "version"; yaml.scalar @version
+            yaml.scalar "server"
+            yaml.mapping do
+              yaml.scalar "socket_path"; write_nullable_string(yaml, @server.socket_path)
+              yaml.scalar "pid_file"; write_nullable_string(yaml, @server.pid_file)
+              yaml.scalar "allow_remote_shutdown"; yaml.scalar @server.allow_remote_shutdown
+              yaml.scalar "start_embedded_if_missing"; yaml.scalar @server.start_embedded_if_missing
+            end
             yaml.scalar "connection"
             yaml.mapping do
               yaml.scalar "host"; yaml.scalar @connection.host
@@ -112,13 +140,15 @@ module Obsctl
               end
               yaml.scalar "connect_timeout_ms"; yaml.scalar @connection.connect_timeout_ms
               yaml.scalar "request_timeout_ms"; yaml.scalar @connection.request_timeout_ms
-              yaml.scalar "reconnect"
-              yaml.mapping do
-                yaml.scalar "enabled"; yaml.scalar @connection.reconnect.enabled
-                yaml.scalar "initial_delay_ms"; yaml.scalar @connection.reconnect.initial_delay_ms
-                yaml.scalar "max_delay_ms"; yaml.scalar @connection.reconnect.max_delay_ms
-                yaml.scalar "multiplier"; yaml.scalar @connection.reconnect.multiplier
-              end
+            end
+            yaml.scalar "reconnect"
+            yaml.mapping do
+              yaml.scalar "enabled"; yaml.scalar @reconnect.enabled
+              yaml.scalar "endless"; yaml.scalar @reconnect.endless
+              yaml.scalar "initial_delay_ms"; yaml.scalar @reconnect.initial_delay_ms
+              yaml.scalar "max_delay_ms"; yaml.scalar @reconnect.max_delay_ms
+              yaml.scalar "multiplier"; yaml.scalar @reconnect.multiplier
+              yaml.scalar "jitter_ms"; yaml.scalar @reconnect.jitter_ms
             end
             yaml.scalar "ui"
             yaml.mapping do
@@ -179,20 +209,21 @@ module Obsctl
         yaml.scalar value
       end
 
+      private def write_nullable_string(yaml : YAML::Builder, value : String?) : Nil
+        if value
+          yaml.scalar value
+        else
+          yaml.scalar nil
+        end
+      end
+
       private def write_string_array(yaml : YAML::Builder, key : String, values : Array(String)) : Nil
         yaml.scalar key
         yaml.sequence { values.each { |value| yaml.scalar value } }
       end
 
-      private def self.parse_connection(value : YAML::Any?) : ConnectionConfig
+      private def self.parse_connection(value : YAML::Any?, include_legacy_reconnect : Bool = true) : ConnectionConfig
         hash = value.try(&.as_h?) || {} of YAML::Any => YAML::Any
-        reconnect_hash = hash["reconnect"]?.try(&.as_h?) || {} of YAML::Any => YAML::Any
-        reconnect = ReconnectConfig.new(
-          enabled: bool(reconnect_hash, "enabled", true),
-          initial_delay_ms: int(reconnect_hash, "initial_delay_ms", 500),
-          max_delay_ms: int(reconnect_hash, "max_delay_ms", 5000),
-          multiplier: float(reconnect_hash, "multiplier", 1.8)
-        )
         ConnectionConfig.new(
           host: string(hash, "host", "127.0.0.1"),
           port: int(hash, "port", 4455),
@@ -200,7 +231,45 @@ module Obsctl
           password: string_or_nil(hash, "password"),
           connect_timeout_ms: int(hash, "connect_timeout_ms", 3000),
           request_timeout_ms: int(hash, "request_timeout_ms", 2500),
-          reconnect: reconnect
+          reconnect: include_legacy_reconnect ? reconnect_from_connection(hash) : nil
+        )
+      end
+
+      private def self.parse_server(value : YAML::Any?) : ServerConfig
+        hash = value.try(&.as_h?) || {} of YAML::Any => YAML::Any
+        ServerConfig.new(
+          socket_path: string_or_nil(hash, "socket_path"),
+          pid_file: string_or_nil(hash, "pid_file"),
+          allow_remote_shutdown: bool(hash, "allow_remote_shutdown", false),
+          start_embedded_if_missing: bool(hash, "start_embedded_if_missing", true)
+        )
+      end
+
+      private def self.parse_reconnect(value : YAML::Any?, connection : YAML::Any?) : ReconnectConfig
+        hash = value.try(&.as_h?)
+        hash ||= connection.try(&.as_h?).try { |connection_hash| connection_hash["reconnect"]?.try(&.as_h?) }
+        hash ||= {} of YAML::Any => YAML::Any
+        ReconnectConfig.new(
+          enabled: bool(hash, "enabled", true),
+          endless: bool(hash, "endless", true),
+          initial_delay_ms: int(hash, "initial_delay_ms", 500),
+          max_delay_ms: int(hash, "max_delay_ms", 10_000),
+          multiplier: float(hash, "multiplier", 1.8),
+          jitter_ms: int(hash, "jitter_ms", 250)
+        )
+      end
+
+      private def self.reconnect_from_connection(hash : Hash(YAML::Any, YAML::Any)) : ReconnectConfig?
+        reconnect_hash = hash["reconnect"]?.try(&.as_h?)
+        return nil unless reconnect_hash
+
+        ReconnectConfig.new(
+          enabled: bool(reconnect_hash, "enabled", true),
+          endless: bool(reconnect_hash, "endless", true),
+          initial_delay_ms: int(reconnect_hash, "initial_delay_ms", 500),
+          max_delay_ms: int(reconnect_hash, "max_delay_ms", 10_000),
+          multiplier: float(reconnect_hash, "multiplier", 1.8),
+          jitter_ms: int(reconnect_hash, "jitter_ms", 250)
         )
       end
 
@@ -282,7 +351,11 @@ module Obsctl
       end
 
       private def self.bool(hash, key, fallback)
-        hash[YAML::Any.new(key)]?.try(&.as_bool) || fallback
+        value = hash[YAML::Any.new(key)]?
+        return fallback unless value
+
+        parsed = value.as_bool?
+        parsed.nil? ? fallback : parsed
       end
 
       private def self.string_array(value : YAML::Any?, fallback : Array(String)) : Array(String)

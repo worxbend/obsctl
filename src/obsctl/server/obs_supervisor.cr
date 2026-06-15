@@ -41,7 +41,7 @@ module Obsctl
       end
 
       private def run : Nil
-        policy = Runtime::ReconnectPolicy.new(@config.connection.reconnect)
+        policy = Runtime::ReconnectPolicy.new(@config.reconnect)
         attempt = 0
 
         until @stopped
@@ -62,7 +62,7 @@ module Obsctl
             publish_log("warn", "obs_disconnected", ex.message || "OBS unavailable")
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
-            break unless @config.connection.reconnect.enabled
+            break unless @config.reconnect.enabled
             sleep policy.delay_for(attempt)
             attempt += 1
           rescue ex
@@ -70,7 +70,7 @@ module Obsctl
             publish_log("error", "obs_supervisor_error", ex.message || "OBS supervisor failed")
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
-            break unless @config.connection.reconnect.enabled
+            break unless @config.reconnect.enabled
             sleep policy.delay_for(attempt)
             attempt += 1
           end

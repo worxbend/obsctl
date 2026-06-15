@@ -4,8 +4,12 @@ require "../../../src/obsctl/server/server"
 require "../../support/fake_obs_server"
 
 private def with_fake_cli_config(server : Obsctl::SpecSupport::FakeObsServer, &)
+  with_fake_cli_config_for(server.config) { |path| yield path }
+end
+
+private def with_fake_cli_config_for(config : Obsctl::Config::Config, &)
   path = File.tempname("obsctl-cli-integration", ".yml")
-  Obsctl::Config::ConfigWriter.new.write(path, server.config, backup: false)
+  Obsctl::Config::ConfigWriter.new.write(path, config, backup: false)
   yield path
 ensure
   File.delete(path) if path && File.exists?(path)
@@ -51,6 +55,48 @@ describe Obsctl::CLI::Main do
       with_fake_cli_config(server) do |path|
         with_cli_runtime do
           obsctl_server = start_cli_server(server.config, path)
+
+          exit_code = 1
+          20.times do
+            exit_code = Obsctl::CLI::Main.run(["--config", path, "scene", "2"])
+            break if exit_code == 0
+            sleep 50.milliseconds
+          end
+
+          exit_code.should eq(0)
+          server.current_scene.should eq("Screen Share")
+        end
+      end
+    ensure
+      obsctl_server.try(&.stop)
+      server.stop if server
+    end
+  end
+
+  it "uses server.socket_path from config for thin client commands" do
+    server = Obsctl::SpecSupport::FakeObsServer.new.start
+    obsctl_server = nil
+    begin
+      with_cli_runtime do |runtime_dir|
+        socket_path = File.join(runtime_dir, "custom", "obsctl.sock")
+        config = Obsctl::Config::Config.new(
+          server: Obsctl::Config::ServerConfig.new(socket_path: socket_path),
+          connection: server.config.connection,
+          scenes: server.config.scenes,
+          audio: server.config.audio,
+          reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false)
+        )
+        with_fake_cli_config_for(config) do |path|
+          obsctl_server = Obsctl::Server::Server.new(config, path, socket_path: socket_path)
+          ready = Channel(Nil).new
+          spawn do
+            ready.send(nil)
+            obsctl_server.not_nil!.run
+          end
+          ready.receive
+          until File.exists?(socket_path)
+            Fiber.yield
+          end
 
           exit_code = 1
           20.times do
