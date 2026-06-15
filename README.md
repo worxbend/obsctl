@@ -47,7 +47,7 @@ obsctl validate-config
 
 Except for `init`, `validate-config`, and `server`, scriptable commands are thin IPC clients. Start `obsctl server --headless` first; if the server is missing, commands print startup/service instructions and exit `3`.
 
-TUI palette commands use the same grammar with a leading slash, for example `/scene main`, `/mute mic`, and `/vol mic 70`.
+The TUI is also a local IPC client in normal mode. It subscribes to server state updates and sends palette commands through the server, using the same grammar with a leading slash, for example `/scene main`, `/mute mic`, and `/vol mic 70`.
 
 `dump-config` is performed by the local server, which owns the OBS connection, reads scenes and audio inputs, and writes a generated config. Existing config files are backed up before dump writes.
 
