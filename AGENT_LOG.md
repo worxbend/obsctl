@@ -214,3 +214,18 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:00:20Z iteration 12 validation started
+2026-06-15T19:00:31Z iteration 12 committed
+2026-06-15T19:00:34Z iteration 12 pushed
+2026-06-15T19:00:34Z iteration 13 started
+
+## 2026-06-15 TUI IPC request correlation
+
+- Hardened the IPC-backed TUI session client with per-request pending response channels so overlapping long-lived commands are matched by response ID.
+- Kept pushed IPC events on the existing event queue while command responses are dispatched directly to their waiting request.
+- Added TUI IPC coverage proving two concurrent commands complete when the fake server replies out of order.
+- Updated `TODO.md`; next planned slice is termisu/proper widget evaluation or documentation polish.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

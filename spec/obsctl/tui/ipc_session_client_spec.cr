@@ -135,4 +135,60 @@ describe Obsctl::TUI::IpcSessionClient do
     client.try(&.close)
     server.try(&.close)
   end
+
+  it "correlates overlapping command responses by request id" do
+    path = File.join(Dir.tempdir, "obsctl-tui-ipc-correlation-#{Random.rand(1_000_000)}.sock")
+    server = Obsctl::IPC::UnixServer.new(path)
+    client = nil.as(Obsctl::TUI::IpcSessionClient?)
+    ready = Channel(Nil).new
+    done = Channel(Nil).new
+
+    spawn do
+      server.bind
+      ready.send(nil)
+      session = server.accept
+
+      subscribe = session.read_message.as(Obsctl::IPC::Request)
+      session.write_message(Obsctl::IPC::Response.new(subscribe.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
+      session.write_message(Obsctl::IPC::Event.new("state", tui_ipc_snapshot))
+
+      first = session.read_message.as(Obsctl::IPC::Request)
+      second = session.read_message.as(Obsctl::IPC::Request)
+
+      session.write_message(Obsctl::IPC::Response.new(second.id, true, JSON.parse({"message" => "second"}.to_json)))
+      session.write_message(Obsctl::IPC::Response.new(first.id, true, JSON.parse({"message" => "first"}.to_json)))
+      done.receive
+      session.close
+    ensure
+      server.close
+    end
+
+    ready.receive
+    client = Obsctl::TUI::IpcSessionClient.new(Obsctl::IPC::UnixClient.new(path))
+    client.connect
+
+    first_result = Channel(Exception?).new(1)
+    second_result = Channel(Exception?).new(1)
+
+    spawn do
+      client.not_nil!.set_scene("main")
+      first_result.send(nil)
+    rescue ex
+      first_result.send(ex)
+    end
+
+    spawn do
+      client.not_nil!.mute("mic", true)
+      second_result.send(nil)
+    rescue ex
+      second_result.send(ex)
+    end
+
+    first_result.receive.should be_nil
+    second_result.receive.should be_nil
+    done.send(nil)
+  ensure
+    client.try(&.close)
+    server.try(&.close)
+  end
 end
