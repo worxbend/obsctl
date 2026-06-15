@@ -327,3 +327,18 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:35:52Z iteration 19 validation started
+2026-06-15T19:36:04Z iteration 19 committed
+2026-06-15T19:36:06Z iteration 19 pushed
+2026-06-15T19:36:06Z iteration 20 started
+
+## 2026-06-15 Dump-config conflict reporting
+
+- Hardened `ConfigDump.merge` so dump writes preserve top-level `server` and `reconnect` daemon settings.
+- Added pre-write dump conflict reporting for duplicate scene/audio aliases or shortcuts and alias/shortcut collisions with discovered OBS object names.
+- Added config-level and CLI-through-server coverage proving conflicting dumps return a config error without writing the config or creating a backup.
+- Updated README, config docs, command docs, and `TODO.md`; Milestone 5 now has no remaining tracked dump-config items.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)
