@@ -358,3 +358,18 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T19:44:18Z iteration 21 validation started
+2026-06-15T19:44:30Z iteration 21 committed
+2026-06-15T19:44:32Z iteration 21 pushed
+2026-06-15T19:44:32Z iteration 22 started
+
+## 2026-06-15 TUI incremental ANSI renderer
+
+- Added a frame-building path to the ANSI TUI renderer and an incremental renderer that emits row-level diffs after the initial full paint.
+- Switched the interactive TUI app loop to use incremental rendering while preserving the existing full-render API for tests and snapshots.
+- Added renderer specs covering first-paint behavior, changed-row updates, and unchanged-frame no-op output.
+- Updated README, command docs, and `TODO.md`; next planned slice is public documentation comments/lint polish or CLI service smoke coverage.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

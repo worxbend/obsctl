@@ -87,4 +87,45 @@ describe Obsctl::TUI::Renderer do
     end
     output.should contain("~")
   end
+
+  it "uses a full paint for the first incremental render" do
+    model = Obsctl::TUI::Model.new(snapshot: renderer_snapshot, command_line: "/scene main")
+    io = IO::Memory.new
+
+    Obsctl::TUI::Renderer.new.render_incremental(model, io, width: 60, height: 24)
+    output = io.to_s
+
+    output.should start_with("\e[2J\e[H")
+    output.should contain("obsctl-cr | OBS connected | scene Main Camera")
+    output.should contain("> /scene main")
+  end
+
+  it "only writes changed rows after the first incremental render" do
+    renderer = Obsctl::TUI::Renderer.new
+    first = Obsctl::TUI::Model.new(snapshot: renderer_snapshot, command_line: "/scene main")
+    second = Obsctl::TUI::Model.new(snapshot: renderer_snapshot, command_line: "/scene brb")
+    io = IO::Memory.new
+
+    renderer.render_incremental(first, io, width: 60, height: 24)
+    io.clear
+    renderer.render_incremental(second, io, width: 60, height: 24)
+    output = io.to_s
+
+    output.should_not contain("\e[2J\e[H")
+    output.should contain("\e[23;1H")
+    output.should contain("> /scene brb")
+    output.should_not contain("Scenes\n")
+  end
+
+  it "does not write unchanged rows during incremental render" do
+    renderer = Obsctl::TUI::Renderer.new
+    model = Obsctl::TUI::Model.new(snapshot: renderer_snapshot, command_line: "/scene main")
+    io = IO::Memory.new
+
+    renderer.render_incremental(model, io, width: 60, height: 24)
+    io.clear
+    renderer.render_incremental(model, io, width: 60, height: 24)
+
+    io.to_s.should eq("")
+  end
 end
