@@ -17,8 +17,10 @@ module Obsctl
       )
         @registry = ClientRegistry.new
         @state = StateStore.new(->(snapshot : JSON::Any) { @registry.broadcast("state", snapshot) })
-        @supervisor = ObsSupervisor.new(@config, @state)
-        @executor = CommandExecutor.new(@config, @config_path, @state, @supervisor, -> { @registry.client_count })
+        event_broadcast = ->(event : JSON::Any) { @registry.broadcast("events", event) }
+        log_broadcast = ->(entry : JSON::Any) { @registry.broadcast("logs", entry) }
+        @supervisor = ObsSupervisor.new(@config, @state, event_broadcast, log_broadcast)
+        @executor = CommandExecutor.new(@config, @config_path, @state, @supervisor, -> { @registry.client_count }, log_broadcast)
         @ipc = IPC::UnixServer.new(@socket_path)
       end
 
@@ -48,7 +50,7 @@ module Obsctl
           if request.subscribe?
             @registry.add(session, request.topics)
             session.write_message(IPC::Response.new(request.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
-            session.write_message(IPC::Event.new("state", @state.snapshot_json))
+            session.write_message(IPC::Event.new("state", @state.snapshot_json)) if request.topics.includes?("state")
           elsif request.command?
             session.write_message(@executor.execute(request))
           else
@@ -57,6 +59,7 @@ module Obsctl
         end
       rescue ex : Domain::IpcProtocolError
         session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new("INVALID_REQUEST", ex.message || "invalid IPC request")))
+      rescue IO::Error
       ensure
         @registry.remove(session)
         session.close

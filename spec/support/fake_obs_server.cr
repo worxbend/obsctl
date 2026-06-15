@@ -98,6 +98,16 @@ module Obsctl
         end
       end
 
+      def emit_current_scene_changed(scene_name : String) : Nil
+        @mutex.synchronize { @current_scene = scene_name if @scenes.includes?(scene_name) }
+        broadcast_event("CurrentProgramSceneChanged", {"sceneName" => scene_name})
+      end
+
+      def emit_input_mute_changed(input_name : String, muted : Bool) : Nil
+        @mutex.synchronize { update_input(input_name, muted: muted) }
+        broadcast_event("InputMuteStateChanged", {"inputName" => input_name, "inputMuted" => muted})
+      end
+
       private def websocket_handler : HTTP::WebSocketHandler
         HTTP::WebSocketHandler.new do |websocket, _context|
           @mutex.synchronize { @websockets << websocket }
@@ -146,6 +156,26 @@ module Obsctl
         select
         when @request_notifications.send(request_type)
         else
+        end
+      end
+
+      private def broadcast_event(event_type : String, event_data) : Nil
+        frame = JSON.build do |json|
+          json.object do
+            json.field "op", 5
+            json.field "d" do
+              json.object do
+                json.field "eventType", event_type
+                json.field "eventData", event_data
+              end
+            end
+          end
+        end
+
+        sockets = @mutex.synchronize { @websockets.dup }
+        sockets.each do |websocket|
+          websocket.send(frame)
+        rescue
         end
       end
 

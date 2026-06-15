@@ -145,6 +145,98 @@ describe Obsctl::Server::Server do
     File.delete(path) if path && File.exists?(path)
   end
 
+  it "broadcasts OBS events to events subscribers and refreshes state subscribers" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    path = temp_socket_path
+    server = Obsctl::Server::Server.new(obs.config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    until File.exists?(path)
+      Fiber.yield
+    end
+
+    status_client = Obsctl::IPC::UnixClient.new(path)
+    wait_for_obs_connected(status_client)
+
+    events = subscribe(path, ["events"], "req-events")
+    state = subscribe(path, ["state"], "req-state")
+    state.read_message.as(Obsctl::IPC::Event).topic.should eq("state")
+
+    obs.emit_current_scene_changed("Screen Share")
+
+    event = read_ipc_message(events).as(Obsctl::IPC::Event)
+    event.topic.should eq("events")
+    event.data.not_nil!["event_type"].as_s.should eq("CurrentProgramSceneChanged")
+    event.data.not_nil!["event_data"]["sceneName"].as_s.should eq("Screen Share")
+
+    state_event = read_ipc_message(state).as(Obsctl::IPC::Event)
+    state_event.topic.should eq("state")
+    state_event.data.not_nil!["current_scene"].as_s.should eq("Screen Share")
+  ensure
+    events.try(&.close)
+    state.try(&.close)
+    server.try(&.stop)
+    obs.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
+  it "broadcasts command failure logs to logs subscribers" do
+    path = temp_socket_path
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: 1,
+        password_env: "",
+        request_timeout_ms: 100,
+        reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false)
+      ),
+      scenes: [
+        Obsctl::Config::SceneConfig.new("Main Camera", "main"),
+      ]
+    )
+    server = Obsctl::Server::Server.new(config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    until File.exists?(path)
+      Fiber.yield
+    end
+
+    logs = subscribe(path, ["logs"], "req-logs")
+    client = Obsctl::IPC::UnixClient.new(path)
+    response = client.request(
+      Obsctl::IPC::Request.new(
+        "req-missing-obs",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("set_scene", "main")
+      )
+    )
+
+    response.ok.should be_false
+    response.error.not_nil!.code.should eq("OBS_UNAVAILABLE")
+
+    log = read_ipc_message(logs).as(Obsctl::IPC::Event)
+    log.topic.should eq("logs")
+    log.data.not_nil!["level"].as_s.should eq("warn")
+    log.data.not_nil!["code"].as_s.should eq("command_failed")
+    log.data.not_nil!["message"].as_s.should contain("OBS")
+  ensure
+    logs.try(&.close)
+    server.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
   it "marks OBS disconnected after an established WebSocket closes while IPC stays available" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     path = temp_socket_path
@@ -183,6 +275,31 @@ describe Obsctl::Server::Server do
     server.try(&.stop)
     obs.try(&.stop)
     File.delete(path) if path && File.exists?(path)
+  end
+end
+
+private def subscribe(path : String, topics : Array(String), id : String) : Obsctl::IPC::ClientSession
+  session = Obsctl::IPC::UnixClient.new(path).connect
+  session.write_message(
+    Obsctl::IPC::Request.new(
+      id,
+      Obsctl::IPC::Request::TYPE_SUBSCRIBE,
+      nil,
+      topics
+    )
+  )
+  session.read_message.as(Obsctl::IPC::Response).ok.should be_true
+  session
+end
+
+private def read_ipc_message(session : Obsctl::IPC::ClientSession, timeout : Time::Span = 2.seconds) : Obsctl::IPC::Message
+  messages = Channel(Obsctl::IPC::Message?).new(1)
+  spawn { messages.send(session.read_message) }
+  select
+  when message = messages.receive
+    message || raise "IPC session closed before expected message"
+  when timeout(timeout)
+    raise "timed out waiting for IPC message"
   end
 end
 

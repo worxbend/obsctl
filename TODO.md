@@ -575,6 +575,7 @@ Implemented:
   - TUI event application behavior
   - TUI reconnect-on-poll behavior
   - TUI IPC subscription and command forwarding behavior
+  - TUI IPC pushed OBS event topic parsing
   - TUI command palette input handling and dashboard shortcuts
   - CLI scene/audio integration against fake OBS server
   - CLI scene/audio integration through the local server IPC path
@@ -588,6 +589,7 @@ Implemented:
   - server-owned OBS scene command through IPC
   - server state transition to disconnected after an established OBS WebSocket closes
   - server state broadcasts to subscribed IPC clients
+  - server OBS event and log topic broadcasts to subscribed IPC clients
   - systemd user service unit generation and installer command behavior
 
 ## Partial
@@ -597,7 +599,7 @@ Implemented:
   - OBS supervisor owns the OBS WebSocket client
   - IPC command executor can control scene/audio and dump/reload config
   - reconnect loop detects established OBS WebSocket disconnects, marks state disconnected, clears the stale client, and retries when reconnect is enabled
-  - subscription handling maintains a client registry and broadcasts state updates, but does not yet broadcast distinct OBS/log event topics
+  - subscription handling maintains a client registry and broadcasts state, OBS event, and log topic updates
 - CLI:
   - non-interactive OBS control commands are thin IPC clients
   - `server-status` exists with PID, connected state, last error, and subscribed client count
@@ -613,7 +615,7 @@ Implemented:
   - fails in-flight pending requests promptly when the WebSocket closes or the reader fiber errors
   - exposes connection state so the server supervisor can detect established WebSocket disconnects
   - event parsing exists and events are routed to a client channel
-  - direct embedded-style TUI sessions can consume the event channel, but normal TUI mode consumes server-pushed IPC state
+  - direct embedded-style TUI sessions can consume the event channel, and normal TUI mode consumes server-pushed IPC state and OBS event topics
   - reconnect policy is still wired into the TUI session for server reconnects, but not into the low-level OBS client itself
 - Config:
   - known fields round-trip
@@ -773,6 +775,7 @@ Partial:
 - scene changed events
 - input mute changed events
 - input volume changed events
+- OBS event topic fanout from the server to IPC subscribers
 - reconnect handling wired into runtime
 
 ### Milestone 8: Polish
@@ -811,10 +814,11 @@ Done:
 - `server-status` command path
 - persistent client registry and state broadcast fanout for subscriptions
 - TUI IPC session client with subscription acknowledgement, initial state handling, command forwarding, and server-pushed state updates
+- event/log topic broadcast fanout for server-side OBS events and command failures
+- TUI IPC session client parsing of pushed OBS event topics
 
 Remaining:
 
-- add event/log topic broadcast fanout after server-side producers exist
 - harden request correlation helpers for long-lived clients if concurrent TUI requests are added later
 
 ### Milestone 10: Systemd User Service
@@ -838,5 +842,5 @@ Remaining:
 ## Planned Next
 
 1. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-2. Add event/log topic broadcast fanout after server-side producers exist.
+2. Harden request correlation helpers for long-lived clients if concurrent TUI requests are added later.
 3. Add public documentation comments and run lint once dependencies are installed.

@@ -19,6 +19,7 @@ module Obsctl
         @state : StateStore,
         @supervisor : ObsSupervisor,
         @client_count : Proc(Int32)? = nil,
+        @log_broadcast : Proc(JSON::Any, Nil)? = nil,
       )
       end
 
@@ -29,8 +30,10 @@ module Obsctl
         result = execute_command(command)
         IPC::Response.new(request.id, true, result)
       rescue ex : Domain::ObsctlError
+        publish_log("warn", "command_failed", ex.message || "request failed")
         IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new(error_code(ex), ex.message || "request failed"))
       rescue ex
+        publish_log("error", "command_failed", ex.message || "request failed")
         IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new("INTERNAL_ERROR", ex.message || "request failed"))
       end
 
@@ -109,6 +112,15 @@ module Obsctl
 
       private def object(values) : JSON::Any
         JSON.parse(values.to_json)
+      end
+
+      private def publish_log(level : String, code : String, message : String) : Nil
+        @log_broadcast.try(&.call(JSON.parse({
+          level:      level,
+          code:       code,
+          message:    message,
+          created_at: Time.utc.to_rfc3339,
+        }.to_json)))
       end
 
       private def error_code(error : Domain::ObsctlError) : String
