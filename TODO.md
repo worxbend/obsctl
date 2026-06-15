@@ -568,6 +568,7 @@ Implemented:
   - fake OBS WebSocket integration server
   - OBS client snapshot integration
   - OBS scene/audio command integration
+  - OBS client pending request failure on WebSocket close
   - TUI session command refresh behavior
   - TUI event application behavior
   - TUI reconnect-on-poll behavior
@@ -606,6 +607,7 @@ Implemented:
 - OBS client:
   - has a single WebSocket reader channel
   - has a pending request map for request/response coordination
+  - fails in-flight pending requests promptly when the WebSocket closes or the reader fiber errors
   - event parsing exists and events are routed to a client channel
   - direct embedded-style TUI sessions can consume the event channel, but normal TUI mode consumes server-pushed IPC state
   - reconnect policy is still wired into the TUI session for server reconnects, but not into the low-level OBS client itself
@@ -675,10 +677,11 @@ Done:
 - fake OBS WebSocket integration test server
 - explicit event channel
 - explicit event subscription options during Identify
+- pending requests fail promptly on WebSocket close or reader failure
 
 Remaining:
 
-- more robust close/error handling
+- detect and surface established WebSocket disconnects in the server supervisor loop
 - optional low-level client reconnect loop
 
 ### Milestone 3: Scene Control
@@ -830,7 +833,7 @@ Remaining:
 
 ## Planned Next
 
-1. Improve close/error handling for pending requests and WebSocket shutdown.
+1. Detect established OBS WebSocket disconnects in the server supervisor and mark state disconnected/reconnect.
 2. Add raw-mode keyboard handling and a real command palette.
 3. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
 4. Add public documentation comments and run lint once dependencies are installed.

@@ -148,3 +148,19 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:43:18Z iteration 8 validation started
+2026-06-15T18:43:28Z iteration 8 committed
+2026-06-15T18:43:30Z iteration 8 pushed
+2026-06-15T18:43:30Z iteration 9 started
+
+## 2026-06-15 OBS pending request shutdown
+
+- Hardened `OBS::Client` WebSocket shutdown handling so close callbacks and reader-fiber errors mark the client unidentified and fail in-flight pending requests promptly.
+- Buffered per-request response channels so late responses cannot block the reader after caller timeouts.
+- Added fake OBS server hooks for delayed request responses and request notifications, keeping notifications nonblocking so tests do not alter server behavior.
+- Added OBS client integration coverage proving an in-flight request fails with `ConnectionFailed` when the WebSocket closes instead of waiting for the request timeout.
+- Updated `TODO.md`; next planned slice is detecting established OBS WebSocket disconnects in the server supervisor and reconnecting statefully.
+- Validation passed after fixing a fake-server notification backpressure regression found by the first full spec run:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)
