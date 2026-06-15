@@ -531,6 +531,16 @@ Implemented:
   - server-pushed state events update the displayed snapshot
   - direct OBS session adapter remains available for explicit embedded-style use/tests
   - reconnect attempts use the configured reconnect policy
+- Systemd user service support:
+  - `obsctl service install`
+  - `obsctl service uninstall`
+  - `obsctl service status`
+  - `obsctl service start`
+  - `obsctl service stop`
+  - `obsctl service restart`
+  - install writes `~/.config/systemd/user/obsctl.service`
+  - service unit uses the current absolute executable path with `server --headless`
+  - install/uninstall run `systemctl --user daemon-reload`
 - Runtime scaffolding:
   - logger with secret redaction
   - reconnect policy
@@ -571,6 +581,7 @@ Implemented:
   - server IPC startup while OBS is unavailable
   - server-owned OBS scene command through IPC
   - server state broadcasts to subscribed IPC clients
+  - systemd user service unit generation and installer command behavior
 
 ## Partial
 
@@ -798,12 +809,29 @@ Remaining:
 - add event/log topic broadcast fanout after server-side producers exist
 - harden request correlation helpers for long-lived clients if concurrent TUI requests are added later
 
+### Milestone 10: Systemd User Service
+
+Done:
+
+- `obsctl service install`
+- `obsctl service uninstall`
+- `obsctl service status`
+- `obsctl service start`
+- `obsctl service stop`
+- `obsctl service restart`
+- service unit generation with absolute `obsctl server --headless` ExecStart
+- `systemctl --user daemon-reload` after install/uninstall
+- service generation and installer specs
+
+Remaining:
+
+- add CLI-level smoke coverage with a fake command runner hook if CLI dependency injection is introduced later
+
 ## Planned Next
 
-1. Add systemd user service install/uninstall/status/start/stop/restart support.
-2. Add explicit OBS event subscription options during Identify in server mode.
-3. Add dump-config CLI integration coverage through the server.
-4. Improve close/error handling for pending requests and WebSocket shutdown.
-5. Add raw-mode keyboard handling and a real command palette.
-6. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-7. Add public documentation comments and run lint once dependencies are installed.
+1. Add explicit OBS event subscription options during Identify in server mode.
+2. Add dump-config CLI integration coverage through the server.
+3. Improve close/error handling for pending requests and WebSocket shutdown.
+4. Add raw-mode keyboard handling and a real command palette.
+5. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+6. Add public documentation comments and run lint once dependencies are installed.

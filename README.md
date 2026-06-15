@@ -43,9 +43,13 @@ obsctl vol|volume <alias-or-name> <0-100>
 obsctl dump-config
 obsctl reload-config
 obsctl validate-config
+obsctl service install
+obsctl service start|stop|restart|status|uninstall
 ```
 
-Except for `init`, `validate-config`, and `server`, scriptable commands are thin IPC clients. Start `obsctl server --headless` first; if the server is missing, commands print startup/service instructions and exit `3`.
+Except for `init`, `validate-config`, `server`, and `service`, scriptable OBS-control commands are thin IPC clients. Start `obsctl server --headless` first; if the server is missing, commands print startup/service instructions and exit `3`.
+
+`obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
 The TUI is also a local IPC client in normal mode. It subscribes to server state updates and sends palette commands through the server, using the same grammar with a leading slash, for example `/scene main`, `/mute mic`, and `/vol mic 70`.
 
