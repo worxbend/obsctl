@@ -45,4 +45,26 @@ describe Obsctl::Config::ConfigSchema do
     config.server.start_embedded_if_missing.should be_false
     config.reconnect.enabled.should be_false
   end
+
+  it "warns when a plaintext password is configured without exposing it" do
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        password_env: "",
+        password: "super-secret"
+      )
+    )
+
+    warnings = Obsctl::Config::ConfigSchema.warnings(config)
+    warnings.size.should eq(1)
+    warnings.first.should contain("connection.password")
+    warnings.first.should_not contain("super-secret")
+  end
+
+  it "does not warn when only password_env is configured" do
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(password_env: "OBSCTL_TEST_PASSWORD")
+    )
+
+    Obsctl::Config::ConfigSchema.warnings(config).should be_empty
+  end
 end
