@@ -1,4 +1,5 @@
 require "./model"
+require "./event_applier"
 require "./session_client"
 require "../config/config_dump"
 require "../config/config_loader"
@@ -8,6 +9,7 @@ require "../domain/command"
 require "../domain/command_parser"
 require "../domain/command_result"
 require "../domain/errors"
+require "../runtime/reconnect_policy"
 
 module Obsctl
   module TUI
@@ -26,6 +28,9 @@ module Obsctl
         @parser = Domain::CommandParser.new
         @snapshot = nil.as(OBS::State::ObsSnapshot?)
         @client = nil.as(SessionClient?)
+        @last_result = nil.as(String?)
+        @reconnect_attempt = 0
+        @next_reconnect_at = nil.as(Time?)
       end
 
       def start : Model
@@ -33,10 +38,19 @@ module Obsctl
       end
 
       def execute_line(line : String) : SessionResult
+        drain_events
         command = @parser.parse(line)
         execute(command)
       rescue ex : Domain::ObsctlError
         SessionResult.new(model_with_result(ex.message || "command failed"))
+      end
+
+      def poll_events : Model
+        changed = drain_events
+        return model_with_result("state updated") if changed
+        return reconnect_if_due if reconnect_due?
+
+        model_with_result(@last_result)
       end
 
       def execute(command : Domain::Command) : SessionResult
@@ -112,9 +126,12 @@ module Obsctl
         client.connect
         @client = client
         @snapshot = client.snapshot
+        @reconnect_attempt = 0
+        @next_reconnect_at = nil
         model_with_result(message)
       rescue ex : Domain::ObsctlError
         @snapshot = disconnected_snapshot(ex.message)
+        schedule_reconnect
         model_with_result(ex.message || "connection failed")
       end
 
@@ -136,7 +153,43 @@ module Obsctl
       end
 
       private def model_with_result(message : String?) : Model
+        @last_result = message
         Model.new(snapshot: @snapshot, last_result: message)
+      end
+
+      private def drain_events : Bool
+        changed = false
+        client = @client
+        snapshot = @snapshot
+        return false unless client && snapshot
+
+        current_snapshot = snapshot
+        while event = client.next_event
+          current_snapshot = EventApplier.apply(current_snapshot, event)
+          @snapshot = current_snapshot
+          changed = true
+        end
+        changed
+      end
+
+      private def reconnect_due? : Bool
+        return false unless @config.connection.reconnect.enabled
+        return false unless @snapshot.try { |snapshot| !snapshot.connected }
+
+        reconnect_at = @next_reconnect_at
+        reconnect_at.nil? || Time.utc >= reconnect_at
+      end
+
+      private def reconnect_if_due : Model
+        connect_with_current_config("reconnected")
+      end
+
+      private def schedule_reconnect : Nil
+        return unless @config.connection.reconnect.enabled
+
+        delay = Runtime::ReconnectPolicy.new(@config.connection.reconnect).delay_for(@reconnect_attempt)
+        @reconnect_attempt += 1
+        @next_reconnect_at = Time.utc + delay
       end
 
       private def disconnected_snapshot(message : String?) : OBS::State::ObsSnapshot

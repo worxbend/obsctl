@@ -196,7 +196,7 @@ module Obsctl
         ConnectionConfig.new(
           host: string(hash, "host", "127.0.0.1"),
           port: int(hash, "port", 4455),
-          password_env: string_or_nil(hash, "password_env") || "OBS_WEBSOCKET_PASSWORD",
+          password_env: password_env(hash),
           password: string_or_nil(hash, "password"),
           connect_timeout_ms: int(hash, "connect_timeout_ms", 3000),
           request_timeout_ms: int(hash, "request_timeout_ms", 2500),
@@ -265,7 +265,10 @@ module Obsctl
       end
 
       private def self.string_or_nil(hash, key)
-        hash[YAML::Any.new(key)]?.try(&.as_s?)
+        value = hash[YAML::Any.new(key)]?
+        return nil unless value
+
+        value.as_s? || value.as_i?.try(&.to_s)
       end
 
       private def self.int(hash, key, fallback)
@@ -284,6 +287,13 @@ module Obsctl
 
       private def self.string_array(value : YAML::Any?, fallback : Array(String)) : Array(String)
         value.try(&.as_a?).try(&.map(&.as_s)) || fallback
+      end
+
+      private def self.password_env(hash) : String?
+        key = YAML::Any.new("password_env")
+        return "OBS_WEBSOCKET_PASSWORD" unless hash.has_key?(key)
+
+        string_or_nil(hash, "password_env") || ""
       end
 
       private def self.reject_unknown_top_level_keys!(root : Hash(YAML::Any, YAML::Any)) : Nil

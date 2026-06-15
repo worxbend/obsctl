@@ -1,5 +1,6 @@
 require "../config/config"
 require "../obs/client"
+require "../obs/protocol/event"
 require "../obs/state/obs_snapshot"
 
 module Obsctl
@@ -14,6 +15,7 @@ module Obsctl
       abstract def set_volume(name : String, percent : Int32) : Nil
       abstract def scene_names : Array(String)
       abstract def input_names : Array(String)
+      abstract def next_event : OBS::Protocol::Event?
     end
 
     class ObsSessionClient < SessionClient
@@ -55,6 +57,15 @@ module Obsctl
 
       def input_names : Array(String)
         @client.input_names
+      end
+
+      def next_event : OBS::Protocol::Event?
+        select
+        when event = @client.events.receive
+          event
+        when timeout(0.milliseconds)
+          nil
+        end
       end
     end
   end

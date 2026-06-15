@@ -112,6 +112,9 @@ Implemented:
   - snapshot refresh after scene/audio commands
   - `/reload-config` reloads config and reconnects
   - `/dump-config` writes merged config and refreshes the model
+  - timer-based event polling in the ANSI TUI loop
+  - scene/audio OBS events update the displayed snapshot
+  - reconnect attempts use the configured reconnect policy
 - Runtime scaffolding:
   - logger with secret redaction
   - reconnect policy
@@ -139,6 +142,9 @@ Implemented:
   - OBS client snapshot integration
   - OBS scene/audio command integration
   - TUI session command refresh behavior
+  - TUI event application behavior
+  - TUI reconnect-on-poll behavior
+  - CLI scene/audio integration against fake OBS server
 
 ## Partial
 
@@ -147,13 +153,13 @@ Implemented:
   - not yet a full termisu dashboard
   - not yet btop/btm-style keyboard-first layout
   - does not yet do raw-mode key handling
-  - does not yet refresh continuously
+  - refreshes on a timer, but rendering is still full-screen ANSI redraw
 - OBS client:
   - has a single WebSocket reader channel
   - has a pending request map for request/response coordination
   - event parsing exists and events are routed to a client channel
-  - event channel is not yet consumed by TUI app state
-  - reconnect policy exists, but reconnect handling is not yet wired into the client
+  - event channel is consumed by the TUI session
+  - reconnect policy is wired into the TUI session, but not into the low-level client itself
 - Config:
   - known fields round-trip
   - unknown top-level fields are explicitly rejected to avoid silent data loss
@@ -167,7 +173,7 @@ Implemented:
   - no guided host/port/password prompt yet
   - no optional connect-and-dump flow yet
 - Tests:
-  - no end-to-end CLI tests against a fake OBS server yet
+  - CLI scene/audio fake-server specs exist, but dump-config CLI fake-server coverage is still missing
   - TUI session specs exist, but no raw keyboard/input specs yet
 
 ## Not Yet Implemented
@@ -177,11 +183,8 @@ Implemented:
 - Keyboard shortcuts outside line-based command input.
 - Scene map widget with grouped textual graph.
 - Compact log panel with recent errors.
-- Realtime OBS event subscriptions and event-driven state updates.
-- Input mute changed event handling.
-- Input volume changed event handling.
-- Scene changed event handling.
-- Connection failure recovery from inside TUI.
+- Explicit OBS event subscription options during Identify.
+- Low-level client reconnect loop independent of TUI session.
 - Studio mode support.
 - Stream/record controls and status.
 - Scene item visibility controls.
@@ -227,7 +230,8 @@ Done:
 Remaining:
 
 - more robust close/error handling
-- consume event channel from runtime/TUI state
+- explicit event subscription options during Identify
+- optional low-level client reconnect loop
 
 ### Milestone 3: Scene Control
 
@@ -241,7 +245,7 @@ Done:
 
 Remaining:
 
-- add CLI-level scene command integration test against fake OBS server
+- add more CLI smoke tests for failure cases
 
 ### Milestone 4: Audio Control
 
@@ -261,7 +265,6 @@ Done:
 
 Remaining:
 
-- add CLI-level audio command integration test against fake OBS server
 - improve volume display/formatting
 
 ### Milestone 5: Config Dump
@@ -299,14 +302,14 @@ Remaining:
 
 - termisu app
 - raw keyboard handling
-- realtime refresh
+- incremental/diff rendering instead of full-screen redraw
 - proper layout panels
 - command palette editing
 - log panel
 
 ### Milestone 7: Realtime Events
 
-Not started:
+Partial:
 
 - scene changed events
 - input mute changed events
@@ -334,10 +337,9 @@ Remaining:
 
 ## Planned Next
 
-1. Wire parsed OBS events into a state update channel consumed by the TUI session.
-2. Add reconnect handling around the session client and OBS client.
-3. Add raw-mode keyboard handling and a real command palette.
-4. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
-5. Add end-to-end CLI specs against the fake OBS server.
-6. Improve close/error handling for pending requests and WebSocket shutdown.
-7. Add public documentation comments and run lint once dependencies are installed.
+1. Add explicit OBS event subscription options during Identify.
+2. Add dump-config CLI integration coverage against the fake OBS server.
+3. Improve close/error handling for pending requests and WebSocket shutdown.
+4. Add raw-mode keyboard handling and a real command palette.
+5. Evaluate/install `termisu` if available and replace ANSI rendering with proper widgets.
+6. Add public documentation comments and run lint once dependencies are installed.
