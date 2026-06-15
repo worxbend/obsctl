@@ -107,5 +107,11 @@ module Obsctl
         super(message, ExitCode::Ipc)
       end
     end
+
+    class ServiceInstallFailed < ObsctlError
+      def initialize(message : String)
+        super(message, ExitCode::Failure)
+      end
+    end
   end
 end

@@ -8,6 +8,7 @@ require "../domain/command_parser"
 require "../domain/errors"
 require "../server/server"
 require "../server/server_options"
+require "../service/service_installer"
 require "../tui/app"
 
 module Obsctl
@@ -36,6 +37,15 @@ module Obsctl
           config = Config::ConfigLoader.new.load(options.config_path)
           server_options = Server::ServerOptions.new(headless: options.args.includes?("--headless"))
           return Server::Server.new(config, options.config_path, server_options).run
+        end
+
+        if command == "service"
+          action = options.args[0]? || raise Domain::CommandParseError.new("missing service action")
+          if options.args.size > 1
+            raise Domain::CommandParseError.new("wrong argument count for service")
+          end
+          puts Service::ServiceInstaller.new.run(action)
+          return 0
         end
 
         if command.nil? || command == "tui"

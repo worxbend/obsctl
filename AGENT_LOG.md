@@ -101,3 +101,18 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T18:33:02Z iteration 5 validation started
+2026-06-15T18:33:11Z iteration 5 committed
+2026-06-15T18:33:13Z iteration 5 pushed
+2026-06-15T18:33:13Z iteration 6 started
+
+## 2026-06-15 Systemd user service commands
+
+- Added `src/obsctl/service/` with systemd user service unit rendering, installer/uninstaller behavior, and `systemctl --user` command execution.
+- Wired `obsctl service install|uninstall|status|start|stop|restart` into the CLI outside the OBS IPC proxy path.
+- Added service specs covering unit generation, install/uninstall daemon reloads, action dispatch, invalid actions, and systemctl failure mapping.
+- Updated `README.md`, `docs/commands.md`, and `TODO.md`; next planned slice is explicit OBS event subscription options during Identify in server mode.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)
