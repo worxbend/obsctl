@@ -311,3 +311,18 @@ Append-only progress log for autonomous iterations.
 2026-06-15T19:32:19Z iteration 18 validation started
 2026-06-15T19:32:41Z iteration 18 committed
 2026-06-15T19:33:01Z iteration 18 validation started
+2026-06-15T19:33:12Z iteration 18 committed
+2026-06-15T19:33:16Z iteration 18 pushed
+2026-06-15T19:33:16Z iteration 19 started
+
+## 2026-06-15 Server status payload polish
+
+- Expanded server-side `get_server_status` IPC responses with uptime, socket path, subscribed client count, OBS connection state, reconnecting state, and last error.
+- Updated thin CLI `server-status` formatting to print the expanded daemon status fields.
+- Added server IPC coverage for the daemon status contract and documented the output in README/commands docs.
+- Updated `TODO.md` to reflect the completed status payload polish.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; Makefile skip path)

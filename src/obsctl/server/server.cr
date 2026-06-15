@@ -22,7 +22,7 @@ module Obsctl
         event_broadcast = ->(event : JSON::Any) { @registry.broadcast("events", event) }
         log_broadcast = ->(entry : JSON::Any) { broadcast_log(entry) }
         @supervisor = ObsSupervisor.new(@config, @state, event_broadcast, log_broadcast)
-        @executor = CommandExecutor.new(@config, @config_path, @state, @supervisor, -> { @registry.client_count }, log_broadcast)
+        @executor = CommandExecutor.new(@config, @config_path, @state, @supervisor, @socket_path, client_count: -> { @registry.client_count }, log_broadcast: log_broadcast)
         @ipc = IPC::UnixServer.new(@socket_path)
       end
 

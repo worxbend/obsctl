@@ -50,6 +50,51 @@ describe Obsctl::Server::Server do
     File.delete(path) if path && File.exists?(path)
   end
 
+  it "reports daemon status fields through IPC" do
+    path = temp_socket_path
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: 1,
+        password_env: "",
+        request_timeout_ms: 100
+      ),
+      reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false)
+    )
+    server = Obsctl::Server::Server.new(config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    wait_for_socket(path)
+
+    subscriber = subscribe(path, ["logs"], "req-status-subscribe")
+    response = Obsctl::IPC::UnixClient.new(path).request(
+      Obsctl::IPC::Request.new(
+        "req-server-status",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("get_server_status")
+      )
+    )
+
+    response.ok.should be_true
+    status = response.result.not_nil!
+    status["pid"].as_i.should eq(Process.pid)
+    (status["uptime_seconds"].as_i64 >= 0).should be_true
+    status["socket_path"].as_s.should eq(path)
+    status["client_count"].as_i.should eq(1)
+    status["obs_connected"].as_bool.should be_false
+    status["reconnecting"].as_bool.should be_false
+  ensure
+    subscriber.try(&.close)
+    server.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
   it "executes scene commands through the server-owned OBS client" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     path = temp_socket_path

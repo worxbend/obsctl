@@ -18,6 +18,8 @@ module Obsctl
         @config_path : String,
         @state : StateStore,
         @supervisor : ObsSupervisor,
+        @socket_path : String,
+        @started_at : Time = Time.utc,
         @client_count : Proc(Int32)? = nil,
         @log_broadcast : Proc(JSON::Any, Nil)? = nil,
       )
@@ -110,10 +112,13 @@ module Obsctl
       private def server_status : JSON::Any
         snapshot = @state.snapshot
         object({
-          "pid"           => Process.pid,
-          "client_count"  => @client_count.try(&.call) || 0,
-          "obs_connected" => snapshot.connected,
-          "last_error"    => snapshot.last_error,
+          "pid"            => Process.pid,
+          "uptime_seconds" => (Time.utc - @started_at).total_seconds.to_i64,
+          "socket_path"    => @socket_path,
+          "client_count"   => @client_count.try(&.call) || 0,
+          "obs_connected"  => snapshot.connected,
+          "reconnecting"   => !snapshot.connected && @config.reconnect.enabled,
+          "last_error"     => snapshot.last_error,
         })
       end
 

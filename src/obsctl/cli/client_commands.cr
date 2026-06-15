@@ -101,7 +101,11 @@ module Obsctl
       private def format_server_status(result : JSON::Any) : String
         lines = [] of String
         lines << "pid: #{result["pid"]?.try(&.as_i?) || "-"}"
+        lines << "uptime_seconds: #{result["uptime_seconds"]?.try(&.as_i?) || "-"}"
+        lines << "socket_path: #{result["socket_path"]?.try(&.as_s?) || "-"}"
+        lines << "client_count: #{result["client_count"]?.try(&.as_i?) || 0}"
         lines << "obs_connected: #{result["obs_connected"]?.try(&.as_bool?) || false}"
+        lines << "reconnecting: #{result["reconnecting"]?.try(&.as_bool?) || false}"
         lines << "last_error: #{result["last_error"]?.try(&.as_s?) || "-"}"
         lines.join('\n')
       end
