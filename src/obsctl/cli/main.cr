@@ -7,6 +7,7 @@ require "../config/config_schema"
 require "../domain/command_parser"
 require "../domain/errors"
 require "../ipc/socket_path"
+require "../runtime/logger"
 require "../server/server"
 require "../server/server_options"
 require "../service/service_installer"
@@ -17,6 +18,7 @@ module Obsctl
     module Main
       def self.run(argv : Array(String)) : Int32
         options = OptionsParser.new.parse(argv)
+        log_level = Runtime::LogLevel.parse(options.log_level)
         command = options.command
 
         if command == "init"
@@ -39,7 +41,8 @@ module Obsctl
           config = Config::ConfigLoader.new.load(options.config_path)
           server_options = Server::ServerOptions.new(headless: options.args.includes?("--headless"))
           socket_path = IPC::SocketPath.resolve(config.server.socket_path)
-          return Server::Server.new(config, options.config_path, server_options, socket_path).run
+          logger = Runtime::Logger.new(log_level)
+          return Server::Server.new(config, options.config_path, server_options, socket_path, logger).run
         end
 
         if command == "service"

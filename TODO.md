@@ -563,6 +563,7 @@ Implemented:
   - install/uninstall run `systemctl --user daemon-reload`
 - Runtime scaffolding:
   - logger with secret redaction
+  - typed `--log-level debug|info|warn|error` parsing and filtering for persisted server logs
   - reconnect policy
   - scheduler
   - event loop placeholder
@@ -652,8 +653,9 @@ Implemented:
   - `validate-config` warns when plaintext `connection.password` is configured without printing the secret value
   - nested unknown fields are not preserved yet
 - Logging:
-  - logger exists with redaction
-  - CLI/TUI do not yet consistently use it
+  - logger exists with redaction and server-side log-level filtering
+  - server lifecycle, supervisor, and command-failure log events are persisted when `obsctl server` is started through the CLI
+  - non-server CLI/TUI paths do not yet consistently use it
 - First run:
   - missing interactive config creates a safe default
   - no guided host/port/password prompt yet
@@ -671,7 +673,6 @@ Implemented:
 - Stream/record controls and status.
 - Scene item visibility controls.
 - Volume meter events.
-- Log level CLI behavior wired through runtime logger.
 - `ameba` lint execution in this environment.
 - Release packaging beyond `make release`.
 - Public API/module documentation comments throughout.

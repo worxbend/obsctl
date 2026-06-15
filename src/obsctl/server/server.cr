@@ -1,5 +1,6 @@
 require "../config/config"
 require "../ipc/protocol"
+require "../runtime/logger"
 require "./client_registry"
 require "./command_executor"
 require "./obs_supervisor"
@@ -14,11 +15,12 @@ module Obsctl
         @config_path : String,
         @options : ServerOptions = ServerOptions.new,
         @socket_path : String = IPC::SocketPath.resolve,
+        @logger : Runtime::Logger? = nil,
       )
         @registry = ClientRegistry.new
         @state = StateStore.new(->(snapshot : JSON::Any) { @registry.broadcast("state", snapshot) })
         event_broadcast = ->(event : JSON::Any) { @registry.broadcast("events", event) }
-        log_broadcast = ->(entry : JSON::Any) { @registry.broadcast("logs", entry) }
+        log_broadcast = ->(entry : JSON::Any) { broadcast_log(entry) }
         @supervisor = ObsSupervisor.new(@config, @state, event_broadcast, log_broadcast)
         @executor = CommandExecutor.new(@config, @config_path, @state, @supervisor, -> { @registry.client_count }, log_broadcast)
         @ipc = IPC::UnixServer.new(@socket_path)
@@ -27,6 +29,7 @@ module Obsctl
       getter socket_path
 
       def run : Int32
+        log("info", "server_start", "obsctl server starting socket=#{@socket_path}")
         @supervisor.start
         @ipc.listen(->handle_session(IPC::ClientSession))
         0
@@ -37,6 +40,24 @@ module Obsctl
       def stop : Nil
         @supervisor.stop
         @ipc.close
+        log("info", "server_stop", "obsctl server stopped socket=#{@socket_path}")
+      end
+
+      private def broadcast_log(entry : JSON::Any) : Nil
+        @registry.broadcast("logs", entry)
+        level = entry["level"]?.try(&.as_s?) || "info"
+        code = entry["code"]?.try(&.as_s?) || "server"
+        message = entry["message"]?.try(&.as_s?) || ""
+        @logger.try(&.write(level, "#{code} #{message}"))
+      end
+
+      private def log(level : String, code : String, message : String) : Nil
+        broadcast_log(JSON.parse({
+          level:      level,
+          code:       code,
+          message:    message,
+          created_at: Time.utc.to_rfc3339,
+        }.to_json))
       end
 
       private def handle_session(session : IPC::ClientSession) : Nil
