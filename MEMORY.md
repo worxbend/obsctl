@@ -7,5 +7,7 @@
 [learning] Regex architecture-boundary specs are useful but insufficient unless they scan every relevant layer and also protect require-level contracts.
 [anti-pattern] Moving a class to fence architecture boundaries can silently break callers that relied on the old require path; document and test the new opt-in path.
 [learning] OBS pending request cleanup must cover timeout, late response, concurrent response correlation, disconnect, and malformed frame paths.
+[learning] Golden fixtures can freeze accidental behavior; reconcile command semantics against acceptance docs before treating fixtures as final contracts.
+[learning] Protocol-error cleanup should preserve the root cause through supervisor state/logs, not only close the websocket and report a generic disconnect.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
 [security] Never log or expose OBS passwords, generated authentication strings, tokens, or secret-like values in IPC errors, JSON envelopes, logs, specs, or TUI output.
