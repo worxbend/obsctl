@@ -825,3 +825,113 @@ M  src/obsctl/cli/client_commands.cr
 M  src/obsctl/server/command_executor.cr
 M  src/obsctl/server/obs_supervisor.cr
 M  src/obsctl/server/state_store.cr
+2026-06-20T12:05:04Z iteration 5 started remaining=11917s
+2026-06-20T12:05:04Z iteration 5 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-20T12:05:04Z iteration 5 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-gjpxc7h4/repo copied_entries=176
+2026-06-20T12:05:04Z iteration 5 ideator phase started count=3
+2026-06-20T12:05:04Z iteration 5 ideator phase concurrency workers=3
+2026-06-20T12:05:04Z iteration 5 ideator 1 role="the pragmatist" started
+2026-06-20T12:05:04Z iteration 5 ideator 2 role="the architect" started
+2026-06-20T12:05:04Z iteration 5 ideator 3 role="the contrarian" started
+2026-06-20T12:05:13Z iteration 5 ideator 3 role="the contrarian" completed status=0
+2026-06-20T12:05:13Z iteration 5 ideator 1 role="the pragmatist" completed status=0
+2026-06-20T12:05:18Z iteration 5 ideator 2 role="the architect" completed status=0
+2026-06-20T12:05:18Z iteration 5 ideator phase completed approaches=3
+2026-06-20T12:05:18Z iteration 5 selector started approaches=3
+2026-06-20T12:05:35Z iteration 5 selector completed status=0
+2026-06-20T12:05:35Z iteration 5 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-gjpxc7h4/repo
+2026-06-20T12:05:35Z iteration 5 selector rejected alternative role="the contrarian" approach="Truthful Failure First: make the system prefer explicit refusal over optimistic success for any uncertain cross-repo or reconnect state, then only promote behavior to green-path..." reason="Useful emphasis on refusing false positives, but too broad if applied equally to reconnect, CI, and every uncertain status surface at once. The planner needs an ordering principle, not a general skepticism posture."
+2026-06-20T12:05:35Z iteration 5 selector rejected alternative role="the pragmatist" approach="Truthful Control-Plane Hardening: prioritize making existing operational contracts impossible to misreport before adding surface area. The next planner should sequence work arou..." reason="Strong overall framing, but it treats reconnect, supervisor liveness, CI, and timestamp semantics as peers. The current sharper product risk is reconnect truthfulness, so planning should lead there before widening to CI signal hardening."
+2026-06-20T12:05:35Z iteration 5 selector rejected alternative role="the architect" approach="Truthful Reconnect First: stabilize the observable server contract before broadening CI or features, treating every reconnect/status path as an operator-facing truth source rath..." reason="Best single approach, but selected as a hybrid because CI compatibility actionability is also a P0 operational trust issue and should remain the next strategic concern after reconnect semantics are clarified."
+2026-06-20T12:05:35Z iteration 5 selector alternatives persisted count=3
+2026-06-20T12:05:35Z iteration 5 selector structured alternatives persisted count=3
+2026-06-20T12:05:35Z iteration 5 planner started
+2026-06-20T12:06:11Z iteration 5 plan: 6 task(s) in 3 phase(s). The first phase serializes the core behavior change because reconnect liveness affects later specs and documentation. Phase 2 can run in parallel because integration reconnect coverage, StateStore timestamp semantics, and CLI formatter assertions exercise different files and surfaces. Phase 3 separates public documentation from strict compatibility diagnostics; both are valuable P0 follow-through and can proceed once behavior is known.
+2026-06-20T12:06:11Z iteration 5 phase 1 started parallel=False tasks=1
+2026-06-20T12:10:32Z iteration 5 task t1 ('Make reconnect report supervisor liveness truthfully') status=0
+2026-06-20T12:10:32Z iteration 5 phase 2 started parallel=True tasks=3
+2026-06-20T12:13:42Z iteration 5 task t4 ('Add CLI status timestamp assertions') status=0
+2026-06-20T12:13:55Z iteration 5 task t2 ('Add reconnect-disabled integration coverage') status=0
+2026-06-20T12:14:02Z iteration 5 task t3 ('Freeze last_connection_failed_at semantics in focused specs') status=0
+2026-06-20T12:14:02Z iteration 5 phase 3 started parallel=True tasks=2
+2026-06-20T12:15:59Z iteration 5 task t5 ('Document reconnect timestamp contract') status=0
+2026-06-20T12:16:46Z iteration 5 task t6 ('Make strict compatibility diagnostics actionable') status=0
+2026-06-20T12:16:46Z iteration 5 reviewer started
+
+## 2026-06-20 Fresh reviewer audit: iteration 5 truthful reconnect
+
+- Iteration reviewed:
+  - supervisor liveness reporting and `reconnect_obs` command behavior
+  - reconnect-disabled startup-failure integration coverage
+  - focused `StateStore` timestamp semantics
+  - CLI status timestamp formatting and JSON envelope assertions
+  - strict `obsctl-rs` compatibility diagnostics
+  - README, command docs, protocol docs, and tracker updates
+- What was done correctly:
+  - `reconnect_obs` no longer reports success after the supervisor loop has
+    exited; it returns `OBS_UNAVAILABLE` with actionable operator guidance.
+  - The reconnect-disabled integration spec proves OBS can become available
+    later without `obsctl reconnect` falsely scheduling an Identify attempt.
+  - `last_connection_failed_at` is now explicitly a historical "most recent
+    failed attempt" timestamp and is covered across startup failure, passive
+    disconnect, failed reconnect, explicit reconnect, and successful reconnect
+    paths.
+  - CLI unit coverage now asserts all reconnect timestamp fields for combined
+    status, daemon-only status, human output, JSON output, and older daemon
+    payload compatibility.
+  - Strict compatibility diagnostics print the sibling repository and selected
+    fixture root, and missing-root failures explain the expected `cli/` and
+    `ipc/` layout.
+  - Validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+    with 240 examples.
+- What was found:
+  - No blocking default-gate regression was found.
+  - `make contract-rs-compat` still fails in this workspace because
+    `/home/worxbend/Worxpace/obsctl-rs` has no recognized fixture root; this is
+    expected and the failure is now clear.
+  - The always-on `obsctl-rs` compatibility workflow will remain red until the
+    Rust repository has compatible fixtures or the workflow is made
+    manual/conditional.
+  - `ObsSupervisor#alive?` is a coarse fiber-liveness signal; there is still a
+    small start/stop race window because `alive?` is set by the spawned fiber.
+  - Explicit reconnect while the supervisor is alive but sleeping in retry
+    backoff records a request but does not wake the next attempt immediately.
+  - Reconnect specs still rely on polling, sleeps, and an `unused_tcp_port`
+    helper; deterministic fake-server probes would reduce flake risk.
+- Top improvement proposals:
+  - Make strict compatibility CI conditional/manual until `obsctl-rs` has the
+    expected fixture root, or add the Rust-side fixtures before requiring it.
+  - Add a reconnect wake/signal path so explicit reconnect interrupts retry
+    backoff when the supervisor is alive but OBS is currently unavailable.
+  - Tighten supervisor lifecycle state around start/stop and guard or document
+    single-start behavior.
+  - Replace the highest-risk reconnect polling specs with fake OBS channels for
+    attempt-started, Identify-received, close-observed, reconnect-completed, and
+    no-attempt assertions.
+2026-06-20T12:21:03Z iteration 5 reviewer completed status=0
+2026-06-20T12:21:03Z iteration 5 memory updated
+2026-06-20T12:21:03Z iteration 5 completed validation_status=0
+2026-06-20T12:21:03Z iteration 5 checkpoint started
+2026-06-20T12:21:03Z iteration 5 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  README.md
+M  SCORES.jsonl
+M  TODO.md
+M  docs/commands.md
+M  docs/protocol.md
+M  spec/obsctl/cli/client_commands_spec.cr
+M  spec/obsctl/cli/main_spec.cr
+M  spec/obsctl/contracts/optional_obsctl_rs_compat_spec.cr
+M  spec/obsctl/server/command_executor_spec.cr
+A  spec/obsctl/server/obs_supervisor_spec.cr
+M  spec/obsctl/server/server_spec.cr
+A  spec/obsctl/server/state_store_spec.cr
+M  spec/support/fake_obs_server.cr
+M  spec/support/optional_obsctl_rs_compat.cr
+M  src/obsctl/server/command_executor.cr
+M  src/obsctl/server/obs_supervisor.cr
+M  src/obsctl/server/state_store.cr

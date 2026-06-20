@@ -65,11 +65,31 @@ Server status fields are the same in the combined `status` payload and the
 daemon-only `get_server_status` payload. `last_disconnected_at` means OBS had
 an established connected session and then disconnected. Initial connection
 failures before any successful session leave it `null` and update
-`last_connection_failed_at` instead. `last_reconnect_attempt_at` records when
-the supervisor last started an OBS connection attempt. Explicit
-`reconnect_obs` requests set `last_error` to `OBS reconnect requested`; the
-clean close caused by that intentional drop does not overwrite the message, and
-the next connection success or failure becomes the next public outcome.
+`last_connection_failed_at` instead. `last_connection_failed_at` is the most
+recent failed OBS connection attempt, not necessarily the current disconnected
+episode, and a later successful connection does not clear it. Only a newer
+failed connection attempt replaces it. `last_reconnect_attempt_at` records when
+the supervisor last started an OBS connection attempt.
+
+Explicit `reconnect_obs` requests return success only when the supervisor loop
+is alive and can perform a reconnect attempt. In that case, `last_error` is set
+to `OBS reconnect requested`; the clean close caused by that intentional drop
+does not overwrite the message, and the next connection success or failure
+becomes the next public outcome.
+
+```json
+{"id":"req-000005","type":"response","ok":true,"result":{"message":"OBS reconnect requested"}}
+```
+
+If the supervisor has exited, for example because OBS was unavailable at startup
+and `reconnect.enabled: false` was configured, `reconnect_obs` fails with a
+public `OBS_UNAVAILABLE` error instead of reporting a requested reconnect.
+Clients should treat the message as operator guidance and avoid assuming that a
+new OBS connection attempt was scheduled:
+
+```json
+{"id":"req-000006","type":"response","ok":false,"error":{"code":"OBS_UNAVAILABLE","message":"OBS supervisor is not running; restart the server or enable reconnect."}}
+```
 
 Error response:
 
@@ -126,6 +146,49 @@ contract:
 `ALIAS_AMBIGUOUS` intentionally exits as command parse error code `5`: the
 requested target is ambiguous at obsctl's command/domain boundary, before any
 OBS request is made.
+
+## Shared Contract Fixtures
+
+`obsctl` and `obsctl-rs` compare public contract fixtures only when the strict
+dual-repo compatibility check is explicitly enabled. The default `make test`
+gate does not require a sibling checkout and skips optional cross-repo
+compatibility unless `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1` is set.
+
+Both repositories should expose the same shared fixture layout under one of
+these recognized roots:
+
+```text
+spec/fixtures/contracts/
+tests/fixtures/contracts/
+fixtures/contracts/
+```
+
+The selected root must contain contract files in these subdirectories:
+
+```text
+<contract-root>/
+  cli/
+    human/
+    json/
+  ipc/
+```
+
+`cli/` stores frozen CLI output contracts, including human-readable output and
+JSON envelopes. `ipc/` stores frozen newline-delimited JSON request payloads for
+typed IPC commands. Strict compatibility compares matching fixture paths between
+the two repositories, reports fixtures missing from either side, and reports
+content differences after trimming surrounding whitespace.
+
+Run the strict comparison from a prepared dual-repo workspace:
+
+```sh
+make contract-rs-compat
+```
+
+When strict mode is enabled, the check prints the selected sibling repository
+path and the selected fixture root before comparing files. If no recognized
+fixture root exists, the failure lists the expected roots and notes that the
+root should contain `cli/` and `ipc/` fixture directories.
 
 ## CLI JSON Envelope
 

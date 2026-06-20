@@ -1,4 +1,5 @@
 require "../../spec_helper"
+require "socket"
 require "../../../src/obsctl/server/server"
 require "../../../src/obsctl/ipc/protocol"
 require "../../../src/obsctl/obs/protocol/event_subscription"
@@ -7,6 +8,14 @@ require "../../support/fake_obs_server"
 
 private def temp_socket_path : String
   File.join(Dir.tempdir, "obsctl-server-spec-#{Random.rand(1_000_000)}.sock")
+end
+
+private def unused_tcp_port : Int32
+  server = nil.as(TCPServer?)
+  server = TCPServer.new("127.0.0.1", 0)
+  server.local_address.port
+ensure
+  server.try(&.close)
 end
 
 describe Obsctl::Server::Server do
@@ -54,6 +63,71 @@ describe Obsctl::Server::Server do
     parse_rfc3339(status["last_connection_failed_at"])
     status["last_error"].as_s.should_not be_empty
   ensure
+    server.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
+  it "rejects explicit reconnect when reconnect is disabled and the startup supervisor exited" do
+    obs = nil.as(Obsctl::SpecSupport::FakeObsServer?)
+    path = temp_socket_path
+    obs_port = unused_tcp_port
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: obs_port,
+        password_env: "",
+        connect_timeout_ms: 100,
+        request_timeout_ms: 100
+      ),
+      reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false)
+    )
+    server = Obsctl::Server::Server.new(config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    wait_for_socket(path)
+
+    client = Obsctl::IPC::UnixClient.new(path)
+    failed_status = wait_for_server_status(client) do |data|
+      !data["last_connection_failed_at"].raw.nil? && !data["reconnecting"].as_bool
+    end
+    failed_status["obs_connected"].as_bool.should be_false
+    failed_status["last_error"].as_s.should_not contain("OBS reconnect requested")
+
+    obs = Obsctl::SpecSupport::FakeObsServer.new(port: obs_port).start
+
+    reconnect = client.request(
+      Obsctl::IPC::Request.new(
+        "req-reconnect-after-supervisor-exit",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("reconnect_obs")
+      )
+    )
+
+    reconnect.ok.should be_false
+    reconnect.error.not_nil!.code.should eq(Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE)
+    reconnect.error.not_nil!.message.should eq("OBS supervisor is not running; restart the server or enable reconnect.")
+    obs.next_identify(250.milliseconds).should be_nil
+
+    status = client.request(
+      Obsctl::IPC::Request.new(
+        "req-status-after-failed-reconnect",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("status")
+      )
+    )
+    status.ok.should be_true
+    status.result.not_nil!["server"]["obs_connected"].as_bool.should be_false
+    status.result.not_nil!["server"]["last_error"].as_s.should_not contain("OBS reconnect requested")
+    status.result.not_nil!["obs"]["connected"].as_bool.should be_false
+    status.result.not_nil!["obs"]["last_error"].as_s.should_not contain("OBS reconnect requested")
+  ensure
+    obs.try(&.stop)
     server.try(&.stop)
     File.delete(path) if path && File.exists?(path)
   end

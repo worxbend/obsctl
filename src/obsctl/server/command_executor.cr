@@ -56,7 +56,9 @@ module Obsctl
           Config::ConfigLoader.new.load(@config_path)
           object({"message" => "config valid: #{@config_path}"})
         when "reconnect_obs"
-          @supervisor.reconnect
+          unless @supervisor.alive? && @supervisor.reconnect
+            raise Domain::ObsUnavailable.new("OBS supervisor is not running; restart the server or enable reconnect.")
+          end
           object({"message" => "OBS reconnect requested"})
         when "shutdown_server"
           unless @config.server.allow_remote_shutdown
