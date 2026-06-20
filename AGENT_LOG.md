@@ -1320,3 +1320,64 @@ M  src/obsctl/server/state_store.cr
     examples.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build` passed.
   - `make lint` exited 0 through the existing `ameba not installed` skip path.
+2026-06-20T13:15:20Z iteration 9 task t4 ('Update trackers and run gates') status=0
+2026-06-20T13:15:20Z iteration 9 reviewer started
+
+## 2026-06-20 Fresh reviewer audit: iteration 9 reconnect signal atomicity
+
+- Iteration reviewed:
+  - `Server::ReconnectSignal` extraction and atomic waiter registration
+  - `ObsSupervisor` usage of request epochs, cancel, transient wake behavior,
+    retry delay waiting, and generation-scoped signal ownership
+  - signal-level specs for request-before-wait, request-during-wait,
+    stale-notification, internal wake, cancel wake, and repeated requests
+  - README, command docs, protocol docs, `TODO.md`, `MEMORY.md`,
+    `ALTERNATIVES.jsonl`, and validation notes
+- What was done correctly:
+  - The primitive-level check-then-wait race is addressed: `wait` checks the
+    request epoch and appends its waiter while holding the same mutex.
+  - Explicit reconnect requests remain durable epoch advances, while internal
+    wakes and cancel wakes interrupt current waits without advancing the public
+    reconnect epoch.
+  - Stale notification behavior is improved because waiters are per-wait
+    buffered channels removed after timeout or wake.
+  - The primitive is now independently testable without a fake OBS server.
+  - Public docs avoid exposing internal wake taxonomy and keep the reconnect
+    contract at command/status level.
+  - Focused validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/reconnect_signal_spec.cr spec/obsctl/server/obs_supervisor_spec.cr`
+    with 15 examples.
+- What was found:
+  - No blocking default-gate regression was found.
+  - The signal specs still rely on short no-result sleeps to infer that a waiter
+    is registered. The spawned fiber sends `started` before calling `wait`, so a
+    slow scheduler can make request-during-wait cases accidentally exercise
+    request-before-wait behavior.
+  - `ReconnectSignal#wait` returns only an epoch. Timeout, transient wake, and
+    cancel can all return the handled epoch, leaving future readers to infer the
+    wake reason from external lifecycle state.
+  - A reconnect-vs-stop truthfulness race remains worth testing: `reconnect` can
+    obtain a live signal, then a concurrent `stop` can cancel that generation
+    before `reconnect` publishes `OBS reconnect requested`.
+  - Reconnect integration specs still use `unused_tcp_port`, and
+    `wait_for_disconnect` still polls every 250 ms.
+- Top improvement proposals:
+  - Add a deterministic waiter-registered probe or narrow test hook for
+    `ReconnectSignal` specs and remove scheduler-sleep proof from
+    request-during-wait cases.
+  - Consider replacing the raw `UInt64` wait return with an explicit result type
+    that distinguishes requested, interrupted, timed-out, and cancelled waits
+    while preserving durable epoch semantics.
+  - Add a focused reconnect-vs-stop lifecycle spec and make `reconnect` re-check
+    generation/liveness before changing public state if the race is real.
+  - Continue reconnect flake cleanup with deterministic unavailable-then-bind
+    helpers and an event-driven close notification path.
+2026-06-20T13:19:50Z iteration 9 reviewer completed status=0
+2026-06-20T13:19:50Z iteration 9 memory updated
+2026-06-20T13:19:50Z iteration 9 completed validation_status=0
+2026-06-20T13:19:50Z iteration 9 checkpoint started
+2026-06-20T13:19:50Z iteration 9 checkpoint status before commit:
+M  AGENT_LOG.md
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
