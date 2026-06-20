@@ -1,15 +1,17 @@
 # obsctl Improvement Plan
 
-This plan reflects the fresh reviewer pass on the June 20, 2026 contract-freeze
-iteration. The daemon-first architecture is now substantially implemented and
-the public contract work passes the current Crystal gates, but a few proof and
-compatibility gaps remain before feature expansion is a good use of time.
+This plan reflects the fresh reviewer pass on the June 20, 2026
+contract-freeze/runtime-hardening closeout. The daemon-first architecture and
+public CLI/IPC contract are now substantially locked and pass the current
+Crystal gates. The remaining highest-value work is to reconcile a small
+status-contract mismatch, preserve better reconnect/protocol-error telemetry,
+and then move into product polish.
 
 ## Current Assessment
 
 `obsctl` is a serious local OBS controller with a daemon, Unix socket IPC, thin
 CLI/TUI clients, service installation, config dump/validation, a fake OBS
-server, and 140 passing Crystal specs.
+server, golden public-contract fixtures, and 209 passing Crystal specs.
 
 The intended process model remains:
 
@@ -18,21 +20,32 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
                                                                <---- Unix socket IPC ----> obsctl TUI
 ```
 
-Completed in the latest contract-freeze iteration:
+Completed in the latest closeout iteration:
 
-- Proxy CLI commands support `--json` envelopes with `ok`, `result`, `error`,
-  and `exit_code`.
-- Public IPC error payloads are canonicalized through `IPC::ErrorCode`.
-- Server command execution no longer emits vague public codes such as
-  `CONFIG_ERROR`, `REQUEST_FAILED`, `INVALID_REQUEST`, or `INTERNAL_ERROR`.
-- Normal CLI/TUI source has boundary specs against direct OBS client imports.
-- The direct TUI OBS adapter was moved to an explicitly named
-  `src/obsctl/tui/obs_session_client.cr` file.
-- Golden fixtures now freeze representative CLI JSON/human output and one IPC
-  command payload.
-- Adversarial OBS request specs cover timeout cleanup, late responses,
-  concurrent requests, disconnect during a request, and malformed OBS frames.
-- Validation passed:
+- JSON mode policy is explicit: exactly one machine JSON envelope on stdout,
+  with secret-free warnings allowed on stderr.
+- Unsupported JSON commands such as `init` and `service` now fail before side
+  effects with a JSON `COMMAND_PARSE_ERROR` envelope and exit `5`.
+- Invalid global options can still return JSON errors when `--json` is present.
+- Public IPC/domain error mapping is covered by an audited table spec,
+  including `ALIAS_AMBIGUOUS` as command parse exit `5`.
+- IPC error redaction now covers quoted values, YAML-like `password: value`
+  fields, and natural-language secret phrases.
+- Architecture boundary specs now scan normal CLI, TUI, IPC, domain, and
+  support layers, with explicit exceptions for the embedded TUI OBS adapter
+  and server OBS supervisor.
+- The embedded direct TUI adapter require contract is tested:
+  `obs_session_client` is the explicit opt-in require path.
+- Golden fixtures now cover every current proxy command for human output, JSON
+  envelopes, and IPC request payloads.
+- Optional `../obsctl-rs` fixture compatibility checks skip when the sibling
+  project or fixture directory is absent.
+- OBS protocol errors now explicitly close the websocket, fail pending
+  requests nonblocking, and are covered by malformed-frame and parser-error
+  specs.
+- Server integration coverage proves IPC remains available and the supervisor
+  reconnects after protocol-error-triggered client closure.
+- Validation passed independently in review:
   - `make format`
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
@@ -40,80 +53,60 @@ Completed in the latest contract-freeze iteration:
 
 Reviewer findings:
 
-- The architecture boundary specs are useful but incomplete: they do not scan
-  `src/obsctl/ipc/**`, `src/obsctl/domain/**`, or `src/obsctl/support/**` for
-  OBS implementation dependencies.
-- Moving `TUI::ObsSessionClient` out of `session_client.cr` fenced the normal
-  path, but it also changed the embedded/test require contract. A caller that
-  only requires `src/obsctl/tui/session_client` no longer gets the adapter.
-- Golden contract coverage is still representative, not comprehensive. It does
-  not yet compare against `../obsctl-rs` and freezes only one IPC command
-  payload.
-- JSON mode mostly honors the stdout machine contract, but the project should
-  explicitly decide whether JSON-mode warnings, especially
-  `validate-config` warnings, may appear on stderr.
-- OBS parser errors now clear pending requests, but the low-level client does
-  not explicitly close the websocket on protocol error. The supervisor sees the
-  client as disconnected, but the cleanup contract should be made explicit.
+- No blocking regression was found in the current implementation.
+- The new golden fixtures freeze current `obsctl status` behavior as the same
+  OBS-only payload as `obs-status`. That matches current code, but it conflicts
+  with the broader acceptance text that says `obsctl status` should report
+  both server and OBS status. This should be resolved before treating the
+  fixture as a final compatibility promise.
+- Protocol-error cleanup is operationally correct, but the supervisor-visible
+  state records the eventual `"OBS WebSocket closed"` rather than preserving
+  the original malformed-frame or parser-error cause. This weakens operator
+  diagnostics and should be fixed alongside reconnect-status telemetry.
+- Optional Rust compatibility checks are useful but weak: if `../obsctl-rs`
+  exists without a recognized fixture directory, the specs silently pass.
+  That is acceptable for local convenience but not enough for CI parity.
 
-## P0: Close Contract-Freeze Gaps
+## P0: Resolve Remaining Contract Ambiguity
 
-1. Finish daemon-first boundary proof.
-   - Extend architecture scans to `src/obsctl/ipc/**`, `src/obsctl/domain/**`,
-     and `src/obsctl/support/**`.
-   - Add a require-level spec for the embedded TUI adapter contract:
-     either `require "./tui/obs_session_client"` is the documented opt-in path,
-     or an explicit `obsctl tui --embedded` path is implemented.
-   - Keep normal `obsctl`, `obsctl tui`, and CLI proxy paths unable to
-     instantiate `OBS::Client`.
+1. Reconcile `obsctl status` semantics.
+   - Decide whether `status` is an OBS-only alias for `obs-status`, or the
+     combined server-and-OBS status promised by the acceptance plan.
+   - If it remains OBS-only, update `TODO.md`, `IMPLEMENTATION_CHECK_PLAN.md`,
+     README, command docs, and fixture names/comments to make that deliberate.
+   - If it should be combined, add a server command/result shape that includes
+     daemon status and OBS snapshot data, then update human/JSON golden
+     fixtures.
 
-2. Expand golden CLI/IPC contracts.
-   - Add fixtures for every current proxy command:
-     `status`, `server-status`, `obs-status`, `scene`, `mute`, `unmute`,
-     `toggle-mute`, `vol`, `dump-config`, `reload-config`, `reconnect`, and
-     `shutdown-server`.
-   - Freeze parse-error, server-unavailable, OBS-unavailable, config-invalid,
-     timeout, and protocol-error envelopes.
-   - Add optional compatibility checks against `../obsctl-rs` when the sibling
-     repo is present.
+2. Strengthen cross-project contract compatibility.
+   - When `../obsctl-rs` exists, fail with a clear message if no recognized
+     fixture root exists unless an explicit skip env var is set.
+   - Compare fixture sets in both directions, not only local files against
+     sibling files, so missing sibling/local fixtures are visible.
+   - Add this compatibility mode to CI only when both repositories are checked
+     out.
 
-3. Decide and enforce JSON diagnostics policy.
-   - Choose one rule:
-     - strict machine mode: JSON commands write no human text to stderr, or
-     - stdout-only machine contract: one JSON object on stdout while warnings
-       may still go to stderr.
-   - Update docs and tests so `validate-config --json` follows the chosen rule.
-   - Add tests for unsupported command plus `--json`, service/init plus
-     `--json`, and invalid global options.
+## P0: Finish Reconnect Observability
 
-4. Make public error mapping exhaustive and auditable.
-   - Add a table spec from domain errors to canonical IPC codes and CLI exit
-     codes.
-   - Revisit whether `ALIAS_AMBIGUOUS` should exit as command parse (`5`) or
-     OBS request (`4`) and document the decision.
-   - Improve redaction tests for quoted values, YAML-like `password: value`,
-     and natural-language secret messages.
+1. Preserve protocol-error root cause through supervisor state.
+   - Expose the low-level OBS client terminal error to `ObsSupervisor` instead
+     of reducing every post-identify failure to `"OBS WebSocket closed"`.
+   - Ensure `server-status.last_error`, state events, and logs distinguish
+     clean close, passive disconnect, malformed OBS frame, and response parser
+     error.
+   - Keep public messages secret-free.
 
-## P0: Finish Runtime Hardening
-
-1. Make OBS protocol-error cleanup explicit.
-   - Close the websocket after malformed OBS frames or route-response parser
-     errors.
-   - Prove the supervisor drops the client and reconnects after such protocol
-     errors.
-   - Keep pending request cleanup deterministic and nonblocking.
-
-2. Replace remaining sleep-based spec synchronization.
-   - Add fake OBS hooks for delayed-response completion and websocket close
-     acknowledgement.
-   - Prefer channels/probes over fixed sleeps in pending-request and server
-     reconnect specs.
-
-3. Make server status honest.
+2. Make server reconnect status honest.
    - Track reconnecting state directly instead of deriving it only from
      disconnected plus reconnect-enabled.
-   - Include `last_connected_at` and `last_reconnect_attempt_at` in server
-     status.
+   - Include `last_connected_at`, `last_disconnected_at`, and
+     `last_reconnect_attempt_at` in server status.
+   - Add golden JSON/human fixture updates for the expanded status payload.
+
+3. Remove remaining fixed sleeps from reconnect/pending-request specs.
+   - Extend fake OBS probes for reconnect attempt, close acknowledgement, and
+     delayed response completion.
+   - Replace `sleep` polling where a channel/probe can prove the transition.
 
 ## P1: Config And Security
 
@@ -151,10 +144,9 @@ Reviewer findings:
    - Redact before broadcast.
 
 2. Add lifecycle log events.
-   - server started/stopped
    - socket bound
-   - OBS connected/disconnected
    - reconnect scheduled
+   - reconnect attempt started/failed/succeeded
    - config reloaded
    - command failed
 
@@ -165,7 +157,7 @@ Reviewer findings:
 
 ## P2: Product Features
 
-Add breadth only after the daemon/IPC contract is stable.
+Add breadth only after the daemon/IPC contract remains stable.
 
 1. Recording controls:
    `record start|stop|pause|resume|status`.
@@ -208,22 +200,19 @@ Add breadth only after the daemon/IPC contract is stable.
 
 ## P2: Test Infrastructure
 
-1. Strengthen fake OBS coverage.
+1. Add CI.
+   - `crystal tool format --check`
+   - `crystal spec`
+   - `ameba` when installed
+   - release build
+   - optional dual-repo fixture compatibility
+
+2. Strengthen fake OBS coverage.
    - out-of-order responses
    - dropped connection
    - passive close
    - OBS request failures
    - structural scene/input events
-
-2. Add CI.
-   - `crystal tool format --check`
-   - `crystal spec`
-   - `ameba` when installed
-   - release build
-
-3. Add optional compatibility tests against `../obsctl-rs`.
-   - Skip when the sibling repo is absent.
-   - Run in CI when both projects are checked out.
 
 ## P3: Open Source Polish
 
@@ -251,11 +240,10 @@ Add breadth only after the daemon/IPC contract is stable.
 
 ## Suggested Next Pull Requests
 
-1. Complete contract-freeze proof: broader boundary scans, embedded adapter
-   require contract, JSON diagnostics policy, and expanded fixtures.
-2. Make OBS protocol-error cleanup explicit and remove sleep-based pending
-   request specs.
-3. Add honest reconnect status fields and server lifecycle timestamps.
+1. Resolve `obsctl status` semantics and update fixtures/docs accordingly.
+2. Preserve OBS protocol-error root causes in supervisor state/logs, then add
+   honest reconnect timestamps to `server-status`.
+3. Harden optional `../obsctl-rs` fixture compatibility for dual-repo CI.
 
 ## Build Gates
 

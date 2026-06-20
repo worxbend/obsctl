@@ -570,3 +570,66 @@ M  src/obsctl/tui/session_client.cr
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` (209 examples, 0 failures)
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; existing skip path)
+2026-06-20T11:13:44Z iteration 2 task t6 ('Refresh trackers and run gates') status=0
+2026-06-20T11:13:44Z iteration 2 reviewer started
+
+## 2026-06-20 Fresh reviewer audit: iteration 2 contract/runtime closeout
+
+- Iteration reviewed:
+  - JSON diagnostics policy and unsupported JSON command behavior
+  - exhaustive public IPC/domain error mapping and redaction coverage
+  - broadened daemon-first boundary specs and embedded TUI adapter require proof
+  - expanded golden CLI human/JSON fixtures and IPC request fixtures
+  - optional `../obsctl-rs` fixture compatibility helper
+  - OBS protocol-error websocket cleanup and supervisor reconnect proof
+- What was done correctly:
+  - JSON mode now consistently returns a single stdout envelope for supported
+    scriptable commands and JSON-formatted errors for unsupported commands before
+    side effects.
+  - `validate-config --json` has a documented and tested stdout/stderr policy:
+    machine envelope on stdout, secret-free warnings on stderr.
+  - Public IPC error mapping is auditable, and `ALIAS_AMBIGUOUS` is deliberately
+    treated as command parse exit `5`.
+  - Normal CLI/TUI/IPC/domain/support layers are now scanned for direct OBS
+    client imports, with explicit opt-in coverage for the embedded TUI adapter.
+  - Golden fixtures cover every current proxy command and representative public
+    error envelopes.
+  - Malformed OBS frames and response parser errors now close the websocket,
+    clear pending requests, and allow the daemon supervisor to reconnect while
+    IPC stays available.
+  - Independent validation passed:
+    `make format`,
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`,
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and
+    `make lint` with the existing Ameba skip path.
+- What was found:
+  - No blocking implementation regression was found.
+  - The new fixtures freeze `obsctl status` as an OBS-only alias for
+    `obs-status`, while `IMPLEMENTATION_CHECK_PLAN.md` and older `TODO.md`
+    acceptance text still say `status` should report both server and OBS status.
+    This is now the most important public-contract ambiguity.
+  - Protocol-error cleanup works operationally, but supervisor-visible state
+    records the resulting close as `"OBS WebSocket closed"` instead of
+    preserving the malformed-frame/parser-error root cause.
+  - Optional Rust compatibility checks silently pass when `../obsctl-rs` exists
+    but has no recognized fixture root, so they are not yet strong enough for
+    dual-repo CI parity.
+- Top improvement proposals:
+  - Resolve `obsctl status` semantics before treating the new fixtures as a
+    permanent compatibility contract.
+  - Preserve OBS protocol-error root cause through supervisor state, logs, and
+    `server-status`, then add `last_connected_at`, `last_disconnected_at`, and
+    `last_reconnect_attempt_at`.
+  - Harden optional `../obsctl-rs` compatibility checks to fail loudly in
+    dual-repo CI when fixture roots or fixture counterparts are missing.
+  - Continue replacing fixed sleeps in reconnect/pending-request specs with
+    fake OBS probes where possible.
+2026-06-20T11:18:35Z iteration 2 reviewer completed status=0
+2026-06-20T11:18:35Z iteration 2 memory updated
+2026-06-20T11:18:35Z iteration 2 completed validation_status=0
+2026-06-20T11:18:35Z iteration 2 checkpoint started
+2026-06-20T11:18:35Z iteration 2 checkpoint status before commit:
+M  AGENT_LOG.md
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
