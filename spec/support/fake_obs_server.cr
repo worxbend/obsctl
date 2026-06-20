@@ -18,6 +18,7 @@ module Obsctl
 
       @server : HTTP::Server
       @mutex = Mutex.new
+      @send_mutex = Mutex.new
       @identify_data = nil.as(JSON::Any?)
       @request_notifications = Channel(String).new(16)
       @websockets = [] of HTTP::WebSocket
@@ -46,6 +47,11 @@ module Obsctl
 
       def stop : Nil
         @server.close
+        close_connections
+      rescue
+      end
+
+      def close_connections : Nil
         sockets = @mutex.synchronize do
           existing = @websockets.dup
           @websockets.clear
@@ -55,7 +61,6 @@ module Obsctl
           websocket.close
         rescue
         end
-      rescue
       end
 
       def config : Config::Config
@@ -108,13 +113,21 @@ module Obsctl
         broadcast_event("InputMuteStateChanged", {"inputName" => input_name, "inputMuted" => muted})
       end
 
+      def emit_raw_frame(frame : String) : Nil
+        sockets = @mutex.synchronize { @websockets.dup }
+        sockets.each do |websocket|
+          send_frame(websocket, frame)
+        rescue
+        end
+      end
+
       private def websocket_handler : HTTP::WebSocketHandler
         HTTP::WebSocketHandler.new do |websocket, _context|
           @mutex.synchronize { @websockets << websocket }
           websocket.on_close do
             @mutex.synchronize { @websockets.delete(websocket) }
           end
-          websocket.send(hello_frame)
+          send_frame(websocket, hello_frame)
           websocket.on_message do |message|
             handle_message(websocket, message)
           end
@@ -126,15 +139,20 @@ module Obsctl
         case frame["op"].as_i
         when 1
           @mutex.synchronize { @identify_data = frame["d"] }
-          websocket.send(identified_frame)
+          send_frame(websocket, identified_frame)
         when 6
           request = frame["d"]
           request_type = request["requestType"].as_s
           notify_request(request_type)
           if delay = @request_delays[request_type]?
-            sleep delay
+            spawn do
+              sleep delay
+              send_frame(websocket, response_frame(request))
+            rescue
+            end
+          else
+            send_frame(websocket, response_frame(request))
           end
-          websocket.send(response_frame(request))
         end
       end
 
@@ -174,8 +192,14 @@ module Obsctl
 
         sockets = @mutex.synchronize { @websockets.dup }
         sockets.each do |websocket|
-          websocket.send(frame)
+          send_frame(websocket, frame)
         rescue
+        end
+      end
+
+      private def send_frame(websocket : HTTP::WebSocket, frame : String) : Nil
+        @send_mutex.synchronize do
+          websocket.send(frame)
         end
       end
 

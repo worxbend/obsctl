@@ -417,3 +417,113 @@ Append-only progress log for autonomous iterations.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
   - `make lint` (Ameba not installed; Makefile skip path)
 2026-06-15T20:01:09Z iteration 25 validation started
+2026-06-15T20:01:21Z iteration 25 committed
+2026-06-15T20:01:23Z iteration 25 pushed
+2026-06-15T20:01:23Z iteration limit reached iterations=25
+2026-06-20T10:23:41Z orchestrator started provider=codex budget=18000s iterations=20 max_workers=4
+2026-06-20T10:23:41Z iteration 1 started remaining=18000s
+2026-06-20T10:23:41Z iteration 1 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-20T10:23:41Z iteration 1 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-afvzfcwj/repo copied_entries=116
+2026-06-20T10:23:41Z iteration 1 ideator phase started count=3
+2026-06-20T10:23:41Z iteration 1 ideator phase concurrency workers=3
+2026-06-20T10:23:41Z iteration 1 ideator 1 role="the pragmatist" started
+2026-06-20T10:23:41Z iteration 1 ideator 2 role="the architect" started
+2026-06-20T10:23:41Z iteration 1 ideator 3 role="the contrarian" started
+2026-06-20T10:23:49Z iteration 1 ideator 1 role="the pragmatist" completed status=0
+2026-06-20T10:23:50Z iteration 1 ideator 2 role="the architect" completed status=0
+2026-06-20T10:23:54Z iteration 1 ideator 3 role="the contrarian" completed status=0
+2026-06-20T10:23:54Z iteration 1 ideator phase completed approaches=3
+2026-06-20T10:23:54Z iteration 1 selector started approaches=3
+2026-06-20T10:24:05Z iteration 1 selector completed status=0
+2026-06-20T10:24:05Z iteration 1 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-afvzfcwj/repo
+2026-06-20T10:24:05Z iteration 1 selector rejected alternative role="the pragmatist" approach="Contract Hardening Before Feature Polish: treat the current daemon-first architecture as functionally present, then spend the next planning cycle tightening public CLI/IPC behav..." reason="Strong on public contract hardening, but too narrow as-is because it underemphasizes architecture-boundary proof and adversarial lifecycle validation."
+2026-06-20T10:24:05Z iteration 1 selector rejected alternative role="the architect" approach="Contract Hardening Before Feature Expansion: treat the current daemon-first implementation as functionally complete enough, and focus the next planner on stabilizing public CLI/..." reason="Strong and aligned with PLAN.md P0, but it frames the work mostly as compatibility stabilization and does not sufficiently challenge the claimed completion of daemon-first boundaries."
+2026-06-20T10:24:05Z iteration 1 selector rejected alternative role="the contrarian" approach="Contrarian contract hardening: stop chasing polish and first prove the daemon-first boundary as a stable product contract through architecture audits, public error/output consis..." reason="Strong on risk discovery and boundary skepticism, but too broad as-is; the Planner still needs the more concrete contract-freeze lens of JSON envelopes, error taxonomy, and CLI/IPC compatibility."
+2026-06-20T10:24:05Z iteration 1 selector alternatives persisted count=3
+2026-06-20T10:24:05Z iteration 1 selector structured alternatives persisted count=3
+2026-06-20T10:24:05Z iteration 1 planner started
+2026-06-20T10:24:42Z iteration 1 plan: 6 task(s) in 4 phase(s). This decomposition prioritizes the P0 contract-freeze slice over packaging/UI polish. Error taxonomy comes first because JSON CLI output and golden contract tests depend on stable public errors. JSON output and architecture-boundary specs can proceed independently. Golden contract tests depend on both the canonical errors and JSON envelope. Lifecycle hardening and docs can then run independently because they touch different implementation surfaces.
+2026-06-20T10:24:42Z iteration 1 phase 1 started parallel=False tasks=1
+2026-06-20T10:30:08Z iteration 1 task t1 ('Canonicalize public IPC error codes') status=0
+2026-06-20T10:30:08Z iteration 1 phase 2 started parallel=True tasks=2
+2026-06-20T10:38:08Z iteration 1 task t3 ('Add daemon-first architecture boundary specs') status=0
+2026-06-20T10:38:26Z iteration 1 task t2 ('Add JSON envelope output for proxy CLI commands') status=0
+2026-06-20T10:38:26Z iteration 1 phase 3 started parallel=False tasks=1
+2026-06-20T10:40:45Z iteration 1 task t4 ('Add golden CLI and IPC contract specs') status=0
+2026-06-20T10:40:45Z iteration 1 phase 4 started parallel=True tasks=2
+
+## 2026-06-20 Contract-freeze docs and tracker
+
+- Updated protocol docs with the daemon-first boundary, frozen CLI JSON envelope shape, and canonical public IPC error codes.
+- Updated command docs with `--json` usage, stdout/stderr behavior, and the daemon-first CLI/TUI boundary expectations.
+- Updated `TODO.md` to mark contract-freeze documentation, JSON envelopes, canonical IPC errors, boundary specs, and golden contract specs as implemented, while keeping adversarial OBS request lifecycle hardening as the remaining P0 gap.
+- Validation passed:
+  - `git diff --check -- docs/protocol.md docs/commands.md TODO.md AGENT_LOG.md`
+2026-06-20T10:43:36Z iteration 1 task t6 ('Update tracker and public contract docs') status=0
+2026-06-20T10:43:53Z iteration 1 task t5 ('Add adversarial OBS request lifecycle specs') status=0
+2026-06-20T10:43:53Z iteration 1 reviewer started
+
+## 2026-06-20 Fresh reviewer audit: iteration 1 contract freeze
+
+- Iteration reviewed:
+  - canonical public IPC error codes
+  - JSON envelope output for proxy CLI commands
+  - daemon-first architecture boundary specs
+  - golden CLI and IPC contract specs
+  - adversarial OBS request lifecycle specs
+  - tracker and public contract docs
+- What was done correctly:
+  - `IPC::ErrorCode` now centralizes the public error-code taxonomy and canonicalizes legacy vague codes at the IPC boundary.
+  - `CommandExecutor` returns safe canonical public errors and uses a generic `SERVER_ERROR` message for unexpected failures.
+  - Thin CLI JSON mode emits the expected `ok`/`result`/`error`/`exit_code` envelope on stdout and suppresses startup hints.
+  - Normal CLI routing no longer contains direct OBS client execution; the normal TUI client remains IPC-backed.
+  - Pending OBS request specs now cover late responses, concurrent requests, disconnect during request, malformed frames, and timeout cleanup.
+  - Full validation passed: `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint` with the existing Ameba skip.
+- What was found:
+  - Architecture boundary specs do not yet scan `src/obsctl/ipc/**`, `src/obsctl/domain/**`, or `src/obsctl/support/**` for OBS implementation dependencies.
+  - `TUI::ObsSessionClient` was moved out of `session_client.cr`; this fences the normal path but changes the embedded/test require contract unless documented and tested.
+  - Golden contract fixtures are representative but not comprehensive; only one IPC command payload and two CLI envelopes are frozen.
+  - JSON-mode diagnostics policy is not fully settled, especially whether `validate-config --json` may write warnings to stderr.
+  - OBS protocol-error handling clears pending requests but should explicitly close the websocket and prove supervisor reconnection after malformed frames.
+- Top improvement proposals:
+  - Expand contract-freeze specs to cover all proxy commands, all public error envelopes, domain/IPC dependency boundaries, and optional `../obsctl-rs` compatibility.
+  - Document and test the explicit embedded TUI adapter path, or remove embedded mode from production entirely.
+  - Make JSON diagnostics policy explicit in code, tests, and docs.
+  - Replace remaining sleep-based pending-request specs with fake-server channels/probes.
+  - Add server status fields for direct reconnect state, last successful OBS connection, and last reconnect attempt.
+2026-06-20T10:48:41Z iteration 1 reviewer completed status=0
+2026-06-20T10:48:41Z iteration 1 memory updated
+2026-06-20T10:48:41Z iteration 1 completed validation_status=0
+2026-06-20T10:48:41Z iteration 1 checkpoint started
+2026-06-20T10:48:41Z iteration 1 checkpoint status before commit:
+M  AGENT_LOG.md
+A  ALTERNATIVES.jsonl
+M  MEMORY.md
+A  PLAN.md
+A  SCORES.jsonl
+M  TODO.md
+M  docs/commands.md
+M  docs/protocol.md
+A  spec/fixtures/contracts/cli_scene_error.json
+A  spec/fixtures/contracts/cli_status_success.json
+A  spec/fixtures/contracts/ipc_set_scene_request.json
+A  spec/obsctl/architecture_boundary_spec.cr
+A  spec/obsctl/cli/client_commands_spec.cr
+M  spec/obsctl/cli/main_spec.cr
+M  spec/obsctl/cli/options_spec.cr
+A  spec/obsctl/contract/cli_contract_spec.cr
+A  spec/obsctl/contract/ipc_contract_spec.cr
+M  spec/obsctl/ipc/codec_spec.cr
+A  spec/obsctl/obs/client_pending_request_spec.cr
+A  spec/obsctl/server/command_executor_spec.cr
+M  spec/support/fake_obs_server.cr
+M  src/obsctl/cli/client_commands.cr
+M  src/obsctl/cli/command_router.cr
+M  src/obsctl/cli/main.cr
+M  src/obsctl/cli/options.cr
+M  src/obsctl/ipc/response.cr
+M  src/obsctl/obs/client.cr
+M  src/obsctl/server/command_executor.cr
+M  src/obsctl/server/server.cr
+A  src/obsctl/tui/obs_session_client.cr
+M  src/obsctl/tui/session_client.cr

@@ -35,11 +35,11 @@ module Obsctl
         result = execute_command(command)
         IPC::Response.new(request.id, true, result)
       rescue ex : Domain::ObsctlError
-        publish_log("warn", "command_failed", ex.message || "request failed")
-        IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new(error_code(ex), ex.message || "request failed"))
+        publish_log("warn", "command_failed", IPC::ErrorPayload.sanitize_message(ex.message || "request failed"))
+        IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.from_exception(ex))
       rescue ex
-        publish_log("error", "command_failed", ex.message || "request failed")
-        IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new("INTERNAL_ERROR", ex.message || "request failed"))
+        publish_log("error", "command_failed", IPC::ErrorPayload.sanitize_message(ex.message || "request failed"))
+        IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.server_error)
       end
 
       private def execute_command(command : IPC::CommandPayload) : JSON::Any
@@ -140,25 +140,6 @@ module Obsctl
           message:    message,
           created_at: Time.utc.to_rfc3339,
         }.to_json)))
-      end
-
-      private def error_code(error : Domain::ObsctlError) : String
-        case error
-        when Domain::ObsUnavailable
-          "OBS_UNAVAILABLE"
-        when Domain::SceneNotFound
-          "SCENE_NOT_FOUND"
-        when Domain::AudioInputNotFound
-          "AUDIO_INPUT_NOT_FOUND"
-        when Domain::AliasAmbiguous
-          "ALIAS_AMBIGUOUS"
-        when Domain::CommandParseError
-          error.message == "remote shutdown is disabled" ? "SHUTDOWN_DISABLED" : "COMMAND_PARSE_ERROR"
-        when Domain::ConfigInvalid, Domain::ConfigNotFound
-          "CONFIG_ERROR"
-        else
-          "REQUEST_FAILED"
-        end
       end
     end
   end

@@ -68,7 +68,7 @@ module Obsctl
         while message = session.read_message
           request = message.as?(IPC::Request)
           unless request
-            session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new("INVALID_REQUEST", "expected IPC request")))
+            session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, "expected IPC request")))
             next
           end
 
@@ -81,11 +81,11 @@ module Obsctl
             session.write_message(response)
             schedule_shutdown if response.ok && request.command.try(&.name) == "shutdown_server"
           else
-            session.write_message(IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new("INVALID_REQUEST", "unsupported request type")))
+            session.write_message(IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, "unsupported request type")))
           end
         end
       rescue ex : Domain::IpcProtocolError
-        session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new("INVALID_REQUEST", ex.message || "invalid IPC request")))
+        session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, ex.message || "invalid IPC request")))
       rescue IO::Error
       ensure
         @registry.remove(session)

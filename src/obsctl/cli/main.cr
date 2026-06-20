@@ -1,3 +1,4 @@
+require "json"
 require "./options"
 require "./command_router"
 require "./client_commands"
@@ -16,63 +17,123 @@ require "../tui/app"
 module Obsctl
   module CLI
     module Main
-      def self.run(argv : Array(String), service_installer : Service::ServiceInstaller? = nil) : Int32
-        options = OptionsParser.new.parse(argv)
-        log_level = Runtime::LogLevel.parse(options.log_level)
-        command = options.command
+      def self.run(
+        argv : Array(String),
+        service_installer : Service::ServiceInstaller? = nil,
+        stdout : IO = STDOUT,
+        stderr : IO = STDERR,
+      ) : Int32
+        json_output = false
 
-        if command == "init"
-          if File.exists?(options.config_path) && !options.force
-            raise Domain::ConfigInvalid.new("config already exists: #{options.config_path}; pass --force to overwrite")
+        begin
+          options = OptionsParser.new.parse(argv)
+          command = options.command
+          command_args, command_json = split_json_flag(options.args)
+          json_output = (options.json || command_json) && json_command?(command)
+          log_level = Runtime::LogLevel.parse(options.log_level)
+
+          if command == "init"
+            if File.exists?(options.config_path) && !options.force
+              raise Domain::ConfigInvalid.new("config already exists: #{options.config_path}; pass --force to overwrite")
+            end
+            Config::ConfigWriter.new.write_default(options.config_path)
+            stdout.puts "created config: #{options.config_path}"
+            return 0
           end
-          Config::ConfigWriter.new.write_default(options.config_path)
-          puts "created config: #{options.config_path}"
-          return 0
-        end
 
-        if command == "validate-config"
-          config = Config::ConfigLoader.new.load(options.config_path)
-          write_config_warnings(config)
-          puts "config valid: #{options.config_path}"
-          return 0
-        end
-
-        if command == "server"
-          config = Config::ConfigLoader.new.load(options.config_path)
-          server_options = Server::ServerOptions.new(headless: options.args.includes?("--headless"))
-          socket_path = IPC::SocketPath.resolve(config.server.socket_path)
-          logger = Runtime::Logger.new(log_level)
-          return Server::Server.new(config, options.config_path, server_options, socket_path, logger).run
-        end
-
-        if command == "service"
-          action = options.args[0]? || raise Domain::CommandParseError.new("missing service action")
-          if options.args.size > 1
-            raise Domain::CommandParseError.new("wrong argument count for service")
+          if command == "validate-config"
+            config = Config::ConfigLoader.new.load(options.config_path)
+            write_config_warnings(config, stderr)
+            message = "config valid: #{options.config_path}"
+            if json_output
+              stdout.puts json_envelope(true, message_result(message), nil, Domain::ExitCode::Success.value)
+            else
+              stdout.puts message
+            end
+            return 0
           end
-          puts (service_installer || Service::ServiceInstaller.new).run(action)
-          return 0
-        end
 
-        if command.nil? || command == "tui"
-          config = load_config_for(command, options.config_path)
-          return TUI::App.new(config, options.config_path).run
-        end
+          if command == "server"
+            config = Config::ConfigLoader.new.load(options.config_path)
+            server_options = Server::ServerOptions.new(headless: command_args.includes?("--headless"))
+            socket_path = IPC::SocketPath.resolve(config.server.socket_path)
+            logger = Runtime::Logger.new(log_level)
+            return Server::Server.new(config, options.config_path, server_options, socket_path, logger).run
+          end
 
-        palette_line = cli_to_palette(command, options.args)
-        parsed = Domain::CommandParser.new.parse(palette_line)
-        result = ClientCommands.new(IPC::UnixClient.new(client_socket_path(options.config_path))).execute(parsed)
-        puts result.message
-        result.ok ? 0 : 1
-      rescue ex : Domain::ServerUnavailable
-        STDERR.puts server_unavailable_message
-        ex.exit_code.value
-      rescue ex : Domain::ObsctlError
-        STDERR.puts ex.message
-        ex.exit_code.value
-      rescue ex
-        STDERR.puts ex.message
-        Domain::ExitCode::Failure.value
+          if command == "service"
+            action = command_args[0]? || raise Domain::CommandParseError.new("missing service action")
+            if command_args.size > 1
+              raise Domain::CommandParseError.new("wrong argument count for service")
+            end
+            stdout.puts (service_installer || Service::ServiceInstaller.new).run(action)
+            return 0
+          end
+
+          if command.nil? || command == "tui"
+            config = load_config_for(command, options.config_path, stderr)
+            return TUI::App.new(config, options.config_path).run
+          end
+
+          palette_line = cli_to_palette(command, command_args)
+          parsed = Domain::CommandParser.new.parse(palette_line)
+          client_commands = ClientCommands.new(IPC::UnixClient.new(client_socket_path(options.config_path)))
+          if json_output
+            response = client_commands.request(parsed)
+            exit_code = response.ok ? Domain::ExitCode::Success.value : ClientCommands.exit_code_for(response.error.not_nil!).value
+            stdout.puts json_envelope(response.ok, response.result, response.error, exit_code)
+            exit_code
+          else
+            result = client_commands.execute(parsed)
+            stdout.puts result.message
+            result.ok ? 0 : 1
+          end
+        rescue ex : Domain::ServerUnavailable
+          if json_output
+            write_json_error(stdout, IPC::ErrorPayload.from_exception(ex), ex.exit_code.value)
+          else
+            stderr.puts server_unavailable_message
+          end
+          ex.exit_code.value
+        rescue ex : Domain::ObsctlError
+          if json_output
+            write_json_error(stdout, IPC::ErrorPayload.from_exception(ex), ex.exit_code.value)
+          else
+            stderr.puts ex.message
+          end
+          ex.exit_code.value
+        rescue ex
+          if json_output
+            write_json_error(stdout, IPC::ErrorPayload.server_error, Domain::ExitCode::Failure.value)
+          else
+            stderr.puts ex.message
+          end
+          Domain::ExitCode::Failure.value
+        end
+      end
+
+      private def self.split_json_flag(args : Array(String)) : Tuple(Array(String), Bool)
+        json = false
+        filtered = args.reject do |arg|
+          if arg == "--json"
+            json = true
+            true
+          else
+            false
+          end
+        end
+        {filtered, json}
+      end
+
+      private def self.json_command?(command : String?) : Bool
+        case command
+        when "status", "obs-status", "server-status", "reconnect", "shutdown-server",
+             "scene", "mute", "unmute", "toggle-mute", "vol", "volume",
+             "dump-config", "reload-config", "validate-config"
+          true
+        else
+          false
+        end
       end
 
       private def self.cli_to_palette(command : String, args : Array(String)) : String
@@ -117,14 +178,14 @@ module Obsctl
         end
       end
 
-      private def self.load_config_for(command : String?, path : String) : Config::Config
+      private def self.load_config_for(command : String?, path : String, stderr : IO = STDERR) : Config::Config
         if command == "dump-config" && !File.exists?(path)
           return Config::Config.default
         end
 
         if (command.nil? || command == "tui") && !File.exists?(path)
           Config::ConfigWriter.new.write_default(path)
-          STDERR.puts "created default config: #{path}"
+          stderr.puts "created default config: #{path}"
         end
 
         Config::ConfigLoader.new.load(path)
@@ -150,6 +211,37 @@ module Obsctl
         "Or install service:\n" \
         "  obsctl service install\n" \
         "  systemctl --user enable --now obsctl.service"
+      end
+
+      private def self.message_result(message : String) : JSON::Any
+        JSON.parse({"message" => message}.to_json)
+      end
+
+      private def self.write_json_error(stdout : IO, error : IPC::ErrorPayload, exit_code : Int32) : Nil
+        stdout.puts json_envelope(false, nil, error, exit_code)
+      end
+
+      private def self.json_envelope(ok : Bool, result : JSON::Any?, error : IPC::ErrorPayload?, exit_code : Int32) : String
+        JSON.build do |json|
+          json.object do
+            json.field "ok", ok
+            json.field "result" do
+              if result
+                result.to_json(json)
+              else
+                json.null
+              end
+            end
+            json.field "error" do
+              if error
+                error.to_json(json)
+              else
+                json.null
+              end
+            end
+            json.field "exit_code", exit_code
+          end
+        end
       end
     end
   end

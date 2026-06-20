@@ -1,5 +1,9 @@
+require "json"
+require "socket"
 require "../../spec_helper"
 require "../../../src/obsctl/cli/main"
+require "../../../src/obsctl/ipc/client_session"
+require "../../../src/obsctl/ipc/socket_path"
 
 private class FakeCliSystemCommandRunner < Obsctl::Service::SystemCommandRunner
   getter calls = [] of Tuple(String, Array(String))
@@ -8,6 +12,55 @@ private class FakeCliSystemCommandRunner < Obsctl::Service::SystemCommandRunner
     @calls << {command, args}
     Process::Status.new(0)
   end
+end
+
+private def with_cli_json_runtime(&)
+  runtime_dir = File.join(Dir.tempdir, "obsctl-cli-json-#{Random.rand(1_000_000)}")
+  previous_runtime_dir = ENV["XDG_RUNTIME_DIR"]?
+  ENV["XDG_RUNTIME_DIR"] = runtime_dir
+  yield runtime_dir
+ensure
+  if previous_runtime_dir
+    ENV["XDG_RUNTIME_DIR"] = previous_runtime_dir
+  else
+    ENV.delete("XDG_RUNTIME_DIR")
+  end
+  FileUtils.rm_rf(runtime_dir) if runtime_dir
+end
+
+private def with_fake_ipc_response(response : Obsctl::IPC::Response, &)
+  socket_path = Obsctl::IPC::SocketPath.resolve
+  Obsctl::IPC::SocketPath.ensure_parent(socket_path)
+  server = UNIXServer.new(socket_path)
+  File.chmod(socket_path, 0o600)
+  received = Channel(Obsctl::IPC::Request).new(1)
+
+  spawn do
+    socket = server.accept
+    session = Obsctl::IPC::ClientSession.new(socket)
+    message = session.read_message
+    received.send(message.as(Obsctl::IPC::Request))
+    session.write_message(response)
+    session.close
+  end
+
+  yield received
+ensure
+  server.try(&.close)
+  File.delete(socket_path) if socket_path && File.exists?(socket_path)
+end
+
+private def run_cli_json(args : Array(String)) : Tuple(Int32, String, String)
+  stdout = IO::Memory.new
+  stderr = IO::Memory.new
+  exit_code = Obsctl::CLI::Main.run(args, nil, stdout, stderr)
+  {exit_code, stdout.to_s, stderr.to_s}
+end
+
+private def parse_single_json(stdout : String) : JSON::Any
+  lines = stdout.lines
+  lines.size.should eq(1)
+  JSON.parse(lines[0])
 end
 
 describe Obsctl::CLI::Main do
@@ -29,6 +82,100 @@ describe Obsctl::CLI::Main do
       ENV.delete("XDG_RUNTIME_DIR")
     end
     FileUtils.rm_rf(runtime_dir) if runtime_dir
+  end
+
+  it "emits a JSON envelope for successful proxy commands" do
+    with_cli_json_runtime do
+      result = JSON.parse(%({"connected":true,"current_scene":"Main Camera","scenes":[],"audio_inputs":[]}))
+      response = Obsctl::IPC::Response.new("req-000001", true, result)
+
+      with_fake_ipc_response(response) do |received|
+        exit_code, stdout, stderr = run_cli_json(["--json", "status"])
+        request = received.receive
+
+        request.command.try(&.name).should eq("get_obs_status")
+        exit_code.should eq(0)
+        stderr.should eq("")
+
+        envelope = parse_single_json(stdout)
+        envelope["ok"].as_bool.should be_true
+        envelope["result"]["connected"].as_bool.should be_true
+        envelope["result"]["current_scene"].as_s.should eq("Main Camera")
+        envelope["error"].raw.should be_nil
+        envelope["exit_code"].as_i.should eq(0)
+      end
+    end
+  end
+
+  it "emits a JSON envelope without startup hints when the server is unavailable" do
+    with_cli_json_runtime do
+      exit_code, stdout, stderr = run_cli_json(["status", "--json"])
+
+      exit_code.should eq(3)
+      stderr.should eq("")
+
+      envelope = parse_single_json(stdout)
+      envelope["ok"].as_bool.should be_false
+      envelope["result"].raw.should be_nil
+      envelope["error"]["code"].as_s.should eq(Obsctl::IPC::ErrorCode::SERVER_UNAVAILABLE)
+      envelope["exit_code"].as_i.should eq(exit_code)
+    end
+  end
+
+  it "emits a JSON envelope for CLI parse errors before IPC" do
+    with_cli_json_runtime do
+      exit_code, stdout, stderr = run_cli_json(["scene", "--json"])
+
+      exit_code.should eq(5)
+      stderr.should eq("")
+
+      envelope = parse_single_json(stdout)
+      envelope["ok"].as_bool.should be_false
+      envelope["error"]["code"].as_s.should eq(Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR)
+      envelope["error"]["message"].as_s.should contain("missing argument")
+      envelope["exit_code"].as_i.should eq(exit_code)
+    end
+  end
+
+  it "emits a JSON envelope for OBS unavailable command failures" do
+    with_cli_json_runtime do
+      error = Obsctl::IPC::ErrorPayload.new(Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE, "OBS is unavailable")
+      response = Obsctl::IPC::Response.new("req-000001", false, nil, error)
+
+      with_fake_ipc_response(response) do
+        exit_code, stdout, stderr = run_cli_json(["--json", "mute", "mic"])
+
+        exit_code.should eq(3)
+        stderr.should eq("")
+
+        envelope = parse_single_json(stdout)
+        envelope["ok"].as_bool.should be_false
+        envelope["result"].raw.should be_nil
+        envelope["error"]["code"].as_s.should eq(Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE)
+        envelope["exit_code"].as_i.should eq(exit_code)
+      end
+    end
+  end
+
+  it "emits a JSON envelope for failed proxy command responses" do
+    with_cli_json_runtime do
+      error = Obsctl::IPC::ErrorPayload.new(Obsctl::IPC::ErrorCode::SCENE_NOT_FOUND, "scene not found: missing")
+      response = Obsctl::IPC::Response.new("req-000001", false, nil, error)
+
+      with_fake_ipc_response(response) do
+        exit_code, stdout, stderr = run_cli_json(["--json", "scene", "missing"])
+
+        exit_code.should eq(4)
+        stderr.should eq("")
+
+        envelope = parse_single_json(stdout)
+        envelope["ok"].as_bool.should be_false
+        envelope["result"].raw.should be_nil
+        envelope["error"]["code"].as_s.should eq(Obsctl::IPC::ErrorCode::SCENE_NOT_FOUND)
+        envelope["error"]["message"].as_s.should eq("scene not found: missing")
+        envelope["exit_code"].as_i.should eq(exit_code)
+      end
+    end
   end
 
   it "returns command parse error for unsupported log levels" do

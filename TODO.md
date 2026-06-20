@@ -74,6 +74,8 @@ CLI client mode:
 - `obsctl vol <audio-target> <0-100>`: sends volume request to server.
 - `obsctl dump-config`: sends dump-config request to server; server reads OBS state and writes config.
 - `obsctl reload-config`: sends reload-config request to server.
+- Scriptable commands accept `--json` for a single stdout JSON envelope with
+  `ok`, `result`, `error`, and `exit_code`.
 
 ### Local IPC
 
@@ -114,6 +116,14 @@ Server error response:
 ```json
 {"id":"req-000002","type":"response","ok":false,"error":{"code":"SCENE_NOT_FOUND","message":"Scene alias not found: cam"}}
 ```
+
+Public IPC error responses use the canonical codes `CONFIG_INVALID`,
+`SERVER_UNAVAILABLE`, `OBS_UNAVAILABLE`, `REQUEST_TIMEOUT`,
+`OBS_REQUEST_FAILED`, `SCENE_NOT_FOUND`, `AUDIO_INPUT_NOT_FOUND`,
+`ALIAS_AMBIGUOUS`, `COMMAND_PARSE_ERROR`, `IPC_PROTOCOL_ERROR`,
+`SHUTDOWN_DISABLED`, and `SERVER_ERROR`. Legacy vague boundary codes are
+canonicalized before reaching CLI/TUI clients, and public messages must remain
+secret-free.
 
 TUI subscription request:
 
@@ -416,6 +426,7 @@ Implemented:
   - `obsctl server-status`
   - `obsctl reconnect`
   - `obsctl shutdown-server` (guarded by `server.allow_remote_shutdown`)
+  - `--json` envelope output for scriptable commands
   - non-interactive OBS control commands are thin IPC clients and return exit `3` with startup/service instructions when the local server is missing
 - Command palette parser for:
   - `/help`
@@ -509,6 +520,7 @@ Implemented:
   - timestamp and last error field
 - Local IPC primitives:
   - typed command requests, subscribe requests, responses, errors, and events
+  - canonical public IPC error-code taxonomy with safe messages
   - newline-delimited JSON codec
   - Unix socket path resolution using `$XDG_RUNTIME_DIR/obsctl/obsctl.sock`
   - fallback Unix socket path `/tmp/obsctl-$UID/obsctl.sock`
@@ -531,6 +543,8 @@ Implemented:
   - configured `server.socket_path` is honored by server, CLI clients, and TUI clients
 - CLI IPC proxying:
   - non-interactive `status`, `obs-status`, `server-status`, `reconnect`, `shutdown-server`, `scene`, `mute`, `unmute`, `toggle-mute`, `vol`/`volume`, `dump-config`, and `reload-config` commands send typed IPC requests
+  - JSON envelope output for scriptable commands uses stable `ok`, `result`, `error`, and `exit_code` keys
+  - JSON failures carry canonical IPC error objects and return the same exit code reported in the envelope
   - CLI no longer creates an OBS WebSocket client for normal scriptable OBS-control commands
   - missing local server prints startup/service instructions and exits `3`
 - Minimal ANSI TUI scaffold:
@@ -613,8 +627,10 @@ Implemented:
   - CLI dump-config integration through the local server IPC path
   - CLI dump-config conflict failure through the local server IPC path
   - CLI missing-server exit path for thin client commands
+  - CLI JSON envelopes for success, server unavailable, parse errors, OBS unavailable, and command failures
   - CLI-level systemd service smoke coverage with a fake command runner hook
   - IPC codec validation
+  - canonical IPC error-code validation, legacy-code canonicalization, and non-canonical-code rejection
   - IPC socket path resolution
   - IPC Unix socket request/response round trip
   - stale IPC socket cleanup
@@ -625,6 +641,8 @@ Implemented:
   - server OBS event and log topic broadcasts to subscribed IPC clients
   - server-side validate-config and guarded shutdown behavior
   - systemd user service unit generation and installer command behavior
+  - daemon-first architecture boundary scans for normal CLI/TUI paths and server command execution
+  - golden CLI and IPC contract fixtures for frozen command payloads, human output, JSON envelopes, and error behavior
 
 ## Partial
 
@@ -674,12 +692,16 @@ Implemented:
 - Tests:
   - CLI scene/audio/dump-config fake-server specs exist
   - TUI session, IPC client, and command palette input specs exist
+  - contract-freeze specs cover public IPC errors, JSON CLI envelopes, daemon-first boundaries, and golden CLI/IPC fixtures
 
 ## Not Yet Implemented
 
 - Full termisu integration.
 - Replace ANSI redraw backend with termisu after dependency integration is accepted.
 - Low-level client reconnect loop independent of TUI session.
+- Broader adversarial pending-request lifecycle coverage for late responses,
+  concurrent requests, disconnects, parser/read errors, and timeout/close
+  cleanup.
 - Studio mode support.
 - Stream/record controls and status.
 - Scene item visibility controls.
@@ -834,6 +856,9 @@ Partial:
 - config docs
 - protocol docs
 - command docs
+- frozen JSON CLI envelope docs
+- canonical public IPC error-code docs
+- daemon-first boundary docs
 - plaintext password warning on `validate-config`
 - viewport-bounded ANSI TUI rendering
 - incremental ANSI TUI renderer backend
@@ -872,6 +897,8 @@ Done:
 - TUI IPC request correlation for overlapping long-lived client commands, including out-of-order responses
 - configured `server.socket_path` is honored by thin CLI/TUI clients
 - IPC command executor supports `validate_config`, `reconnect_obs`, and guarded `shutdown_server`
+- canonical public IPC error-code taxonomy and boundary canonicalization
+- golden IPC contract fixtures for representative command payloads
 
 Remaining:
 
@@ -898,5 +925,11 @@ Remaining:
 
 ## Planned Next
 
-1. Prepare demo config and packaging polish.
-2. Revisit a `termisu` backend if the pre-1.0 dependency becomes acceptable for the project.
+1. Finish the remaining P0 runtime hardening: adversarial OBS pending-request
+   lifecycle specs for late responses, concurrent requests, disconnects,
+   parser/read errors, and timeout/close cleanup.
+2. Run the full contract-freeze validation gates after the lifecycle hardening
+   lands: `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`,
+   `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
+3. After P0 contract and lifecycle hardening is closed, return to demo config,
+   packaging polish, and optional `termisu` backend evaluation.

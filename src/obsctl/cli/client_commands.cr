@@ -11,8 +11,35 @@ module Obsctl
         @sequence = 0
       end
 
-      def execute(command : Domain::Command) : Domain::CommandResult
+      def self.exit_code_for(error : IPC::ErrorPayload) : Domain::ExitCode
+        case error.code
+        when IPC::ErrorCode::SERVER_UNAVAILABLE, IPC::ErrorCode::OBS_UNAVAILABLE, IPC::ErrorCode::REQUEST_TIMEOUT
+          Domain::ExitCode::Connection
+        when IPC::ErrorCode::COMMAND_PARSE_ERROR, IPC::ErrorCode::SHUTDOWN_DISABLED, IPC::ErrorCode::ALIAS_AMBIGUOUS
+          Domain::ExitCode::CommandParse
+        when IPC::ErrorCode::CONFIG_INVALID
+          Domain::ExitCode::Config
+        when IPC::ErrorCode::SCENE_NOT_FOUND, IPC::ErrorCode::AUDIO_INPUT_NOT_FOUND, IPC::ErrorCode::OBS_REQUEST_FAILED
+          Domain::ExitCode::ObsRequest
+        when IPC::ErrorCode::IPC_PROTOCOL_ERROR
+          Domain::ExitCode::Ipc
+        else
+          Domain::ExitCode::Failure
+        end
+      end
+
+      def request(command : Domain::Command) : IPC::Response
         response = @client.request(request_for(command))
+        if !response.ok && response.error.nil?
+          raise Domain::IpcProtocolError.new("server returned an invalid error response")
+        end
+        response
+      rescue ex : Domain::IpcConnectionFailed
+        raise Domain::ServerUnavailable.new
+      end
+
+      def execute(command : Domain::Command) : Domain::CommandResult
+        response = request(command)
         unless response.ok
           error = response.error
           raise_remote_error(error.not_nil!) if error
@@ -20,8 +47,6 @@ module Obsctl
         end
 
         Domain::CommandResult.ok(format_response(command, response.result))
-      rescue ex : Domain::IpcConnectionFailed
-        raise Domain::ServerUnavailable.new
       end
 
       private def request_for(command : Domain::Command) : IPC::Request
@@ -111,19 +136,22 @@ module Obsctl
       end
 
       private def raise_remote_error(error : IPC::ErrorPayload) : NoReturn
-        case error.code
-        when "COMMAND_PARSE_ERROR"
-          raise Domain::CommandParseError.new(error.message)
-        when "CONFIG_ERROR"
+        case code = self.class.exit_code_for(error)
+        when Domain::ExitCode::Connection
+          if error.code == IPC::ErrorCode::SERVER_UNAVAILABLE
+            raise Domain::ServerUnavailable.new(error.message)
+          end
+          if error.code == IPC::ErrorCode::OBS_UNAVAILABLE
+            raise Domain::ObsUnavailable.new(error.message)
+          end
+          raise Domain::RemoteCommandFailed.new(error.message, code)
+        when Domain::ExitCode::CommandParse
+          raise Domain::CommandParseError.new(error.message) if error.code == IPC::ErrorCode::COMMAND_PARSE_ERROR
+          raise Domain::RemoteCommandFailed.new(error.message, code)
+        when Domain::ExitCode::Config
           raise Domain::ConfigInvalid.new(error.message)
-        when "OBS_UNAVAILABLE"
-          raise Domain::ObsUnavailable.new(error.message)
-        when "SHUTDOWN_DISABLED"
-          raise Domain::RemoteCommandFailed.new(error.message, Domain::ExitCode::CommandParse)
-        when "SCENE_NOT_FOUND", "AUDIO_INPUT_NOT_FOUND", "ALIAS_AMBIGUOUS", "REQUEST_FAILED"
-          raise Domain::RemoteCommandFailed.new(error.message, Domain::ExitCode::ObsRequest)
         else
-          raise Domain::RemoteCommandFailed.new(error.message, Domain::ExitCode::Failure)
+          raise Domain::RemoteCommandFailed.new(error.message, code)
         end
       end
 
