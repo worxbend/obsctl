@@ -1167,3 +1167,113 @@ M  SCORES.jsonl
 M  TODO.md
 M  spec/obsctl/server/obs_supervisor_spec.cr
 M  src/obsctl/server/obs_supervisor.cr
+2026-06-20T12:50:30Z iteration 8 started remaining=9192s
+2026-06-20T12:50:30Z iteration 8 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-20T12:50:30Z iteration 8 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-0kky1ukl/repo copied_entries=178
+2026-06-20T12:50:30Z iteration 8 ideator phase started count=3
+2026-06-20T12:50:30Z iteration 8 ideator phase concurrency workers=3
+2026-06-20T12:50:30Z iteration 8 ideator 1 role="the pragmatist" started
+2026-06-20T12:50:30Z iteration 8 ideator 2 role="the architect" started
+2026-06-20T12:50:30Z iteration 8 ideator 3 role="the contrarian" started
+2026-06-20T12:50:39Z iteration 8 ideator 3 role="the contrarian" completed status=0
+2026-06-20T12:50:39Z iteration 8 ideator 2 role="the architect" completed status=0
+2026-06-20T12:50:40Z iteration 8 ideator 1 role="the pragmatist" completed status=0
+2026-06-20T12:50:40Z iteration 8 ideator phase completed approaches=3
+2026-06-20T12:50:40Z iteration 8 selector started approaches=3
+2026-06-20T12:50:51Z iteration 8 selector completed status=0
+2026-06-20T12:50:51Z iteration 8 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-0kky1ukl/repo
+2026-06-20T12:50:51Z iteration 8 selector rejected alternative role="the contrarian" approach="Semantics-First Reconnect Contract: pause feature expansion and force the next iteration to define the public meaning of reconnect before changing mechanics, using tests only as..." reason="Strong on public semantics, but too likely to slow the iteration if interpreted as a broad documentation and fixture exercise before any mechanics are considered. The planner needs a tighter state-machine lens, not an open-ended contract..."
+2026-06-20T12:50:51Z iteration 8 selector rejected alternative role="the architect" approach="Semantic Reconnect Contract First: treat the remaining reconnect race as a public contract problem before touching mechanics, defining exactly what an accepted reconnect request..." reason="Nearly selected as-is, but it emphasizes explicit state taxonomy more than closure. The planner should use state-machine semantics, while keeping the objective focused on retiring the P0 race without widening into a larger lifecycle rede..."
+2026-06-20T12:50:51Z iteration 8 selector rejected alternative role="the pragmatist" approach="Semantics-First Reconnect Closure: stabilize the public meaning of explicit reconnect before touching broader polish, treating the remaining wake race as a contract problem rath..." reason="Correctly prioritizes the user-visible reconnect promise and avoids polish drift, but it underplays the need to define boundary cases such as active-close, in-flight attempt, pre-delay, and sleeping-delay behavior before choosing the dur..."
+2026-06-20T12:50:51Z iteration 8 selector alternatives persisted count=3
+2026-06-20T12:50:51Z iteration 8 selector structured alternatives persisted count=3
+2026-06-20T12:50:51Z iteration 8 planner started
+2026-06-20T12:51:25Z iteration 8 plan: 5 task(s) in 4 phase(s). This iteration focuses only on the highest-priority reconnect semantics race. The core supervisor/command contract must land first because tests and docs depend on its exact behavior. Specs then prove the adversarial timing boundary. Documentation and tracker updates can run in parallel because they touch disjoint files after the contract is known. Validation is last because it depends on all code, spec, and documentation updates being complete.
+2026-06-20T12:51:25Z iteration 8 phase 1 started parallel=False tasks=1
+2026-06-20T12:55:08Z iteration 8 task t1 ('Define and implement durable reconnect request semantics') status=0
+2026-06-20T12:55:08Z iteration 8 phase 2 started parallel=False tasks=1
+2026-06-20T12:57:29Z iteration 8 task t2 ('Add deterministic pre-delay reconnect race coverage') status=0
+2026-06-20T12:57:29Z iteration 8 phase 3 started parallel=True tasks=2
+2026-06-20T12:58:27Z iteration 8 task t4 ('Refresh project trackers for reconnect race closure') status=0
+2026-06-20T12:58:27Z iteration 8 t4 changes: refreshed TODO to mark the reconnect pre-delay race implemented with generation-scoped durable request epochs, noted regression coverage for durable pre-delay reconnect requests versus transient active-client-close wakes, kept remaining reconnect polling and unavailable-then-bind flake cleanup listed separately, updated MEMORY with the durable explicit-request versus transient active-client-close wake pattern, and recorded that focused Crystal gates are still pending phase 4.
+2026-06-20T12:58:27Z iteration 8 t4 validation: `git diff --check -- TODO.md MEMORY.md AGENT_LOG.md` passed; focused supervisor specs and full Crystal gates are scheduled for phase 4.
+2026-06-20T12:58:39Z iteration 8 task t3 ('Align reconnect command docs and protocol semantics') status=0
+2026-06-20T12:59:27Z iteration 8 task t4 ('Refresh project trackers for reconnect race closure') status=0
+2026-06-20T12:59:27Z iteration 8 phase 4 started parallel=False tasks=1
+2026-06-20T13:00:32Z iteration 8 task t5 ('Run focused and standard Crystal gates') validation:
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr` passed with 8 examples, 0 failures.
+  - `make format` passed.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` passed with 247 examples, 0 failures.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build` passed.
+  - `make lint` exited 0 with skip output: `ameba not installed; run shards install`.
+2026-06-20T13:00:54Z iteration 8 task t5 ('Run focused and standard Crystal gates') status=0
+2026-06-20T13:00:54Z iteration 8 reviewer started
+
+## 2026-06-20 Fresh reviewer audit: iteration 8 reconnect request durability
+
+- Iteration reviewed:
+  - `ObsSupervisor::ReconnectSignal` request epoch and wake behavior
+  - supervisor reconnect request handling, retry delay consumption, stop/start
+    generation ownership, and active-client reconnect close behavior
+  - focused supervisor specs, including the new failed-attempt-before-delay
+    regression test
+  - reconnect semantics in README, command docs, protocol docs, `TODO.md`,
+    `MEMORY.md`, and planner alternatives
+- What was done correctly:
+  - Explicit reconnect requests are no longer wake-only. A live supervisor now
+    records a generation-scoped request epoch before detaching any active OBS
+    client.
+  - A reconnect request made after a failed connection attempt but before the
+    retry delay starts is consumed at the next delay boundary and can trigger a
+    prompt Identify instead of sleeping for the full configured backoff.
+  - Active-client close wakes remain transient; the previous stale-token
+    behavior is not reintroduced by the durable explicit-request epoch.
+  - Public reconnect docs now distinguish command success from OBS connection
+    success and explain stopped-supervisor failures, prompt in-progress
+    attempts, durable accepted requests, and transient internal wakes.
+  - Focused and standard validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr`,
+    `make format`,
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`,
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and
+    `make lint` with the existing Ameba skip.
+- What was found:
+  - No blocking default-gate regression was found.
+  - The specific pre-delay reconnect race from iteration 7 is fixed in the
+    reviewed supervisor path.
+  - A narrower lost-wake race remains inside `ReconnectSignal#wait`: it checks
+    the request epoch, then waits on an unbuffered channel. A request that lands
+    after the epoch check but before the receive arm is registered can still
+    drop its wake and sleep for the full backoff.
+  - The new spec deterministically covers a request before the retry-delay wait
+    starts, but it does not cover the internal check-then-wait gap.
+  - Reconnect specs still use `unused_tcp_port` for unavailable-then-bind
+    scenarios, and `wait_for_disconnect` still polls every 250 ms.
+- Top improvement proposals:
+  - Make reconnect waiting atomic by using a condition-style primitive or a
+    buffered/drained epoch notification channel with an explicit stop/cancel
+    wake reason.
+  - Add signal-level specs for request-before-wait, request-during-wait,
+    stale-notification, stop-wake, repeated-request, and check-then-wait timing.
+  - Replace the remaining `unused_tcp_port` reconnect windows with a
+    deterministic unavailable-then-bind helper and continue reducing polling in
+    reconnect specs.
+  - Add or coordinate Rust-side `obsctl-rs` contract fixtures before promoting
+    strict compatibility beyond the current manual/scheduled signal.
+2026-06-20T13:04:58Z iteration 8 reviewer completed status=0
+2026-06-20T13:04:58Z iteration 8 memory updated
+2026-06-20T13:04:58Z iteration 8 completed validation_status=0
+2026-06-20T13:04:58Z iteration 8 checkpoint started
+2026-06-20T13:04:58Z iteration 8 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  README.md
+M  SCORES.jsonl
+M  TODO.md
+M  docs/commands.md
+M  docs/protocol.md
+M  spec/obsctl/server/obs_supervisor_spec.cr
+M  src/obsctl/server/obs_supervisor.cr
+M  src/obsctl/server/state_store.cr

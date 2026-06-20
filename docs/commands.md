@@ -131,13 +131,14 @@ even while OBS is currently connected, and successful connections do not clear
 it; only a newer failed attempt replaces it. `last_reconnect_attempt_at` records
 when the supervisor last started an OBS connection attempt.
 
-`obsctl reconnect` asks the running server supervisor to drop any active OBS
-client and attempt a new connection. When the supervisor is alive, the command
-returns success and the public `last_error` stays `OBS reconnect requested`
-until the next OBS connection success or failure outcome. If the supervisor is
-alive but sleeping between retry attempts, the reconnect request wakes that
-backoff so the next OBS connection attempt starts promptly instead of waiting
-for the configured delay:
+`obsctl reconnect` asks the running server supervisor to reconnect OBS. Success
+means the running supervisor accepted a generation-scoped reconnect request, or
+already has a prompt OBS connection attempt in progress; it does not mean OBS is
+already connected. Accepted explicit requests are durable across the next retry
+boundary, so a request made after a failed connection attempt but before retry
+sleep starts is still acted on promptly. The public `last_error` stays
+`OBS reconnect requested` until the next OBS connection success or failure
+outcome:
 
 ```json
 {"ok":true,"result":{"message":"OBS reconnect requested"},"error":null,"exit_code":0}
@@ -151,6 +152,10 @@ to report the real last connection failure instead of `OBS reconnect requested`:
 ```json
 {"ok":false,"result":null,"error":{"code":"OBS_UNAVAILABLE","message":"OBS supervisor is not running; restart the server or enable reconnect."},"exit_code":3}
 ```
+
+Internal wakes caused only by closing an active OBS client are transient
+implementation signals. They are not public reconnect requests and do not
+survive into an unrelated later retry delay.
 
 `obsctl validate-config` validates the local config file directly and does not require a running server. It prints a safe warning to stderr if plaintext `connection.password` is configured, including in JSON mode, and never echoes the password value. The TUI palette command `/validate-config` asks the running server to validate its configured file.
 
