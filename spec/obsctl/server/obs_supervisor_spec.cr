@@ -95,6 +95,38 @@ describe Obsctl::Server::ObsSupervisor do
     wait_for_supervisor { !supervisor.alive? } if supervisor
   end
 
+  it "keeps OBS ownership scoped after stop followed by immediate start" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+    obs.identify_count.should eq(1)
+
+    supervisor.stop
+    supervisor.start
+
+    obs.next_close(2.seconds).should be_true
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor do
+      begin
+        supervisor.with_client { true }
+      rescue Obsctl::Domain::ObsUnavailable
+        false
+      end
+    end
+
+    obs.connection_attempt_count.should eq(2)
+    obs.identify_count.should eq(2)
+    obs.assert_no_identify_or_connection_attempt(600.milliseconds)
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
   it "wakes retry backoff when reconnect is requested" do
     obs = nil.as(Obsctl::SpecSupport::FakeObsServer?)
     obs_port = unused_tcp_port
@@ -130,6 +162,53 @@ describe Obsctl::Server::ObsSupervisor do
 
     supervisor.reconnect.should be_true
 
+    obs.next_identify(1.second).should_not be_nil
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "does not let a reconnect wake from an active close skip the next retry delay" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    base_config = obs.config
+    config = Obsctl::Config::Config.new(
+      connection: base_config.connection,
+      reconnect: Obsctl::Config::ReconnectConfig.new(
+        enabled: true,
+        endless: true,
+        initial_delay_ms: 5_000,
+        max_delay_ms: 5_000,
+        multiplier: 1.0,
+        jitter_ms: 0
+      ),
+      scenes: base_config.scenes,
+      audio: base_config.audio
+    )
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(config, state)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    supervisor.reconnect.should be_true
+    obs.next_close_observed(2.seconds).should be_true
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    connection_attempts_after_explicit_reconnect = obs.connection_attempt_count
+    identifies_after_explicit_reconnect = obs.identify_count
+
+    obs.close_connections
+    obs.next_close_observed(2.seconds).should be_true
+    wait_for_supervisor { !state.snapshot.connected && state.telemetry.reconnecting }
+
+    obs.assert_no_identify_or_connection_attempt(150.milliseconds)
+    obs.connection_attempt_count.should eq(connection_attempts_after_explicit_reconnect)
+    obs.identify_count.should eq(identifies_after_explicit_reconnect)
+
+    supervisor.reconnect.should be_true
     obs.next_identify(1.second).should_not be_nil
   ensure
     supervisor.try(&.stop)

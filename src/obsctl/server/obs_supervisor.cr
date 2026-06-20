@@ -17,6 +17,26 @@ module Obsctl
         Stopped
       end
 
+      private class ReconnectWakeSignal
+        def initialize
+          @wake = Channel(Nil).new
+        end
+
+        def wait(delay : Time::Span) : Nil
+          select
+          when @wake.receive
+          when timeout(delay)
+          end
+        end
+
+        def wake : Nil
+          select
+          when @wake.send(nil)
+          else
+          end
+        end
+      end
+
       # Creates a supervisor that updates server state and optional event/log broadcasts.
       def initialize(
         @config : Config::Config,
@@ -29,7 +49,7 @@ module Obsctl
         @lifecycle_lock = Mutex.new
         @lifecycle_state = LifecycleState::Stopped
         @lifecycle_generation = 0_u64
-        @reconnect_wake = Channel(Nil).new(1)
+        @reconnect_wake = nil.as(ReconnectWakeSignal?)
       end
 
       # Returns true while the supervisor loop is starting or can still act.
@@ -39,23 +59,27 @@ module Obsctl
 
       # Starts the reconnecting supervisor loop in a background fiber.
       def start : Nil
-        generation = @lifecycle_lock.synchronize do
+        generation, wake_signal = @lifecycle_lock.synchronize do
           return unless @lifecycle_state == LifecycleState::Stopped
 
           @lifecycle_generation += 1
           @lifecycle_state = LifecycleState::Starting
-          @lifecycle_generation
+          @reconnect_wake = ReconnectWakeSignal.new
+          {@lifecycle_generation, @reconnect_wake.not_nil!}
         end
-        spawn(name: "obsctl-obs-supervisor") { run(generation) }
+        spawn(name: "obsctl-obs-supervisor") { run(generation, wake_signal) }
       end
 
       # Stops reconnect attempts and closes the active OBS client.
       def stop : Nil
-        @lifecycle_lock.synchronize do
+        wake_signal = @lifecycle_lock.synchronize do
           @lifecycle_generation += 1
           @lifecycle_state = LifecycleState::Stopped
+          signal = @reconnect_wake
+          @reconnect_wake = nil
+          signal
         end
-        wake_reconnect
+        wake_signal.try(&.wake)
         current_client = @client_lock.synchronize do
           existing = @client
           @client = nil
@@ -73,7 +97,11 @@ module Obsctl
 
       # Drops the active client so the supervisor reconnect loop starts over.
       def reconnect : Bool
-        return false unless alive?
+        wake_signal = @lifecycle_lock.synchronize do
+          return false if @lifecycle_state == LifecycleState::Stopped
+
+          @reconnect_wake
+        end
 
         client = @client_lock.synchronize do
           existing = @client
@@ -83,48 +111,53 @@ module Obsctl
         @state.mark_disconnected("OBS reconnect requested", reconnecting: true, connection_failed: false)
         publish_log("info", "obs_reconnect_requested", "OBS reconnect requested")
         client.try(&.close)
-        wake_reconnect
+        wake_signal.try(&.wake)
         true
       end
 
-      private def run(generation : UInt64) : Nil
+      private def run(generation : UInt64, wake_signal : ReconnectWakeSignal) : Nil
         return unless mark_running(generation)
 
         policy = Runtime::ReconnectPolicy.new(@config.reconnect)
         attempt = 0
 
-        until stopped?
+        until stopped?(generation)
           client = OBS::Client.new(@config, event_subscriptions: OBS::Protocol::EventSubscription::SERVER_DEFAULT)
           connected = false
           begin
             @state.mark_reconnect_attempt
             client.connect
             connected = true
-            @client_lock.synchronize { @client = client }
+            break unless claim_client(generation, client)
+
             @state.mark_connected(client.snapshot)
             publish_log("info", "obs_connected", "Connected to OBS WebSocket")
             attempt = 0
 
-            disconnect_error = wait_for_disconnect(client)
+            disconnect_error = wait_for_disconnect(generation, client)
             next if client_detached?(client)
-            raise disconnect_error || Domain::ConnectionFailed.new("OBS WebSocket disconnected") unless stopped?
+            raise disconnect_error || Domain::ConnectionFailed.new("OBS WebSocket disconnected") unless stopped?(generation)
           rescue ex : Domain::ObsctlError
+            break if stopped?(generation)
+
             message = public_message(ex.message, "OBS unavailable")
             @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
             publish_log("warn", disconnect_log_code(message), message)
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
-            break if stopped? || !@config.reconnect.enabled
-            wait_for_reconnect_delay(policy.delay_for(attempt))
+            break if stopped?(generation) || !@config.reconnect.enabled
+            wait_for_reconnect_delay(policy.delay_for(attempt), wake_signal)
             attempt += 1
           rescue ex
+            break if stopped?(generation)
+
             message = public_message(ex.message, "OBS supervisor failed")
             @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
             publish_log("error", "obs_supervisor_error", message)
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
-            break if stopped? || !@config.reconnect.enabled
-            wait_for_reconnect_delay(policy.delay_for(attempt))
+            break if stopped?(generation) || !@config.reconnect.enabled
+            wait_for_reconnect_delay(policy.delay_for(attempt), wake_signal)
             attempt += 1
           end
         end
@@ -132,8 +165,8 @@ module Obsctl
         mark_stopped(generation)
       end
 
-      private def wait_for_disconnect(client : OBS::Client) : Domain::ConnectionFailed?
-        until stopped? || !client.connected?
+      private def wait_for_disconnect(generation : UInt64, client : OBS::Client) : Domain::ConnectionFailed?
+        until stopped?(generation) || !client.connected?
           drain_events(client)
           return client.terminal_error if client.terminal_error
           sleep 250.milliseconds
@@ -142,8 +175,23 @@ module Obsctl
         client.terminal_error
       end
 
-      private def stopped? : Bool
-        @lifecycle_lock.synchronize { @lifecycle_state == LifecycleState::Stopped }
+      private def stopped?(generation : UInt64) : Bool
+        @lifecycle_lock.synchronize do
+          @lifecycle_state == LifecycleState::Stopped || @lifecycle_generation != generation
+        end
+      end
+
+      private def claim_client(generation : UInt64, client : OBS::Client) : Bool
+        claimed = false
+        @lifecycle_lock.synchronize do
+          return false if @lifecycle_state == LifecycleState::Stopped || @lifecycle_generation != generation
+
+          @client_lock.synchronize { @client = client }
+          claimed = true
+        end
+        claimed
+      ensure
+        client.close unless claimed
       end
 
       private def mark_running(generation : UInt64) : Bool
@@ -158,22 +206,15 @@ module Obsctl
 
       private def mark_stopped(generation : UInt64) : Nil
         @lifecycle_lock.synchronize do
-          @lifecycle_state = LifecycleState::Stopped if @lifecycle_generation == generation
+          next unless @lifecycle_generation == generation
+
+          @lifecycle_state = LifecycleState::Stopped
+          @reconnect_wake = nil
         end
       end
 
-      private def wait_for_reconnect_delay(delay : Time::Span) : Nil
-        select
-        when @reconnect_wake.receive
-        when timeout(delay)
-        end
-      end
-
-      private def wake_reconnect : Nil
-        select
-        when @reconnect_wake.send(nil)
-        else
-        end
+      private def wait_for_reconnect_delay(delay : Time::Span, wake_signal : ReconnectWakeSignal) : Nil
+        wake_signal.wait(delay)
       end
 
       private def drain_events(client : OBS::Client) : Nil

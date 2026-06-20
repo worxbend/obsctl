@@ -660,6 +660,14 @@ Implemented:
   - supervisor lifecycle state is explicit: `start` marks the supervisor alive
     synchronously, accidental double starts are ignored while it is alive, and
     `stop` marks it stopped
+  - supervisor run loops are generation-scoped: each `start` creates a fresh
+    lifecycle generation, stale stopped generations exit without reclaiming an
+    OBS client, and stop followed by immediate start keeps OBS ownership with
+    the newest generation
+  - reconnect wake signals are scoped to the active supervisor generation, so a
+    wake emitted while closing an active client cannot remain buffered and skip
+    a later retry delay; a fresh explicit reconnect still wakes live retry
+    backoff promptly
   - `last_disconnected_at` is updated only after an established OBS session
     disconnects; `last_connection_failed_at` records the most recent failed OBS
     connection attempt and is not cleared by later successful connections
@@ -719,7 +727,7 @@ Implemented:
   - strict `obsctl-rs` compatibility mode fails clearly for missing sibling repositories, missing fixture roots, missing counterparts, and content differences
   - fake OBS server support exposes deterministic probes for Identify frames,
     OBS request types, close events, and no-attempt windows
-  - server reconnect specs cover initial OBS unavailable startup, reconnect-disabled supervisor exit, established-session disconnects, protocol-error disconnects, explicit reconnect requests, wakeable retry backoff, and successful reconnects
+  - server reconnect specs cover initial OBS unavailable startup, reconnect-disabled supervisor exit, established-session disconnects, protocol-error disconnects, explicit reconnect requests, wakeable retry backoff, generation-safe stop/start ownership, stale reconnect wake invalidation, and successful reconnects
 
 ## Not Yet Implemented
 
@@ -875,6 +883,7 @@ Partial:
 - reconnect handling wired into runtime
 - explicit OBS reconnect request command through IPC
 - explicit reconnect wakes retry backoff while the supervisor is alive
+- supervisor stop/start ownership and reconnect wake signals are generation-scoped
 - supervisor reconnect proof after protocol-error client closes while IPC remains available
 
 ### Milestone 8: Polish

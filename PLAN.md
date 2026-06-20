@@ -1,9 +1,9 @@
 # obsctl Improvement Plan
 
-This plan reflects the fresh reviewer pass on the June 20, 2026 iteration 6
-reconnect-control and compatibility-CI work. The default Crystal gate is green,
-strict `obsctl-rs` compatibility is no longer an always-on push/PR gate, and
-explicit reconnect now wakes retry backoff when the supervisor is alive.
+This plan reflects the fresh reviewer pass on the June 20, 2026 iteration 7
+supervisor lifecycle work. The default Crystal gate is green, supervisor runs
+are now generation-scoped, and reconnect wake tokens no longer leak across
+supervisor generations or active-client reconnects.
 
 ## Current Assessment
 
@@ -21,87 +21,85 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
 
 Completed in the latest implementation iteration:
 
-- `.github/workflows/obsctl-rs-compat.yml` now runs through manual
-  `workflow_dispatch` and a scheduled cadence instead of push/pull-request
-  triggers. The Rust repository owner, name, and ref are configurable through
-  workflow inputs or repository variables.
-- `ObsSupervisor#start` now marks the supervisor alive synchronously with an
-  explicit lifecycle state, ignores double `start` calls while alive, and
-  `stop` marks the supervisor stopped before closing the active client.
-- `obsctl reconnect` still rejects stopped supervisors with `OBS_UNAVAILABLE`,
-  but live supervisors now wake retry backoff promptly when OBS is unavailable.
-- The fake OBS server now exposes deterministic probes for accepted WebSocket
-  connections, Identify frames, OBS request types, close notifications, and
-  no-attempt windows.
-- Server integration coverage proves the wakeable reconnect path: OBS is
-  unavailable, reconnect is enabled with a long backoff, OBS appears, an IPC
-  `reconnect_obs` request wakes the loop, Identify is sent promptly, and
-  combined status reports the reconnected state.
-- README, command docs, protocol docs, and `TODO.md` were refreshed for the
-  opt-in strict compatibility workflow and wakeable reconnect contract.
+- `ObsSupervisor` run loops now carry the lifecycle generation that created
+  them. Stale fibers exit when a newer generation starts and cannot reclaim the
+  OBS client slot.
+- `stop` invalidates the active generation, clears the current wake signal, and
+  closes the active OBS client outside the lifecycle lock.
+- `start` creates a fresh per-generation reconnect wake signal and still ignores
+  accidental double starts while alive.
+- Reconnect wake tokens are no longer buffered on one supervisor-wide channel.
+  A wake emitted while closing an active client is dropped instead of being
+  consumed by a later unrelated retry delay.
+- Focused supervisor coverage now proves stop followed by immediate start keeps
+  OBS ownership with the newest generation.
+- Focused supervisor coverage now proves a stale reconnect wake from an active
+  close does not skip the next scheduled retry delay.
+- `TODO.md` and `MEMORY.md` were refreshed for generation-scoped supervisor
+  ownership.
 
 Validation observed during review:
 
 - Focused touched specs passed:
-  `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr spec/obsctl/server/server_spec.cr`
-  with 21 examples.
+  `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr`
+  with 7 examples.
 - Default validation passed:
   `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
-  with 244 examples.
-- The implementation log reports `make format`, `make build`, and `make lint`
-  passing; `make lint` still uses the existing Ameba-not-installed skip path.
-- Strict `make contract-rs-compat` still requires a prepared dual-repo
-  workspace with compatible `obsctl-rs` fixtures before it can become a
-  required signal.
+  with 246 examples.
+- Full build/format/lint were not rerun in this reviewer pass after plan/log
+  edits; the implementation log reports the focused supervisor spec only for
+  iteration 7. The full standard gate remains required before checkpointing a
+  code change.
 
 Reviewer findings:
 
 - No blocking default-gate regression was found.
-- The reconnect-disabled false-success path remains fixed, and reconnect while
-  alive in retry backoff now attempts OBS promptly instead of waiting out the
-  configured delay.
-- The new fake OBS probes are useful and reduce several sleep-heavy assertions,
-  but they currently count accepted WebSocket connections rather than failed TCP
-  connection attempts; absence assertions should be interpreted accordingly.
-- `ObsSupervisor` lifecycle state is clearer than before, but stop-then-start
-  reuse is not generation-safe. After `stop` sets the global state to
-  `Stopped`, a quick `start` can set it back to `Starting`/`Running` before the
-  old fiber exits. The old fiber's `stopped?` check is not generation-scoped, so
-  it can continue and race the new fiber.
-- Wake signals are buffered on a single channel shared across the supervisor
-  lifetime. A wake emitted while no delay is waiting can become stale and make a
-  later backoff return immediately. This is probably harmless for the current
-  server lifecycle, but it weakens the exact retry-delay contract.
-- Reconnect monitoring still uses polling inside `wait_for_disconnect`
-  (`sleep 250.milliseconds`), so reconnect after dropping an active client is
-  prompt but not fully event-driven.
-- The strict compatibility workflow is now scoped correctly for this repository,
-  but scheduled runs will continue to fail until `obsctl-rs` publishes a
-  recognized fixture root with matching `cli/` and `ipc/` counterparts.
+- The P0 stop-then-start ownership bug from iteration 6 is fixed in the normal
+  paths reviewed: lifecycle checks, client claiming, and stop cleanup are now
+  generation-aware.
+- The stale buffered wake-token bug is fixed by replacing the shared buffered
+  channel with a per-generation unbuffered signal object.
+- The new unbuffered signal intentionally drops wakes when no retry delay is
+  currently waiting. That prevents stale tokens, but it creates a narrow
+  operator-visible race: a fresh `reconnect_obs` request that lands after a
+  failed connection attempt but just before the supervisor enters
+  `wait_for_reconnect_delay` can be lost and the loop can still sleep for the
+  full backoff.
+- `reconnect` still marks state as `OBS reconnect requested` even when there is
+  no active client and the wake signal is dropped. That is acceptable while the
+  supervisor is already sleeping, but ambiguous in the pre-delay race above.
+- `wait_for_disconnect` still polls every 250 ms. The generation fix makes it
+  correct, but stop/reconnect responsiveness and tests still depend on polling.
+- Reconnect specs still use `unused_tcp_port` for unavailable-then-bind
+  scenarios, so the remaining flake surface is smaller but not eliminated.
+- The strict compatibility workflow remains manual/scheduled and still needs
+  compatible Rust-side fixtures before it can become a required signal.
 
-## P0: Make Supervisor Lifecycle Generation-Safe
+## P0: Close Remaining Reconnect Wake Race
 
-1. Fix stop-then-start reuse or explicitly make supervisors single-use.
-   - Preferred: pass the lifecycle generation into the run loop and make
-     `stopped?` generation-aware, so an old fiber exits even if a newer
-     generation has already started.
-   - Clear any stale wake token when starting a new generation.
-   - Add coverage for `start`, `stop`, immediate `start`, and prove only one OBS
-     connection owner remains active.
+1. Preserve fresh operator reconnect requests without reintroducing stale tokens.
+   - Replace the lossy unbuffered wake-only signal with a per-generation request
+     epoch, monotonic counter, or explicit wake reason.
+   - A reconnect request made while no delay is currently waiting should either
+     be consumed by the next delay boundary immediately or return a clear
+     "attempt already in progress" style success state.
+   - A reconnect wake created by active-client close must still not survive into
+     a later unrelated retry delay.
 
-2. Separate wake reasons from lifecycle state.
-   - Replace the shared buffered `Channel(Nil)` with a small per-generation
-     signal object or a channel recreated on each `start`.
-   - Drain or invalidate stale wake tokens after reconnect requests that close
-     an active client but do not enter a backoff wait.
-   - Add a spec proving a stale wake does not skip the next scheduled retry
-     unless a new explicit reconnect was requested.
+2. Add adversarial coverage for reconnect timing boundaries.
+   - Force the supervisor through: failed attempt observed, reconnect request
+     accepted before delay wait starts, OBS becomes available, and Identify is
+     sent promptly instead of after the full delay.
+   - Keep the existing stale-token negative test and add assertions that the two
+     wake cases are distinguishable.
+   - Prefer deterministic test hooks over timing windows where practical.
 
-3. Keep stopped-supervisor behavior as an explicit public error.
-   - Preserve `OBS_UNAVAILABLE` for exited supervisors unless a deliberate
-     one-shot reconnect feature is added.
-   - If one-shot reconnect is added later, expose it as a clear state
-     transition with tests proving a real OBS connection attempt starts.
+3. Clarify public reconnect semantics.
+   - Decide whether `reconnect_obs` success means "a new request was recorded",
+     "the active delay was woken", or "an attempt is already in progress or will
+     run promptly".
+   - Align `CommandExecutor`, server status, logs, README, command docs, and
+     protocol docs to that exact meaning.
 
 ## P0: Finish Strict Compatibility Signal Ownership
 
@@ -124,18 +122,20 @@ Reviewer findings:
 
 ## P1: Reduce Reconnect Test Flake Surface
 
-1. Continue replacing polling/sleep-based reconnect specs.
-   - Convert remaining reconnect tests from generic polling helpers to fake OBS
-     probes for Identify received, close observed, request received, and
-     no-attempt windows.
-   - Keep polling only for state-store changes that are inherently asynchronous
-     across IPC.
-
-2. Remove `unused_tcp_port` races from reconnect specs.
+1. Remove `unused_tcp_port` races from reconnect specs.
    - Add a deterministic unavailable-then-bind helper that owns port selection
      and delayed fake-server startup.
    - Prefer helpers that reserve the intended port until the exact test moment
      when OBS should become reachable.
+
+2. Continue replacing polling/sleep-based reconnect specs.
+   - Convert remaining reconnect tests from generic polling helpers to fake OBS
+     probes for Identify received, close observed, request received, and
+     no-attempt windows.
+   - Add a specific probe or hook for "connection attempt failed and delay is
+     about to start" so wake-race tests do not depend on sleeps.
+   - Keep polling only for state-store changes that are inherently asynchronous
+     across IPC.
 
 3. Make disconnect detection more event-driven.
    - Replace or supplement the `wait_for_disconnect` polling sleep with a close
@@ -273,11 +273,12 @@ Add breadth only after the daemon/IPC contract remains stable.
 
 ## Suggested Next Pull Requests
 
-1. Make `ObsSupervisor` generation-safe around stop/start and stale wake tokens.
-2. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
+1. Make reconnect requests durable across the pre-delay boundary without
+   reintroducing stale active-close wake tokens.
+2. Add deterministic unavailable-then-bind and pre-delay supervisor hooks to
+   remove the remaining reconnect timing races from specs.
+3. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
    `make contract-rs-compat` in a prepared dual-repo workspace.
-3. Replace the remaining reconnect polling and `unused_tcp_port` helpers with
-   deterministic fake OBS probe and delayed-bind helpers.
 
 ## Build Gates
 

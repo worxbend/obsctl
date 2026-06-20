@@ -1064,3 +1064,106 @@ M  spec/obsctl/server/obs_supervisor_spec.cr
 M  spec/obsctl/server/server_spec.cr
 M  spec/support/fake_obs_server.cr
 M  src/obsctl/server/obs_supervisor.cr
+2026-06-20T12:38:17Z iteration 7 started remaining=9925s
+2026-06-20T12:38:17Z iteration 7 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-20T12:38:17Z iteration 7 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-l78jpc8x/repo copied_entries=178
+2026-06-20T12:38:17Z iteration 7 ideator phase started count=3
+2026-06-20T12:38:17Z iteration 7 ideator phase concurrency workers=3
+2026-06-20T12:38:17Z iteration 7 ideator 1 role="the pragmatist" started
+2026-06-20T12:38:17Z iteration 7 ideator 2 role="the architect" started
+2026-06-20T12:38:17Z iteration 7 ideator 3 role="the contrarian" started
+2026-06-20T12:38:25Z iteration 7 ideator 2 role="the architect" completed status=0
+2026-06-20T12:38:27Z iteration 7 ideator 3 role="the contrarian" completed status=0
+2026-06-20T12:38:28Z iteration 7 ideator 1 role="the pragmatist" completed status=0
+2026-06-20T12:38:28Z iteration 7 ideator phase completed approaches=3
+2026-06-20T12:38:28Z iteration 7 selector started approaches=3
+2026-06-20T12:38:53Z iteration 7 selector completed status=0
+2026-06-20T12:38:53Z iteration 7 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-l78jpc8x/repo
+2026-06-20T12:38:53Z iteration 7 selector rejected alternative role="the architect" approach="Stabilize the Supervisor as a Generational State Machine: treat the next iteration as a reliability-hardening pass centered on lifecycle ownership, where each supervisor run has..." reason="Strongest technical framing, but slightly too implementation-shaped for this selector stage. The Planner should inherit the generation-scoped ownership strategy without being locked prematurely into a specific signal object or channel de..."
+2026-06-20T12:38:53Z iteration 7 selector rejected alternative role="the contrarian" approach="Stabilize by narrowing lifecycle semantics first: treat the supervisor as a concurrency contract, not a feature backlog, and make the next planner prioritize proving what must n..." reason="Correctly prioritizes negative guarantees and resists backlog drift, but it is less actionable as planner guidance because it underplays the need to preserve the existing public reconnect contract and validation posture."
+2026-06-20T12:38:53Z iteration 7 selector rejected alternative role="the pragmatist" approach="Stabilize the supervisor contract before expanding surface area: treat reconnect lifecycle as the next reliability boundary, prefer small state-machine hardening over feature wo..." reason="Well balanced and aligned with project priorities, but selected as part of a hybrid because the architect's generation-boundary framing gives the Planner a sharper organizing principle for the next iteration."
+2026-06-20T12:38:53Z iteration 7 selector alternatives persisted count=3
+2026-06-20T12:38:53Z iteration 7 selector structured alternatives persisted count=3
+2026-06-20T12:38:53Z iteration 7 planner started
+2026-06-20T12:39:22Z iteration 7 plan: 5 task(s) in 4 phase(s). This iteration is scoped to the P0 daemon lifecycle risk: make OBS ownership generation-safe and make reconnect wake signals unable to leak across supervisor runs. Code changes are serialized because both lifecycle and wake behavior live in the same supervisor implementation. The two spec tasks can run in parallel because they target distinct behaviors, though they may need final merge coordination in the same spec file.
+2026-06-20T12:39:22Z iteration 7 phase 1 started parallel=False tasks=1
+2026-06-20T12:41:45Z iteration 7 task t1 ('Make supervisor runs generation-scoped') status=0
+2026-06-20T12:41:45Z iteration 7 phase 2 started parallel=False tasks=1
+2026-06-20T12:43:37Z iteration 7 task t2 ('Scope reconnect wake signals per generation') status=0
+2026-06-20T12:43:37Z iteration 7 phase 3 started parallel=True tasks=2
+2026-06-20T12:45:31Z iteration 7 task t4 ('Add stale reconnect wake coverage') status=0
+2026-06-20T12:45:36Z iteration 7 task t3 ('Add supervisor stop-start ownership coverage') status=0
+2026-06-20T12:45:36Z iteration 7 phase 4 started parallel=False tasks=1
+2026-06-20T12:46:42Z iteration 7 task t5 ('Refresh tracker and iteration log') status=0
+
+## 2026-06-20 Iteration 7 supervisor lifecycle tracker refresh
+
+- Updated `TODO.md` to record generation-scoped supervisor run loops, per-generation reconnect wake signals, stop/start OBS ownership coverage, and stale wake-token coverage as implemented behavior.
+- Replaced the `MEMORY.md` anti-pattern note about shared lifecycle generations with a pattern requiring generation-scoped lifecycle checks, OBS client ownership, and reconnect wake signals.
+- Validation run: `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr` passed with 7 examples.
+2026-06-20T12:47:05Z iteration 7 task t5 ('Refresh tracker and iteration log') status=0
+2026-06-20T12:47:05Z iteration 7 reviewer started
+
+## 2026-06-20 Fresh reviewer audit: iteration 7 supervisor lifecycle
+
+- Iteration reviewed:
+  - `ObsSupervisor` generation-scoped run loop, stop/start state transitions,
+    client claiming, and reconnect wake signal ownership
+  - focused supervisor specs for immediate stop/start reuse, stale reconnect
+    wake invalidation, double-start guarding, reconnect-disabled exit, and
+    wakeable retry backoff
+  - `TODO.md`, `MEMORY.md`, `AGENT_LOG.md`, and `ALTERNATIVES.jsonl` changes
+- What was done correctly:
+  - Stale supervisor fibers now observe generation mismatch and exit without
+    reclaiming OBS ownership after a newer `start`.
+  - `claim_client` verifies the creating generation before publishing an OBS
+    client, and closes an unclaimed client defensively.
+  - `stop` invalidates the active generation and clears the wake signal before
+    closing the active client.
+  - Reconnect wake signals are now per-generation instead of supervisor-wide,
+    so wake tokens cannot leak across stop/start.
+  - The shared buffered wake channel was removed; active-client reconnect wakes
+    no longer remain buffered and skip a later retry delay.
+  - Focused validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr`
+    with 7 examples.
+  - Default validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
+    with 246 examples.
+- What was found:
+  - No blocking default-gate regression was found.
+  - The generation-scoped ownership fix addresses the previous stop/start race
+    in the reviewed normal paths.
+  - The unbuffered wake signal is intentionally lossy. That fixes stale tokens,
+    but a fresh `reconnect_obs` request can still be dropped if it arrives after
+    a failed connection attempt and just before the supervisor enters its retry
+    delay.
+  - Public reconnect success remains slightly ambiguous in that narrow race:
+    state can say `OBS reconnect requested` even though no delay was woken and
+    no prompt attempt is guaranteed.
+  - `wait_for_disconnect` still uses 250 ms polling, and reconnect specs still
+    use `unused_tcp_port` for unavailable-then-bind scenarios.
+- Top improvement proposals:
+  - Replace lossy wake-only signaling with a per-generation reconnect request
+    epoch or explicit wake reason that survives the pre-delay boundary without
+    reviving stale active-close tokens.
+  - Add an adversarial spec for reconnect requested immediately before retry
+    delay starts, proving OBS Identify happens promptly when OBS becomes
+    available.
+  - Add deterministic unavailable-then-bind and pre-delay supervisor test hooks
+    to remove the remaining reconnect timing races.
+  - Continue toward Rust-side contract fixtures before promoting
+    `make contract-rs-compat` beyond the manual/scheduled strict signal.
+2026-06-20T12:50:30Z iteration 7 reviewer completed status=0
+2026-06-20T12:50:30Z iteration 7 memory updated
+2026-06-20T12:50:30Z iteration 7 completed validation_status=0
+2026-06-20T12:50:30Z iteration 7 checkpoint started
+2026-06-20T12:50:30Z iteration 7 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
+M  TODO.md
+M  spec/obsctl/server/obs_supervisor_spec.cr
+M  src/obsctl/server/obs_supervisor.cr
