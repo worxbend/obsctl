@@ -153,6 +153,7 @@ module Obsctl
         lines << "last_connected_at: #{timestamp_text(result["last_connected_at"]?)}"
         lines << "last_disconnected_at: #{timestamp_text(result["last_disconnected_at"]?)}"
         lines << "last_reconnect_attempt_at: #{timestamp_text(result["last_reconnect_attempt_at"]?)}"
+        lines << "last_connection_failed_at: #{timestamp_text(result["last_connection_failed_at"]?)}"
         lines << "last_error: #{result["last_error"]?.try(&.as_s?) || "-"}"
         lines.join('\n')
       end

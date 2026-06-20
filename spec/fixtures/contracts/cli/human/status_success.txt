@@ -8,6 +8,7 @@ server:
   last_connected_at: 2026-06-20T12:00:00Z
   last_disconnected_at: -
   last_reconnect_attempt_at: 2026-06-20T11:59:59Z
+  last_connection_failed_at: -
   last_error: -
 obs:
   connected: true

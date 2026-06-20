@@ -61,7 +61,13 @@ snapshot.
 `obsctl obs-status` reports only the OBS snapshot: connection state, current
 scene, scenes, and audio inputs.
 
-`obsctl server-status` reports only the local daemon status: PID, uptime, socket path, subscribed client count, OBS connection state, explicit reconnecting state, reconnect timestamps, and last error.
+`obsctl server-status` reports only the local daemon status: PID, uptime,
+socket path, subscribed client count, OBS connection state, explicit
+reconnecting state, reconnect timestamps, and last error. `last_disconnected_at`
+is set only after an established OBS session disconnects;
+`last_connection_failed_at` records failed connection attempts before a session
+is established. After `obsctl reconnect`, `last_error` remains
+`OBS reconnect requested` until the next connection succeeds or fails.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
@@ -70,3 +76,26 @@ The TUI is also a local IPC client in normal mode. It subscribes to server state
 `dump-config` is performed by the local server, which owns the OBS connection, reads scenes and audio inputs, and writes a generated config. Existing config files are backed up before dump writes. The dump keeps top-level daemon settings such as `server` and `reconnect`, and it refuses to write if aliases or shortcuts would become ambiguous with discovered OBS names.
 
 Config files reject unknown top-level fields so future settings are not silently lost during rewrites.
+
+## Validation
+
+Default Crystal validation runs the local contract suite without requiring a
+sibling Rust checkout:
+
+```sh
+make test
+crystal spec
+```
+
+Optional `obsctl-rs` golden-fixture compatibility is skipped by default when
+`../obsctl-rs` is absent or when that sibling does not contain a recognized
+contract fixture root. Run the strict dual-repo check explicitly with:
+
+```sh
+make contract-rs-compat
+```
+
+Strict mode sets `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1` and fails on a missing
+sibling repository, missing fixture root, missing counterpart files in either
+repository, or content differences. `OBSCTL_SKIP_OBSCTL_RS_COMPAT=1` remains an
+explicit override for skipping the optional compatibility check.

@@ -15,11 +15,7 @@ lint:
 	@if [ -x bin/ameba ]; then bin/ameba; else echo "ameba not installed; run shards install"; fi
 
 contract-rs-compat:
-	@if [ -d ../obsctl-rs ]; then \
-		$(CRYSTAL) spec spec/obsctl/contracts; \
-	else \
-		echo "obsctl-rs sibling not found; skipping fixture compatibility"; \
-	fi
+	OBSCTL_STRICT_OBSCTL_RS_COMPAT=1 $(CRYSTAL) spec spec/obsctl/contracts
 
 run:
 	$(CRYSTAL) run src/obsctl.cr

@@ -194,7 +194,7 @@ describe "golden CLI proxy contracts" do
     end
   end
 
-  it "matches obsctl-rs CLI golden fixtures when the sibling repository is present" do
+  it "optionally matches obsctl-rs CLI golden fixtures in strict compatibility mode" do
     Obsctl::SpecSupport::OptionalObsctlRsCompat.assert_compatible!(GOLDEN_CLI_FIXTURE_ROOT, "cli/")
   end
 end

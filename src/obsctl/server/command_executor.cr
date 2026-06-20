@@ -138,6 +138,7 @@ module Obsctl
           "last_connected_at"         => timestamp(telemetry.last_connected_at),
           "last_disconnected_at"      => timestamp(telemetry.last_disconnected_at),
           "last_reconnect_attempt_at" => timestamp(telemetry.last_reconnect_attempt_at),
+          "last_connection_failed_at" => timestamp(telemetry.last_connection_failed_at),
           "last_error"                => snapshot.last_error,
         })
       end

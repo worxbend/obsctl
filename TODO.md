@@ -654,12 +654,14 @@ Implemented:
   - IPC command executor returns distinct combined, OBS-only, and daemon-only status payloads
   - IPC command executor validates config, handles explicit OBS reconnect requests, and rejects shutdown unless `server.allow_remote_shutdown` is enabled
   - reconnect loop detects established OBS WebSocket disconnects, marks state disconnected, clears the stale client, and retries when reconnect is enabled
+  - `last_disconnected_at` is updated only after an established OBS session disconnects; failed startup/connection attempts before a successful session update `last_connection_failed_at`
+  - explicit `obsctl reconnect` keeps public `last_error` as `OBS reconnect requested` until the next connection success or failure outcome
   - protocol-error client closes are observed by the supervisor; stale OBS clients are dropped, OBS is marked disconnected, IPC stays available, and reconnect resumes when enabled
   - subscription handling maintains a client registry and broadcasts state, OBS event, and log topic updates
 - CLI:
   - non-interactive OBS control commands are thin IPC clients
   - `status` is the combined daemon-and-OBS status command
-  - `server-status` exists with PID, uptime, socket path, connected state, explicit reconnecting state, reconnect timestamps, last error, and subscribed client count
+  - `server-status` exists with PID, uptime, socket path, connected state, explicit reconnecting state, reconnect timestamps including `last_connection_failed_at`, last error, and subscribed client count
   - `obs-status`, `reconnect`, and guarded `shutdown-server` are thin IPC client commands
 - TUI:
   - currently a simple ANSI dashboard with raw key input and a command palette state machine
@@ -699,7 +701,9 @@ Implemented:
   - CLI scene/audio/dump-config fake-server specs exist
   - TUI session, IPC client, and command palette input specs exist
   - contract-freeze specs cover public IPC errors, JSON CLI envelopes, daemon-first boundaries, embedded TUI adapter require behavior, and golden CLI/IPC fixtures
-  - optional `../obsctl-rs` compatibility checks skip cleanly when the sibling repository is absent
+  - optional `../obsctl-rs` compatibility checks skip cleanly in default mode when the sibling repository is absent or has no recognized fixture root
+  - strict `obsctl-rs` compatibility mode fails clearly for missing sibling repositories, missing fixture roots, missing counterparts, and content differences
+  - server reconnect specs cover initial OBS unavailable startup, established-session disconnects, protocol-error disconnects, explicit reconnect requests, and successful reconnects
 
 ## Not Yet Implemented
 
@@ -899,7 +903,7 @@ Done:
 - non-interactive CLI command proxying through local IPC
 - missing-server CLI exit behavior and startup/service instructions
 - `server-status` command path
-- full `server-status` payload and CLI formatting for PID, uptime, socket path, subscribed client count, OBS connection state, explicit reconnecting state, reconnect timestamps, and last error
+- full `server-status` payload and CLI formatting for PID, uptime, socket path, subscribed client count, OBS connection state, explicit reconnecting state, reconnect timestamps including `last_connection_failed_at`, and last error
 - persistent client registry and state broadcast fanout for subscriptions
 - TUI IPC session client with subscription acknowledgement, initial state handling, command forwarding, and server-pushed state updates
 - event/log topic broadcast fanout for server-side OBS events and command failures
@@ -910,7 +914,10 @@ Done:
 - canonical public IPC error-code taxonomy and boundary canonicalization
 - golden CLI/IPC contract fixtures for proxy command output, JSON envelopes,
   error envelopes, and IPC command payloads
-- optional `../obsctl-rs` compatibility checks that skip when absent
+- optional `../obsctl-rs` compatibility checks that skip by default when absent
+  or when no recognized sibling fixture root exists
+- strict `obsctl-rs` compatibility checks through `make contract-rs-compat`
+  and `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1`
 
 Remaining:
 
@@ -937,7 +944,10 @@ Remaining:
 
 ## Planned Next
 
-1. Return to demo config, packaging polish, and optional `termisu` backend
-   evaluation now that the status/reconnect observability work is complete.
-2. Continue feature expansion only after the daemon/IPC contract remains stable
-   through the full Crystal gates.
+1. Run the full Crystal gates after the documentation/fixture refresh lands:
+   `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`,
+   `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
+2. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
+   when `../obsctl-rs` is available with compatible contract fixtures.
+3. Return to demo config, packaging polish, and optional `termisu` backend
+   evaluation once the stabilized contract gates stay green.

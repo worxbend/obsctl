@@ -58,8 +58,18 @@ Success response:
 Combined status response:
 
 ```json
-{"id":"req-000004","type":"response","ok":true,"result":{"server":{"pid":4242,"uptime_seconds":37,"socket_path":"/tmp/obsctl/obsctl.sock","client_count":2,"obs_connected":true,"reconnecting":false,"last_connected_at":"2026-06-20T12:00:00Z","last_disconnected_at":null,"last_reconnect_attempt_at":"2026-06-20T11:59:59Z","last_error":null},"obs":{"connected":true,"current_scene":"Main Camera","scenes":[],"audio_inputs":[]}}}
+{"id":"req-000004","type":"response","ok":true,"result":{"server":{"pid":4242,"uptime_seconds":37,"socket_path":"/tmp/obsctl/obsctl.sock","client_count":2,"obs_connected":true,"reconnecting":false,"last_connected_at":"2026-06-20T12:00:00Z","last_disconnected_at":null,"last_reconnect_attempt_at":"2026-06-20T11:59:59Z","last_connection_failed_at":null,"last_error":null},"obs":{"connected":true,"current_scene":"Main Camera","scenes":[],"audio_inputs":[]}}}
 ```
+
+Server status fields are the same in the combined `status` payload and the
+daemon-only `get_server_status` payload. `last_disconnected_at` means OBS had
+an established connected session and then disconnected. Initial connection
+failures before any successful session leave it `null` and update
+`last_connection_failed_at` instead. `last_reconnect_attempt_at` records when
+the supervisor last started an OBS connection attempt. Explicit
+`reconnect_obs` requests set `last_error` to `OBS reconnect requested`; the
+clean close caused by that intentional drop does not overwrite the message, and
+the next connection success or failure becomes the next public outcome.
 
 Error response:
 

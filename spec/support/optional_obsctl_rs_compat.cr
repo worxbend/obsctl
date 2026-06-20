@@ -1,7 +1,8 @@
 module Obsctl
   module SpecSupport
     module OptionalObsctlRsCompat
-      SKIP_ENV = "OBSCTL_SKIP_OBSCTL_RS_COMPAT"
+      SKIP_ENV   = "OBSCTL_SKIP_OBSCTL_RS_COMPAT"
+      STRICT_ENV = "OBSCTL_STRICT_OBSCTL_RS_COMPAT"
 
       def self.sibling_repo : String
         File.expand_path("../../../obsctl-rs", __DIR__)
@@ -12,11 +13,11 @@ module Obsctl
       end
 
       def self.skip_requested? : Bool
-        value = ENV[SKIP_ENV]?
-        return false unless value
+        truthy_env?(SKIP_ENV)
+      end
 
-        normalized = value.strip.downcase
-        !normalized.empty? && normalized != "0" && normalized != "false"
+      def self.strict_requested? : Bool
+        truthy_env?(STRICT_ENV)
       end
 
       def self.fixture_candidates(repo : String = sibling_repo) : Array(String)
@@ -45,7 +46,11 @@ module Obsctl
         repo : String = sibling_repo,
       ) : Nil
         return if skip_requested?
-        return unless File.directory?(repo)
+        return unless strict_requested?
+
+        unless File.directory?(repo)
+          raise missing_sibling_repo_message(repo)
+        end
 
         compat_root = fixture_root(repo)
         unless compat_root
@@ -79,9 +84,16 @@ module Obsctl
         failures
       end
 
+      def self.missing_sibling_repo_message(repo : String) : String
+        <<-MESSAGE
+        obsctl-rs fixture compatibility is running in strict mode, but the sibling repository was not found at #{repo}.
+        Create or check out obsctl-rs at that path, or set #{SKIP_ENV}=1 to skip this compatibility check.
+        MESSAGE
+      end
+
       def self.missing_fixture_root_message(repo : String) : String
         <<-MESSAGE
-        obsctl-rs sibling repository exists at #{repo}, but no recognized contract fixture root was found.
+        obsctl-rs fixture compatibility is running in strict mode and the sibling repository at #{repo} has no recognized contract fixture root.
         Expected one of:
         #{fixture_candidates(repo).map { |path| "  - #{path}" }.join("\n")}
         Set #{SKIP_ENV}=1 to skip this optional compatibility check.
@@ -100,6 +112,14 @@ module Obsctl
 
       private def self.format_paths(paths : Array(String)) : String
         paths.join(", ")
+      end
+
+      private def self.truthy_env?(name : String) : Bool
+        value = ENV[name]?
+        return false unless value
+
+        normalized = value.strip.downcase
+        !normalized.empty? && normalized != "0" && normalized != "false"
       end
     end
   end
