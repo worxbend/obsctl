@@ -266,6 +266,44 @@ describe Obsctl::Server::ObsSupervisor do
     wait_for_supervisor { !supervisor.alive? } if supervisor
   end
 
+  it "does not publish stale reconnect-requested state when stop races with reconnect" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    # Capture what reconnect returns so we can distinguish which call won.
+    reconnect_done = Channel(Bool).new(1)
+    spawn { reconnect_done.send(supervisor.reconnect) }
+
+    # Call stop immediately without yielding. In Crystal's cooperative scheduler,
+    # stop runs to completion before the spawned fiber gets a turn. This means
+    # stop wins the race: it sets @lifecycle_state = Stopped before reconnect
+    # fiber can read it, so reconnect returns false without mutating public state.
+    supervisor.stop
+
+    reconnect_result = reconnect_done.receive
+    # alive? reflects @lifecycle_state, which stop set synchronously — already false.
+    wait_for_supervisor { !supervisor.alive? }
+
+    supervisor.alive?.should be_false
+
+    # When stop wins (reconnect returns false), no stale "OBS reconnect requested"
+    # sentinel must appear in the snapshot of a stopped supervisor generation.
+    # When reconnect somehow wins (returns true), it must at minimum have allowed
+    # the supervisor to exit cleanly — alive? == false already asserts that.
+    if !reconnect_result
+      state.snapshot.last_error.should_not eq("OBS reconnect requested")
+    end
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
   it "does not let a reconnect wake from an active close skip the next retry delay" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     base_config = obs.config

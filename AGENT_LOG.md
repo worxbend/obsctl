@@ -1584,3 +1584,111 @@ M  SCORES.jsonl
 2026-06-20T13:20:42Z iteration final-telemetry checkpoint status before commit:
 M  AGENT_LOG.md
 M  SCORES.jsonl
+2026-06-20T13:20:42Z orchestrator finished iterations_run=20 iterations_attempted=20 iterations_completed_successfully=9 had_nonfatal_failures=true nonfatal_failure_count=11 last_nonfatal_exit_code=1 last_nonfatal_failure_reason=planner_failed loop_exit_code=0 process_exit_code=0 fatal=false terminal_reason=iterations_complete_with_failures final_checkpoint_behavior=telemetry_only
+2026-06-20T14:58:14Z orchestrator started provider=claude budget=18000s iterations=2 max_workers=4
+2026-06-20T14:58:14Z iteration 1 started remaining=18000s
+2026-06-20T14:58:14Z iteration 1 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-20T14:58:14Z iteration 1 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-avhblm3l/repo copied_entries=180
+2026-06-20T14:58:14Z iteration 1 ideator phase started count=3
+2026-06-20T14:58:14Z iteration 1 ideator phase concurrency workers=3
+2026-06-20T14:58:14Z iteration 1 ideator 1 role="the pragmatist" started
+2026-06-20T14:58:14Z iteration 1 ideator 2 role="the architect" started
+2026-06-20T14:58:14Z iteration 1 ideator 3 role="the contrarian" started
+2026-06-20T14:58:30Z iteration 1 ideator 2 role="the architect" completed status=0
+2026-06-20T14:58:31Z iteration 1 ideator 3 role="the contrarian" completed status=0
+2026-06-20T14:58:31Z iteration 1 ideator 1 role="the pragmatist" completed status=0
+2026-06-20T14:58:31Z iteration 1 ideator phase completed approaches=3
+2026-06-20T14:58:31Z iteration 1 selector started approaches=3
+2026-06-20T14:58:48Z iteration 1 selector completed status=0
+2026-06-20T14:58:48Z iteration 1 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-avhblm3l/repo
+2026-06-20T14:58:48Z iteration 1 selector rejected alternative role="the architect" approach="Determinism-First Hardening: Close the remaining flake surfaces before expanding features" reason="Correct in substance but frames determinism as 'first-class deliverable' without connecting it explicitly to the explicit result type as a correctness invariant rather than a test aid. The synthesis elevates the result-type change to the..."
+2026-06-20T14:58:48Z iteration 1 selector rejected alternative role="the contrarian" approach="Contract-First Stabilization: Freeze the observable surface before expanding it" reason="The sequencing philosophy is sound but the framing of 'prove what you have' risks understating the load-bearing nature of the reconnect-vs-stop race \u2014 it is a real gap, not just a documentation task. The synthesis treats it as a spec-fir..."
+2026-06-20T14:58:48Z iteration 1 selector rejected alternative role="the pragmatist" approach="Contract-First Stabilization: Harden observable boundaries before expanding surface area" reason="Closest to the synthesis but treats the three P0 items as a 'single coherent proof obligation' without distinguishing which require code changes (result type, race fix) versus test infrastructure (waiter probe). The synthesis makes that..."
+2026-06-20T14:58:48Z iteration 1 selector alternatives persisted count=3
+2026-06-20T14:58:48Z iteration 1 selector structured alternatives persisted count=3
+2026-06-20T14:58:48Z iteration 1 planner started
+2026-06-20T14:59:18Z iteration 1 plan: 4 task(s) in 3 phase(s). Phase 1 adds the waiter-registration probe — a prerequisite for deterministic specs. Phase 2 parallelizes the WaitResult type change (touches signal + supervisor) and the reconnect-vs-stop witness spec (touches only obs_supervisor_spec) since they are independent. Phase 3 updates the signal specs to use the probe and the new result type, which depends on both phase 1 and phase 2 completing. This sequencing matches the strategic constraint: close the proof gap with deterministic primitives before any feature expansion.
+2026-06-20T14:59:18Z iteration 1 phase 1 started parallel=False tasks=1
+2026-06-20T14:59:50Z iteration 1 task t1 ('Add waiter-registration probe to ReconnectSignal') status=0
+2026-06-20T14:59:50Z iteration 1 phase 2 started parallel=True tasks=2
+2026-06-20T15:03:56Z iteration 1 task t3 ('Add reconnect-vs-stop race witness spec') status=0
+2026-06-20T15:04:00Z iteration 1 task t2 ('Replace scalar UInt64 return with explicit WaitResult type') status=0
+2026-06-20T15:04:00Z iteration 1 phase 3 started parallel=False tasks=1
+2026-06-20T15:06:59Z iteration 1 task t4 ('Update signal specs to use waiter-registration probe for determinism') status=0
+2026-06-20T15:06:59Z iteration 1 reviewer started
+
+## 2026-06-20 Fresh reviewer audit: iteration 10 WaitResult type and deterministic signal specs
+
+- Iteration reviewed:
+  - `ReconnectSignal::WaitResult` abstract struct with `Requested`, `Interrupted`,
+    and `TimedOut` subtypes replacing the raw `UInt64` return from `wait()`
+  - `on_waiter_registered : Proc(Nil)?` test-only probe called under lock after
+    waiter registration, used to eliminate sleep-based scheduling races from specs
+  - `ObsSupervisor` case-on-WaitResult: `Requested` skips backoff increment,
+    `TimedOut`/`Interrupted` increment it; `wait_for_reconnect_delay` return type
+    updated accordingly
+  - All 6 reconnect signal specs updated to use the probe and check concrete
+    WaitResult subtypes; `assert_no_signal_result` (25 ms sleep inference) removed
+  - New supervisor spec witnessing reconnect-vs-stop race behavior
+- What was done correctly:
+  - P0 plan items 1 and 2 ("deterministic waiter probe" and "explicit WaitResult
+    type") are fully implemented and correct. The `wait()` result is unambiguous:
+    `Requested`, `Interrupted`, or `TimedOut` — no epoch-comparison inference.
+  - The probe is invoked under `@lock`, immediately after `@waiters << waiter`,
+    which is the only place that matters for concurrent wake correctness.
+  - Signal specs now structurally separate request-before-wait from
+    request-during-wait cases: before-wait uses no probe; during-wait blocks on
+    the probe before calling `request`/`wake`/`cancel`.
+  - Supervisor backoff counter semantics are now correctly tied to result type:
+    only explicit requests keep the counter stable; normal delays and transient
+    wakes advance it.
+  - Full validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/reconnect_signal_spec.cr spec/obsctl/server/obs_supervisor_spec.cr`
+    with 16 examples.
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` with 255 examples.
+- What was found:
+  - The reconnect-vs-stop spec is a witness, not a strict proof. It relies on
+    Crystal's cooperative scheduler guarantee that `stop` completes before the
+    spawned reconnect fiber runs. The hard assertion (`last_error` check) is
+    conditional on `reconnect_result == false`, so the test is vacuously satisfied
+    when reconnect wins the race. This is acceptable documentation but not a
+    closed proof.
+  - `on_waiter_registered` is called while `@lock` is held. The specs use a
+    buffered channel (capacity 1), which is non-blocking and safe under the lock.
+    An unbuffered channel or blocking callback would deadlock. This constraint is
+    not documented on the property.
+  - `Interrupted` is returned for both transient internal wakes (`wake`) and
+    cancel wakes (`cancel`). The supervisor differentiates them only by calling
+    `stopped?` at the loop boundary. A `Cancelled` subtype would make the
+    distinction structural, though the current design is pragmatically correct.
+  - `attempt += 1` executes for `Interrupted` including cancel-driven interrupts.
+    This is harmless because the loop exits at the next `stopped?` check, but it
+    is a minor semantic inaccuracy.
+  - `unused_tcp_port` race and `wait_for_disconnect` polling remain in supervisor
+    integration specs (unchanged P1 items).
+- Top improvement proposals:
+  - Document `on_waiter_registered`'s lock constraint with a one-line comment on
+    the property: "Invoked under @lock — callback must not block or send on an
+    unbuffered channel."
+  - Add a `Cancelled` subtype to `WaitResult` so stop-driven interrupts are
+    structurally distinct from transient wakes, allowing the supervisor loop to
+    skip `stopped?` inference for that case.
+  - Harden the reconnect-vs-stop witness into a deterministic proof by either
+    exposing a synchronization barrier or adding an observable "reconnect was
+    rejected because stopped" counter to `ReconnectSignal`.
+  - Replace the remaining `unused_tcp_port` unavailable-then-bind windows with a
+    deterministic port-reservation helper to reduce reconnect spec flake risk.
+2026-06-20T15:12:34Z iteration 1 reviewer completed status=0
+2026-06-20T15:12:34Z iteration 1 memory updated
+2026-06-20T15:12:34Z iteration 1 completed validation_status=0
+2026-06-20T15:12:34Z iteration 1 checkpoint started
+2026-06-20T15:12:34Z iteration 1 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
+M  spec/obsctl/server/obs_supervisor_spec.cr
+M  spec/obsctl/server/reconnect_signal_spec.cr
+M  src/obsctl/server/obs_supervisor.cr
+M  src/obsctl/server/reconnect_signal.cr

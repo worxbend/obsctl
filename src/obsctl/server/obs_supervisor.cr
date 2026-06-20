@@ -129,8 +129,15 @@ module Obsctl
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
             break if stopped?(generation) || !@config.reconnect.enabled
-            wait_for_reconnect_delay(policy.delay_for(attempt), reconnect_signal, handled_request_epoch)
-            attempt += 1
+            result = wait_for_reconnect_delay(policy.delay_for(attempt), reconnect_signal, handled_request_epoch)
+            case result
+            when ReconnectSignal::WaitResult::Requested
+              # Explicit reconnect request consumed — retry immediately without incrementing backoff.
+            when ReconnectSignal::WaitResult::TimedOut, ReconnectSignal::WaitResult::Interrupted
+              # Normal timeout or transient wake — advance backoff. A cancel-driven Interrupted
+              # will cause the loop to exit at the next stopped? check.
+              attempt += 1
+            end
           rescue ex
             break if stopped?(generation)
 
@@ -140,8 +147,15 @@ module Obsctl
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
             break if stopped?(generation) || !@config.reconnect.enabled
-            wait_for_reconnect_delay(policy.delay_for(attempt), reconnect_signal, handled_request_epoch)
-            attempt += 1
+            result = wait_for_reconnect_delay(policy.delay_for(attempt), reconnect_signal, handled_request_epoch)
+            case result
+            when ReconnectSignal::WaitResult::Requested
+              # Explicit reconnect request consumed — retry immediately without incrementing backoff.
+            when ReconnectSignal::WaitResult::TimedOut, ReconnectSignal::WaitResult::Interrupted
+              # Normal timeout or transient wake — advance backoff. A cancel-driven Interrupted
+              # will cause the loop to exit at the next stopped? check.
+              attempt += 1
+            end
           end
         end
       ensure
@@ -200,7 +214,7 @@ module Obsctl
         delay : Time::Span,
         reconnect_signal : ReconnectSignal,
         handled_request_epoch : UInt64,
-      ) : UInt64
+      ) : ReconnectSignal::WaitResult
         reconnect_signal.wait(delay, handled_request_epoch)
       end
 
