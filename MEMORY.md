@@ -18,7 +18,9 @@
 [learning] `last_connection_failed_at` is historical telemetry for the most recent failed OBS connection attempt and intentionally persists across later successful connections.
 [pattern] Supervisor lifecycle checks must be generation-scoped; run loops, OBS client ownership, and reconnect wake signals should act only for the generation that created them.
 [pattern] Explicit reconnect requests are generation-scoped durable epochs; active-client-close wakes are transient and must not leak into future retry delays.
-[learning] A durable request epoch still needs atomic wait registration or buffered/drained notifications; check-then-unbuffered-wait can lose a wake between the epoch check and receive arm.
+[pattern] ReconnectSignal wait registration must stay atomic with the request-epoch check; durable explicit requests wake or skip retry sleeps without letting transient internal or cancel wakes advance the epoch.
+[learning] Focused signal-level specs are the right boundary for reconnect wake races; supervisor fake-server specs should remain end-to-end witnesses, not the only proof of primitive synchronization.
 [pattern] Deterministic fake-server probes are better than fixed sleeps for reconnect specs, but probe names must match what they observe, such as accepted WebSocket connections versus failed TCP attempts.
+[learning] Remaining reconnect flake cleanup still includes replacing `unused_tcp_port` unavailable-then-bind windows and reducing `wait_for_disconnect` polling.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
 [security] Never log or expose OBS passwords, generated authentication strings, tokens, or secret-like values in IPC errors, JSON envelopes, logs, specs, or TUI output.

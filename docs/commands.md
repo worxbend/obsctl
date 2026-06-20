@@ -153,10 +153,6 @@ to report the real last connection failure instead of `OBS reconnect requested`:
 {"ok":false,"result":null,"error":{"code":"OBS_UNAVAILABLE","message":"OBS supervisor is not running; restart the server or enable reconnect."},"exit_code":3}
 ```
 
-Internal wakes caused only by closing an active OBS client are transient
-implementation signals. They are not public reconnect requests and do not
-survive into an unrelated later retry delay.
-
 `obsctl validate-config` validates the local config file directly and does not require a running server. It prints a safe warning to stderr if plaintext `connection.password` is configured, including in JSON mode, and never echoes the password value. The TUI palette command `/validate-config` asks the running server to validate its configured file.
 
 `obsctl dump-config` and `/dump-config` ask the server to fetch OBS scenes/audio inputs and rewrite the config with a backup. Dump writes preserve `server` and `reconnect` settings and fail with a config error if existing aliases or shortcuts would conflict with discovered OBS names.
