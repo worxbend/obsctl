@@ -20,6 +20,8 @@
 [pattern] Explicit reconnect requests are generation-scoped durable epochs; active-client-close wakes are transient and must not leak into future retry delays.
 [pattern] ReconnectSignal wait registration must stay atomic with the request-epoch check; durable explicit requests wake or skip retry sleeps without letting transient internal or cancel wakes advance the epoch.
 [learning] Focused signal-level specs are the right boundary for reconnect wake races; supervisor fake-server specs should remain end-to-end witnesses, not the only proof of primitive synchronization.
+[learning] A spawned-test `started` signal sent before the code under test reaches its blocking point can accidentally test request-before-wait instead of request-during-wait behavior.
+[pattern] Synchronization primitives are easier to evolve when wait results distinguish durable requests, transient interrupts, cancellation, and timeout instead of overloading a scalar epoch.
 [pattern] Deterministic fake-server probes are better than fixed sleeps for reconnect specs, but probe names must match what they observe, such as accepted WebSocket connections versus failed TCP attempts.
 [learning] Remaining reconnect flake cleanup still includes replacing `unused_tcp_port` unavailable-then-bind windows and reducing `wait_for_disconnect` polling.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
