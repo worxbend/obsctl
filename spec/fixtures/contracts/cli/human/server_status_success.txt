@@ -1,0 +1,7 @@
+pid: 4242
+uptime_seconds: 37
+socket_path: /tmp/obsctl-contract/obsctl.sock
+client_count: 2
+obs_connected: true
+reconnecting: false
+last_error: -

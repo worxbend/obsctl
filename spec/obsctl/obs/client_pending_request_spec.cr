@@ -25,7 +25,7 @@ describe Obsctl::OBS::Client do
       client.pending_request_count_for_spec.should eq(0)
 
       client.current_scene.should eq("Main Camera")
-      sleep 500.milliseconds
+      server.next_delayed_response.should eq("GetVersion")
 
       client.pending_request_count_for_spec.should eq(0)
     ensure
@@ -133,6 +133,40 @@ describe Obsctl::OBS::Client do
       error.should be_a(Obsctl::Domain::ConnectionFailed)
       client.pending_request_count_for_spec.should eq(0)
       client.connected?.should be_false
+      server.next_close.should be_true
+    ensure
+      client.try(&.close)
+      server.stop
+    end
+  end
+
+  it "closes the websocket and clears pending requests when response parsing fails" do
+    server = Obsctl::SpecSupport::FakeObsServer.new(
+      request_delays: {"GetVersion" => 2.seconds},
+      request_timeout_ms: 2_000
+    ).start
+    client = Obsctl::OBS::Client.new(server.config)
+    result = Channel(Exception?).new(1)
+
+    begin
+      client.connect
+      spawn do
+        begin
+          client.version
+          result.send(nil)
+        rescue ex
+          result.send(ex)
+        end
+      end
+
+      server.next_request.should eq("GetVersion")
+      server.emit_raw_frame(%({"op":7,"d":{"requestType":"GetVersion","requestStatus":{"result":true,"code":100}}}))
+
+      error = receive_result(result, 1.second)
+      error.should be_a(Obsctl::Domain::ConnectionFailed)
+      client.pending_request_count_for_spec.should eq(0)
+      client.connected?.should be_false
+      server.next_close.should be_true
     ensure
       client.try(&.close)
       server.stop

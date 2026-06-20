@@ -652,6 +652,7 @@ Implemented:
   - IPC command executor can control scene/audio and dump/reload config
   - IPC command executor validates config, handles explicit OBS reconnect requests, and rejects shutdown unless `server.allow_remote_shutdown` is enabled
   - reconnect loop detects established OBS WebSocket disconnects, marks state disconnected, clears the stale client, and retries when reconnect is enabled
+  - protocol-error client closes are observed by the supervisor; stale OBS clients are dropped, OBS is marked disconnected, IPC stays available, and reconnect resumes when enabled
   - subscription handling maintains a client registry and broadcasts state, OBS event, and log topic updates
 - CLI:
   - non-interactive OBS control commands are thin IPC clients
@@ -669,6 +670,8 @@ Implemented:
   - has a single WebSocket reader channel
   - has a pending request map for request/response coordination
   - fails in-flight pending requests promptly when the WebSocket closes or the reader fiber errors
+  - explicitly closes the WebSocket and clears all pending requests after malformed OBS frames or response parser errors
+  - pending-request specs cover late responses after timeout, concurrent requests, disconnects during in-flight requests, malformed frames, parser errors, and timeout cleanup
   - exposes connection state so the server supervisor can detect established WebSocket disconnects
   - event parsing exists and events are routed to a client channel
   - direct embedded-style TUI sessions can consume the event channel, and normal TUI mode consumes server-pushed IPC state, OBS event topics, and log topics
@@ -692,16 +695,16 @@ Implemented:
 - Tests:
   - CLI scene/audio/dump-config fake-server specs exist
   - TUI session, IPC client, and command palette input specs exist
-  - contract-freeze specs cover public IPC errors, JSON CLI envelopes, daemon-first boundaries, and golden CLI/IPC fixtures
+  - contract-freeze specs cover public IPC errors, JSON CLI envelopes, daemon-first boundaries, embedded TUI adapter require behavior, and golden CLI/IPC fixtures
+  - optional `../obsctl-rs` compatibility checks skip cleanly when the sibling repository is absent
 
 ## Not Yet Implemented
 
 - Full termisu integration.
 - Replace ANSI redraw backend with termisu after dependency integration is accepted.
 - Low-level client reconnect loop independent of TUI session.
-- Broader adversarial pending-request lifecycle coverage for late responses,
-  concurrent requests, disconnects, parser/read errors, and timeout/close
-  cleanup.
+- Honest reconnect status timestamps such as `last_connected_at` and
+  `last_reconnect_attempt_at`.
 - Studio mode support.
 - Stream/record controls and status.
 - Scene item visibility controls.
@@ -744,6 +747,9 @@ Done:
 - explicit event channel
 - explicit event subscription options during Identify
 - pending requests fail promptly on WebSocket close or reader failure
+- pending requests are cleared on timeout, late response, concurrent request,
+  disconnect, malformed frame, and response parser-error paths
+- malformed OBS frames and response parser errors explicitly close the WebSocket
 - established WebSocket disconnects are detected and surfaced by the server supervisor loop
 
 Remaining:
@@ -847,6 +853,7 @@ Partial:
 - OBS event topic fanout from the server to IPC subscribers
 - reconnect handling wired into runtime
 - explicit OBS reconnect request command through IPC
+- supervisor reconnect proof after protocol-error client closes while IPC remains available
 
 ### Milestone 8: Polish
 
@@ -859,6 +866,8 @@ Partial:
 - frozen JSON CLI envelope docs
 - canonical public IPC error-code docs
 - daemon-first boundary docs
+- stdout-only JSON envelope policy with secret-free stderr warnings
+- public error-code-to-exit-code mapping docs
 - plaintext password warning on `validate-config`
 - viewport-bounded ANSI TUI rendering
 - incremental ANSI TUI renderer backend
@@ -898,7 +907,9 @@ Done:
 - configured `server.socket_path` is honored by thin CLI/TUI clients
 - IPC command executor supports `validate_config`, `reconnect_obs`, and guarded `shutdown_server`
 - canonical public IPC error-code taxonomy and boundary canonicalization
-- golden IPC contract fixtures for representative command payloads
+- golden CLI/IPC contract fixtures for proxy command output, JSON envelopes,
+  error envelopes, and IPC command payloads
+- optional `../obsctl-rs` compatibility checks that skip when absent
 
 Remaining:
 
@@ -925,11 +936,10 @@ Remaining:
 
 ## Planned Next
 
-1. Finish the remaining P0 runtime hardening: adversarial OBS pending-request
-   lifecycle specs for late responses, concurrent requests, disconnects,
-   parser/read errors, and timeout/close cleanup.
-2. Run the full contract-freeze validation gates after the lifecycle hardening
-   lands: `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`,
-   `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
-3. After P0 contract and lifecycle hardening is closed, return to demo config,
-   packaging polish, and optional `termisu` backend evaluation.
+1. Make server reconnect status more explicit by tracking
+   `last_connected_at`, `last_reconnect_attempt_at`, and any direct
+   reconnecting state needed by `server-status`.
+2. Return to demo config, packaging polish, and optional `termisu` backend
+   evaluation after the remaining reconnect-status polish is complete.
+3. Continue feature expansion only after the daemon/IPC contract remains stable
+   through the full Crystal gates.

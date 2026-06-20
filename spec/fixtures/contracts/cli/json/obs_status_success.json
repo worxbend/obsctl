@@ -1,0 +1,1 @@
+{"ok":true,"result":{"connected":true,"current_scene":"Main Camera","scenes":[{"name":"Main Camera","active":true},{"name":"Break","active":false}],"audio_inputs":[{"name":"Mic/Aux","muted":false,"volume_percent":72}]},"error":null,"exit_code":0}

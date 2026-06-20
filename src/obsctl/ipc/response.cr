@@ -76,6 +76,9 @@ module Obsctl
 
     # Stable error payload returned for failed IPC command requests.
     class ErrorPayload
+      SENSITIVE_KEY_PATTERN   = "(?:password|authentication(?:[ _-]?string)?|auth(?:[ _-]?string)?|token|secret)"
+      SENSITIVE_VALUE_PATTERN = "(?:\"[^\"]*\"|'[^']*'|\\S+)"
+
       getter code : String
       getter message : String
 
@@ -94,8 +97,10 @@ module Obsctl
 
       def self.sanitize_message(message : String) : String
         message
-          .gsub(/(?i)(password|authentication|auth(?:entication)?(?:_string)?|token|secret)=\S+/, "\\1=[redacted]")
-          .gsub(/(?i)(password|authentication|auth(?:entication)?(?:_string)?|token|secret):\s*\S+/, "\\1: [redacted]")
+          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*=\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1=[redacted]")
+          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*:\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1: [redacted]")
+          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(\"[^\"]*\"|'[^']*')"), "\\1 [redacted]")
+          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(is|was|equals|set to|configured as|provided as)\\s+#{SENSITIVE_VALUE_PATTERN}"), "\\1 \\2 [redacted]")
       end
 
       # Writes the wire-format JSON object for this error.

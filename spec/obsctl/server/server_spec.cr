@@ -370,6 +370,100 @@ describe Obsctl::Server::Server do
     File.delete(path) if path && File.exists?(path)
   end
 
+  it "reconnects after protocol-error client close while IPC stays available" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    base_config = obs.config
+    config = Obsctl::Config::Config.new(
+      connection: base_config.connection,
+      reconnect: Obsctl::Config::ReconnectConfig.new(
+        enabled: true,
+        endless: true,
+        initial_delay_ms: 500,
+        max_delay_ms: 500,
+        multiplier: 1.0,
+        jitter_ms: 0
+      ),
+      scenes: base_config.scenes,
+      audio: base_config.audio
+    )
+    path = temp_socket_path
+    server = Obsctl::Server::Server.new(config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    wait_for_socket(path)
+
+    first_identify = obs.next_identify(2.seconds) || raise "fake OBS did not receive initial Identify"
+    first_identify["eventSubscriptions"].as_i.should eq(Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT)
+
+    state = subscribe(path, ["state"], "req-protocol-error-state")
+    connected = read_state_until(state, connected: true)
+    connected["connected"].as_bool.should be_true
+
+    obs.emit_raw_frame(%({"op":7,"d":{"requestType":"GetVersion"}}))
+    obs.next_close(2.seconds).should be_true
+
+    disconnected = read_state_until(state, connected: false)
+    disconnected["connected"].as_bool.should be_false
+    disconnected["last_error"].as_s.should contain("OBS WebSocket closed")
+
+    ipc = Obsctl::IPC::UnixClient.new(path)
+    status = ipc.request(
+      Obsctl::IPC::Request.new(
+        "req-server-status-protocol-gap",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("get_server_status")
+      )
+    )
+    status.ok.should be_true
+    status.result.not_nil!["obs_connected"].as_bool.should be_false
+    status.result.not_nil!["reconnecting"].as_bool.should be_true
+
+    scene_response = ipc.request(
+      Obsctl::IPC::Request.new(
+        "req-scene-protocol-gap",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("set_scene", "screen")
+      )
+    )
+    scene_response.ok.should be_false
+    scene_response.error.not_nil!.code.should eq(Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE)
+
+    mute_response = ipc.request(
+      Obsctl::IPC::Request.new(
+        "req-mute-protocol-gap",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("mute", "mic")
+      )
+    )
+    mute_response.ok.should be_false
+    mute_response.error.not_nil!.code.should eq(Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE)
+
+    obs.next_identify(3.seconds).should_not be_nil
+    reconnected = read_state_until(state, connected: true)
+    reconnected["connected"].as_bool.should be_true
+
+    recovered = ipc.request(
+      Obsctl::IPC::Request.new(
+        "req-scene-after-protocol-reconnect",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("set_scene", "screen")
+      )
+    )
+    recovered.ok.should be_true
+    obs.current_scene.should eq("Screen Share")
+  ensure
+    state.try(&.close)
+    server.try(&.stop)
+    obs.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
   it "validates config through IPC without connecting clients directly to OBS" do
     path = temp_socket_path
     config_path = File.join(Dir.tempdir, "obsctl-server-validate-#{Random.rand(1_000_000)}.yml")
@@ -565,4 +659,20 @@ private def wait_for_socket(path : String) : Nil
   end
 
   raise "server socket was not created: #{path}"
+end
+
+private def read_state_until(session : Obsctl::IPC::ClientSession, connected : Bool, timeout : Time::Span = 3.seconds) : JSON::Any
+  deadline = Time.instant + timeout
+
+  loop do
+    remaining = deadline - Time.instant
+    raise "timed out waiting for state connected=#{connected}" if remaining <= 0.seconds
+
+    message = read_ipc_message(session, remaining)
+    next unless event = message.as?(Obsctl::IPC::Event)
+    next unless event.topic == "state"
+
+    data = event.data.not_nil!
+    return data if data["connected"].as_bool == connected
+  end
 end

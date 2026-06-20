@@ -4,6 +4,16 @@ private ROOT                      = File.expand_path("../..", __DIR__)
 private EMBEDDED_TUI_OBS_ADAPTERS = [
   "src/obsctl/tui/obs_session_client.cr",
 ]
+private SERVER_OBS_OWNERS = [
+  "src/obsctl/server/obs_supervisor.cr",
+]
+private NORMAL_CLIENT_LAYER_GLOBS = [
+  "src/obsctl/cli/**/*.cr",
+  "src/obsctl/tui/**/*.cr",
+  "src/obsctl/ipc/**/*.cr",
+  "src/obsctl/domain/**/*.cr",
+  "src/obsctl/support/**/*.cr",
+]
 private DIRECT_OBS_CLIENT_PATTERNS = [
   {name: "OBS client require", regex: /require\s+"(?:\.\.\/)+obs\/client"/},
   {name: "OBS connection require", regex: /require\s+"(?:\.\.\/)+obs\/connection"/},
@@ -13,6 +23,10 @@ private DIRECT_OBS_CLIENT_PATTERNS = [
 
 private def src_files(glob : String) : Array(String)
   Dir.glob(File.join(ROOT, glob)).sort
+end
+
+private def src_files(globs : Array(String)) : Array(String)
+  globs.flat_map { |glob| src_files(glob) }.uniq.sort
 end
 
 private def src_path(path : String) : String
@@ -60,8 +74,11 @@ private def usage_files(usages : Array(String)) : Array(String)
 end
 
 describe "daemon-first architecture boundary" do
-  it "keeps scriptable CLI source off the OBS websocket client implementation" do
-    direct_obs_client_usages(src_files("src/obsctl/cli/*.cr")).should eq([] of String)
+  it "keeps normal CLI, TUI, IPC, domain, and support layers off the OBS websocket client implementation" do
+    normal_client_files = src_files(NORMAL_CLIENT_LAYER_GLOBS)
+
+    direct_obs_client_usages(normal_client_files, EMBEDDED_TUI_OBS_ADAPTERS).should eq([] of String)
+    usage_files(direct_obs_client_usages(normal_client_files)).should eq(EMBEDDED_TUI_OBS_ADAPTERS)
   end
 
   it "keeps the normal TUI client path off the OBS websocket client implementation" do
@@ -83,7 +100,8 @@ describe "daemon-first architecture boundary" do
   it "keeps server-owned OBS client construction inside the supervisor" do
     server_files = src_files("src/obsctl/server/**/*.cr")
 
-    direct_obs_client_usages(server_files, ["src/obsctl/server/obs_supervisor.cr"]).should eq([] of String)
+    direct_obs_client_usages(server_files, SERVER_OBS_OWNERS).should eq([] of String)
+    usage_files(direct_obs_client_usages(server_files)).should eq(SERVER_OBS_OWNERS)
   end
 
   it "keeps command executor as the IPC-command-to-OBS-action boundary" do
