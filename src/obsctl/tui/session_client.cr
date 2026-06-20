@@ -1,8 +1,5 @@
-require "../config/config"
-require "../domain/aliases"
 require "../domain/errors"
 require "../ipc/protocol"
-require "../obs/client"
 require "../obs/protocol/event"
 require "../obs/state/obs_snapshot"
 
@@ -42,84 +39,6 @@ module Obsctl
       abstract def reconnect_obs : Nil
       # Requests server-side config validation.
       abstract def validate_config : Nil
-    end
-
-    # Direct OBS adapter retained for explicit embedded-style sessions and tests.
-    class ObsSessionClient < SessionClient
-      def initialize(@config : Config::Config)
-        @client = OBS::Client.new(@config)
-      end
-
-      def connect : Nil
-        @client.connect
-      end
-
-      def close : Nil
-        @client.close
-      end
-
-      def snapshot : OBS::State::ObsSnapshot
-        @client.snapshot
-      end
-
-      def set_scene(target : String) : Nil
-        scene = Domain::Aliases.resolve_scene(@config, target)
-        @client.set_scene(scene.name)
-      end
-
-      def mute(target : String, muted : Bool) : Nil
-        input = Domain::Aliases.resolve_audio(@config, target)
-        @client.mute(input.name, muted)
-      end
-
-      def toggle_mute(target : String) : Nil
-        input = Domain::Aliases.resolve_audio(@config, target)
-        @client.toggle_mute(input.name)
-      end
-
-      def set_volume(target : String, percent : Int32) : Nil
-        input = Domain::Aliases.resolve_audio(@config, target)
-        @client.set_volume(input.name, percent)
-      end
-
-      def scene_names : Array(String)
-        @client.scene_names
-      end
-
-      def input_names : Array(String)
-        @client.input_names
-      end
-
-      def next_event : OBS::Protocol::Event?
-        select
-        when event = @client.events.receive
-          event
-        when timeout(0.milliseconds)
-          nil
-        end
-      end
-
-      def next_snapshot : OBS::State::ObsSnapshot?
-        nil
-      end
-
-      def next_log : String?
-        nil
-      end
-
-      def dump_config : Nil
-      end
-
-      def reload_config : Nil
-      end
-
-      def reconnect_obs : Nil
-        close
-        connect
-      end
-
-      def validate_config : Nil
-      end
     end
 
     # Normal TUI client that subscribes and sends commands over local IPC.
@@ -387,11 +306,11 @@ module Obsctl
         raise Domain::IpcProtocolError.new("server returned an invalid error response") unless error
 
         case error.code
-        when "OBS_UNAVAILABLE"
+        when IPC::ErrorCode::OBS_UNAVAILABLE
           raise Domain::ObsUnavailable.new(error.message)
-        when "COMMAND_PARSE_ERROR"
+        when IPC::ErrorCode::COMMAND_PARSE_ERROR
           raise Domain::CommandParseError.new(error.message)
-        when "CONFIG_ERROR"
+        when IPC::ErrorCode::CONFIG_INVALID
           raise Domain::ConfigInvalid.new(error.message)
         else
           raise Domain::RemoteCommandFailed.new(error.message, Domain::ExitCode::ObsRequest)

@@ -52,7 +52,7 @@ describe Obsctl::IPC::Codec do
       "req-000004",
       false,
       nil,
-      Obsctl::IPC::ErrorPayload.new("OBS_UNAVAILABLE", "OBS is unavailable")
+      Obsctl::IPC::ErrorPayload.new(Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE, "OBS is unavailable")
     )
 
     decoded = codec.decode(codec.encode(response)).as(Obsctl::IPC::Response)
@@ -60,6 +60,37 @@ describe Obsctl::IPC::Codec do
     decoded.ok.should be_false
     decoded.error.not_nil!.code.should eq("OBS_UNAVAILABLE")
     decoded.error.not_nil!.message.should eq("OBS is unavailable")
+  end
+
+  it "keeps public IPC error codes canonical" do
+    Obsctl::IPC::ErrorCode::CODES.each do |code|
+      payload = Obsctl::IPC::ErrorPayload.new(code, "safe message")
+      payload.code.should eq(code)
+    end
+  end
+
+  it "canonicalizes legacy vague IPC error codes at the boundary" do
+    Obsctl::IPC::ErrorPayload.new("CONFIG_ERROR", "bad config").code.should eq(Obsctl::IPC::ErrorCode::CONFIG_INVALID)
+    Obsctl::IPC::ErrorPayload.new("REQUEST_FAILED", "OBS failed").code.should eq(Obsctl::IPC::ErrorCode::OBS_REQUEST_FAILED)
+    Obsctl::IPC::ErrorPayload.new("INVALID_REQUEST", "bad IPC").code.should eq(Obsctl::IPC::ErrorCode::IPC_PROTOCOL_ERROR)
+    Obsctl::IPC::ErrorPayload.new("INTERNAL_ERROR", "boom").code.should eq(Obsctl::IPC::ErrorCode::SERVER_ERROR)
+  end
+
+  it "rejects non-canonical public IPC error codes" do
+    expect_raises(Obsctl::Domain::IpcProtocolError, "non-canonical IPC error code") do
+      Obsctl::IPC::ErrorPayload.new("BOGUS", "bad code")
+    end
+  end
+
+  it "redacts obvious secrets from IPC error messages" do
+    payload = Obsctl::IPC::ErrorPayload.new(
+      Obsctl::IPC::ErrorCode::SERVER_ERROR,
+      "failed with password=supersecret token: abc123"
+    )
+
+    payload.message.should_not contain("supersecret")
+    payload.message.should_not contain("abc123")
+    payload.message.should contain("[redacted]")
   end
 
   it "encodes and decodes events" do

@@ -7,6 +7,7 @@ Global options:
 - `--config PATH`
 - `--log-level debug|info|warn|error`
 - `--force`
+- `--json`
 
 Required commands:
 
@@ -24,6 +25,7 @@ Required commands:
 - `obsctl vol|volume <audio-alias|shortcut|obs-name> <0-100>`
 - `obsctl dump-config`
 - `obsctl reload-config`
+- `obsctl validate-config`
 - `obsctl service install`
 - `obsctl service uninstall`
 - `obsctl service status`
@@ -58,6 +60,33 @@ Quoted names are preserved: `/scene "Main Camera"`.
 
 Non-interactive OBS control commands are IPC clients. They connect to the local Unix socket, send a typed command to the server, print the response, and exit. If the server is unavailable, they print startup/service instructions and exit `3`. `obsctl shutdown-server` is rejected unless `server.allow_remote_shutdown: true` is configured.
 
+`--json` is available for scriptable commands: `status`, `obs-status`,
+`server-status`, `reconnect`, `shutdown-server`, `scene`, `mute`, `unmute`,
+`toggle-mute`, `vol`/`volume`, `dump-config`, `reload-config`, and
+`validate-config`. The flag can be placed before the command or after the
+command arguments:
+
+```sh
+obsctl --json status
+obsctl scene main --json
+```
+
+JSON mode writes exactly one object to stdout:
+
+```json
+{"ok":true,"result":{"message":"Scene changed to Main Camera"},"error":null,"exit_code":0}
+```
+
+On failure, `ok` is `false`, `result` is `null`, `error` is a safe canonical
+IPC error object, and `exit_code` matches the process exit code:
+
+```json
+{"ok":false,"result":null,"error":{"code":"SCENE_NOT_FOUND","message":"scene not found: missing"},"exit_code":4}
+```
+
+Human startup hints and other prose are not printed to stdout in JSON mode.
+Human diagnostics for non-JSON mode remain on stderr.
+
 `obsctl server-status` checks only the local daemon. Its output includes `pid`, `uptime_seconds`, `socket_path`, `client_count`, `obs_connected`, `reconnecting`, and `last_error`.
 
 `obsctl validate-config` validates the local config file directly and does not require a running server. It prints a safe warning if plaintext `connection.password` is configured. The TUI palette command `/validate-config` asks the running server to validate its configured file.
@@ -65,6 +94,12 @@ Non-interactive OBS control commands are IPC clients. They connect to the local 
 `obsctl dump-config` and `/dump-config` ask the server to fetch OBS scenes/audio inputs and rewrite the config with a backup. Dump writes preserve `server` and `reconnect` settings and fail with a config error if existing aliases or shortcuts would conflict with discovered OBS names.
 
 `obsctl` and `obsctl tui` run the ANSI TUI as an IPC client in normal mode. The TUI subscribes to server state snapshots, OBS events, and server log topics, then forwards palette commands to the same server-owned command executor used by scriptable CLI commands. The dashboard renders connection, scenes, grouped scene map, audio, recent logs, and command palette panels. Rendering is bounded to the current `COLUMNS`/`LINES` terminal size when those environment values are available, so long scene/audio names and large collections do not overflow the viewport. After the initial full paint, the ANSI backend emits row-level diffs for changed content instead of clearing the whole screen every refresh.
+
+The daemon-first boundary is enforced as a project contract: normal CLI source
+and the normal TUI client path must not require or instantiate the OBS
+WebSocket client implementation. Server-side `command_executor` is the
+IPC-command-to-OBS-action boundary, and OBS WebSocket client construction stays
+inside the server supervisor.
 
 TUI keyboard input:
 

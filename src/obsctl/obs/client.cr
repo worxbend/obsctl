@@ -257,7 +257,7 @@ module Obsctl
           @system_frames.send(frame)
         end
       rescue ex
-        @system_frames.send(ex)
+        fail_protocol_error(ex)
       end
 
       private def route_response(frame : String) : Nil
@@ -267,7 +267,11 @@ module Obsctl
         channel = @pending_lock.synchronize { @pending[response.request_id]? }
         channel.try(&.send(response))
       rescue ex
-        @system_frames.send(ex)
+        fail_protocol_error(ex)
+      end
+
+      private def fail_protocol_error(error : Exception) : Nil
+        fail_all_pending(Domain::ConnectionFailed.new("OBS WebSocket protocol error: #{error.message}"))
       end
 
       private def fail_all_pending(error : Exception) : Nil

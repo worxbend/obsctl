@@ -6,6 +6,11 @@
 
 Each frame is one JSON object followed by `\n`.
 
+The daemon-first boundary is part of the public contract. Normal CLI and TUI
+paths talk to OBS only through the local IPC server. The only normal process
+that owns an OBS WebSocket connection is `obsctl server`; embedded/direct OBS
+adapters are explicitly fenced for tests or opt-in embedded use.
+
 Command request:
 
 ```json
@@ -58,6 +63,55 @@ Pushed event:
 ```json
 {"type":"event","topic":"state","data":{"connected":true,"current_scene":"Main Camera"}}
 ```
+
+## Public IPC Error Codes
+
+Server-to-client error responses use this canonical public error-code taxonomy:
+
+- `CONFIG_INVALID`
+- `SERVER_UNAVAILABLE`
+- `OBS_UNAVAILABLE`
+- `REQUEST_TIMEOUT`
+- `OBS_REQUEST_FAILED`
+- `SCENE_NOT_FOUND`
+- `AUDIO_INPUT_NOT_FOUND`
+- `ALIAS_AMBIGUOUS`
+- `COMMAND_PARSE_ERROR`
+- `IPC_PROTOCOL_ERROR`
+- `SHUTDOWN_DISABLED`
+- `SERVER_ERROR`
+
+Public IPC responses must not expose secrets. Error messages are kept concise
+and safe for CLI, TUI, and JSON consumers. Legacy vague boundary codes such as
+`CONFIG_ERROR`, `REQUEST_FAILED`, `INTERNAL_ERROR`, and `INVALID_REQUEST` are
+canonicalized before they are exposed to clients.
+
+## CLI JSON Envelope
+
+Thin CLI commands can request machine-readable output with `--json`. In JSON
+mode, stdout contains exactly one JSON object:
+
+```json
+{"ok":true,"result":{"message":"Scene changed to Main Camera"},"error":null,"exit_code":0}
+```
+
+Failure envelopes keep the same shape and carry a canonical IPC error object:
+
+```json
+{"ok":false,"result":null,"error":{"code":"SCENE_NOT_FOUND","message":"scene not found: missing"},"exit_code":4}
+```
+
+Envelope fields are stable:
+
+- `ok`: `true` for success, `false` for failure.
+- `result`: the command payload or message on success; `null` on failure.
+- `error`: `null` on success; `{code,message}` with a canonical public IPC
+  code on failure.
+- `exit_code`: the process exit code that the command returns.
+
+JSON mode is intended for scripts. Startup hints and other human prose are not
+printed to stdout in JSON mode; diagnostics and warnings, when present, stay on
+stderr.
 
 ## obs-websocket
 
