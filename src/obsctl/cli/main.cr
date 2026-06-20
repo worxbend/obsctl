@@ -23,14 +23,18 @@ module Obsctl
         stdout : IO = STDOUT,
         stderr : IO = STDERR,
       ) : Int32
-        json_output = false
+        json_output = argv.includes?("--json")
 
         begin
           options = OptionsParser.new.parse(argv)
           command = options.command
           command_args, command_json = split_json_flag(options.args)
-          json_output = (options.json || command_json) && json_command?(command)
+          json_output = options.json || command_json
           log_level = Runtime::LogLevel.parse(options.log_level)
+
+          if json_output && !json_command?(command)
+            raise Domain::CommandParseError.new(json_unsupported_message(command))
+          end
 
           if command == "init"
             if File.exists?(options.config_path) && !options.force
@@ -95,6 +99,14 @@ module Obsctl
             stderr.puts server_unavailable_message
           end
           ex.exit_code.value
+        rescue ex : OptionParser::Exception
+          error = Domain::CommandParseError.new(ex.message || "invalid option")
+          if json_output
+            write_json_error(stdout, IPC::ErrorPayload.from_exception(error), error.exit_code.value)
+          else
+            stderr.puts error.message
+          end
+          error.exit_code.value
         rescue ex : Domain::ObsctlError
           if json_output
             write_json_error(stdout, IPC::ErrorPayload.from_exception(ex), ex.exit_code.value)
@@ -134,6 +146,11 @@ module Obsctl
         else
           false
         end
+      end
+
+      private def self.json_unsupported_message(command : String?) : String
+        name = command || "tui"
+        "JSON output is not supported for command: #{name}"
       end
 
       private def self.cli_to_palette(command : String, args : Array(String)) : String

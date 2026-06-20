@@ -20,7 +20,10 @@ module Obsctl
       @mutex = Mutex.new
       @send_mutex = Mutex.new
       @identify_data = nil.as(JSON::Any?)
+      @identify_notifications = Channel(JSON::Any).new(16)
       @request_notifications = Channel(String).new(16)
+      @delayed_response_notifications = Channel(String).new(16)
+      @close_notifications = Channel(Nil).new(16)
       @websockets = [] of HTTP::WebSocket
 
       def initialize(
@@ -94,12 +97,39 @@ module Obsctl
         @mutex.synchronize { @identify_data }
       end
 
+      def next_identify(timeout : Time::Span = 1.second) : JSON::Any?
+        select
+        when identify = @identify_notifications.receive
+          identify
+        when timeout(timeout)
+          nil
+        end
+      end
+
       def next_request(timeout : Time::Span = 1.second) : String?
         select
         when request_type = @request_notifications.receive
           request_type
         when timeout(timeout)
           nil
+        end
+      end
+
+      def next_delayed_response(timeout : Time::Span = 1.second) : String?
+        select
+        when request_type = @delayed_response_notifications.receive
+          request_type
+        when timeout(timeout)
+          nil
+        end
+      end
+
+      def next_close(timeout : Time::Span = 1.second) : Bool
+        select
+        when @close_notifications.receive
+          true
+        when timeout(timeout)
+          false
         end
       end
 
@@ -126,6 +156,7 @@ module Obsctl
           @mutex.synchronize { @websockets << websocket }
           websocket.on_close do
             @mutex.synchronize { @websockets.delete(websocket) }
+            notify_close
           end
           send_frame(websocket, hello_frame)
           websocket.on_message do |message|
@@ -139,6 +170,7 @@ module Obsctl
         case frame["op"].as_i
         when 1
           @mutex.synchronize { @identify_data = frame["d"] }
+          notify_identify(frame["d"])
           send_frame(websocket, identified_frame)
         when 6
           request = frame["d"]
@@ -146,9 +178,13 @@ module Obsctl
           notify_request(request_type)
           if delay = @request_delays[request_type]?
             spawn do
-              sleep delay
-              send_frame(websocket, response_frame(request))
-            rescue
+              begin
+                sleep delay
+                send_frame(websocket, response_frame(request))
+              rescue
+              ensure
+                notify_delayed_response(request_type)
+              end
             end
           else
             send_frame(websocket, response_frame(request))
@@ -173,6 +209,27 @@ module Obsctl
       private def notify_request(request_type : String) : Nil
         select
         when @request_notifications.send(request_type)
+        else
+        end
+      end
+
+      private def notify_identify(data : JSON::Any) : Nil
+        select
+        when @identify_notifications.send(data)
+        else
+        end
+      end
+
+      private def notify_delayed_response(request_type : String) : Nil
+        select
+        when @delayed_response_notifications.send(request_type)
+        else
+        end
+      end
+
+      private def notify_close : Nil
+        select
+        when @close_notifications.send(nil)
         else
         end
       end

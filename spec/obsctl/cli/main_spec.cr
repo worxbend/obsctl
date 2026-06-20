@@ -122,6 +122,106 @@ describe Obsctl::CLI::Main do
     end
   end
 
+  it "emits one JSON envelope for validate-config and keeps warnings on stderr" do
+    dir = File.join(Dir.tempdir, "obsctl-cli-validate-json-#{Random.rand(1_000_000)}")
+    Dir.mkdir_p(dir)
+    path = File.join(dir, "config.yml")
+    File.write(path, <<-YAML)
+    version: 1
+    connection:
+      host: 127.0.0.1
+      port: 4455
+      password_env: ""
+      password: "super-secret"
+      connect_timeout_ms: 3000
+      request_timeout_ms: 2500
+    YAML
+
+    exit_code, stdout, stderr = run_cli_json(["--config", path, "validate-config", "--json"])
+
+    exit_code.should eq(0)
+    stderr.should contain("warning: plaintext connection.password is configured")
+    stderr.should_not contain("super-secret")
+
+    envelope = parse_single_json(stdout)
+    envelope["ok"].as_bool.should be_true
+    envelope["result"]["message"].as_s.should eq("config valid: #{path}")
+    envelope["error"].raw.should be_nil
+    envelope["exit_code"].as_i.should eq(exit_code)
+  ensure
+    FileUtils.rm_rf(dir) if dir
+  end
+
+  it "emits a JSON envelope for unsupported commands when JSON is requested" do
+    exit_code, stdout, stderr = run_cli_json(["bogus", "--json"])
+
+    exit_code.should eq(5)
+    stderr.should eq("")
+
+    envelope = parse_single_json(stdout)
+    envelope["ok"].as_bool.should be_false
+    envelope["result"].raw.should be_nil
+    envelope["error"]["code"].as_s.should eq(Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR)
+    envelope["error"]["message"].as_s.should eq("JSON output is not supported for command: bogus")
+    envelope["exit_code"].as_i.should eq(exit_code)
+  end
+
+  it "rejects init in JSON mode before writing config files" do
+    dir = File.join(Dir.tempdir, "obsctl-cli-init-json-#{Random.rand(1_000_000)}")
+    path = File.join(dir, "config.yml")
+
+    exit_code, stdout, stderr = run_cli_json(["--config", path, "init", "--json"])
+
+    exit_code.should eq(5)
+    stderr.should eq("")
+    File.exists?(path).should be_false
+
+    envelope = parse_single_json(stdout)
+    envelope["ok"].as_bool.should be_false
+    envelope["error"]["code"].as_s.should eq(Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR)
+    envelope["error"]["message"].as_s.should eq("JSON output is not supported for command: init")
+    envelope["exit_code"].as_i.should eq(exit_code)
+  ensure
+    FileUtils.rm_rf(dir) if dir
+  end
+
+  it "rejects service commands in JSON mode before invoking systemctl" do
+    runner = FakeCliSystemCommandRunner.new
+    installer = Obsctl::Service::ServiceInstaller.new(
+      service_path: "/tmp/obsctl.service",
+      executable_path: "/tmp/obsctl",
+      runner: runner
+    )
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+
+    exit_code = Obsctl::CLI::Main.run(["service", "status", "--json"], installer, stdout, stderr)
+
+    exit_code.should eq(5)
+    stderr.to_s.should eq("")
+    runner.calls.should be_empty
+
+    envelope = parse_single_json(stdout.to_s)
+    envelope["ok"].as_bool.should be_false
+    envelope["error"]["code"].as_s.should eq(Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR)
+    envelope["error"]["message"].as_s.should eq("JSON output is not supported for command: service")
+    envelope["exit_code"].as_i.should eq(exit_code)
+  end
+
+  it "emits a JSON envelope for invalid global options when JSON is requested" do
+    exit_code, stdout, stderr = run_cli_json(["--json", "--bogus", "status"])
+
+    exit_code.should eq(5)
+    stderr.should eq("")
+
+    envelope = parse_single_json(stdout)
+    envelope["ok"].as_bool.should be_false
+    envelope["result"].raw.should be_nil
+    envelope["error"]["code"].as_s.should eq(Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR)
+    envelope["error"]["message"].as_s.should contain("Invalid option")
+    envelope["exit_code"].as_i.should eq(exit_code)
+  end
+
   it "emits a JSON envelope for CLI parse errors before IPC" do
     with_cli_json_runtime do
       exit_code, stdout, stderr = run_cli_json(["scene", "--json"])

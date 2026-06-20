@@ -86,6 +86,28 @@ and safe for CLI, TUI, and JSON consumers. Legacy vague boundary codes such as
 `CONFIG_ERROR`, `REQUEST_FAILED`, `INTERNAL_ERROR`, and `INVALID_REQUEST` are
 canonicalized before they are exposed to clients.
 
+The CLI maps canonical IPC error codes to process exit codes with this public
+contract:
+
+| Error code | Exit code | Meaning |
+| --- | ---: | --- |
+| `CONFIG_INVALID` | 2 | Local or server config is invalid. |
+| `SERVER_UNAVAILABLE` | 3 | The local obsctl server cannot be reached. |
+| `OBS_UNAVAILABLE` | 3 | OBS is disconnected or unavailable. |
+| `REQUEST_TIMEOUT` | 3 | OBS did not answer before the request timeout. |
+| `OBS_REQUEST_FAILED` | 4 | OBS returned an unsuccessful request status. |
+| `SCENE_NOT_FOUND` | 4 | A scene target could not be resolved. |
+| `AUDIO_INPUT_NOT_FOUND` | 4 | An audio target could not be resolved. |
+| `ALIAS_AMBIGUOUS` | 5 | A target matched multiple aliases/names before OBS was called. |
+| `COMMAND_PARSE_ERROR` | 5 | CLI, TUI, or IPC command input was invalid. |
+| `IPC_PROTOCOL_ERROR` | 6 | A local IPC frame was malformed or unexpected. |
+| `SHUTDOWN_DISABLED` | 5 | Remote shutdown was rejected by command policy. |
+| `SERVER_ERROR` | 1 | The server hit an internal failure. |
+
+`ALIAS_AMBIGUOUS` intentionally exits as command parse error code `5`: the
+requested target is ambiguous at obsctl's command/domain boundary, before any
+OBS request is made.
+
 ## CLI JSON Envelope
 
 Thin CLI commands can request machine-readable output with `--json`. In JSON
@@ -110,8 +132,11 @@ Envelope fields are stable:
 - `exit_code`: the process exit code that the command returns.
 
 JSON mode is intended for scripts. Startup hints and other human prose are not
-printed to stdout in JSON mode; diagnostics and warnings, when present, stay on
-stderr.
+printed to stdout in JSON mode. The stdout contract is exactly one
+machine-readable JSON envelope. Secret-free human warnings, such as
+`validate-config`'s plaintext-password warning, may still be written to stderr.
+Using `--json` with a command that does not support JSON output returns a
+`COMMAND_PARSE_ERROR` envelope and exit code `5` before command side effects.
 
 ## obs-websocket
 

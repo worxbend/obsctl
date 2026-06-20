@@ -85,11 +85,35 @@ IPC error object, and `exit_code` matches the process exit code:
 ```
 
 Human startup hints and other prose are not printed to stdout in JSON mode.
-Human diagnostics for non-JSON mode remain on stderr.
+Secret-free human warnings may still be written to stderr in JSON mode. Human
+diagnostics for non-JSON mode remain on stderr. If `--json` is used with a
+command that does not support JSON output, such as `init` or `service`, obsctl
+returns a JSON `COMMAND_PARSE_ERROR` envelope and exits `5` before performing
+the command.
+
+Canonical JSON/IPC error codes map to CLI exit codes as follows:
+
+| Error code | Exit code |
+| --- | ---: |
+| `CONFIG_INVALID` | 2 |
+| `SERVER_UNAVAILABLE` | 3 |
+| `OBS_UNAVAILABLE` | 3 |
+| `REQUEST_TIMEOUT` | 3 |
+| `OBS_REQUEST_FAILED` | 4 |
+| `SCENE_NOT_FOUND` | 4 |
+| `AUDIO_INPUT_NOT_FOUND` | 4 |
+| `ALIAS_AMBIGUOUS` | 5 |
+| `COMMAND_PARSE_ERROR` | 5 |
+| `IPC_PROTOCOL_ERROR` | 6 |
+| `SHUTDOWN_DISABLED` | 5 |
+| `SERVER_ERROR` | 1 |
+
+`ALIAS_AMBIGUOUS` exits as command parse error code `5` because the user's
+target is ambiguous before any OBS request is made.
 
 `obsctl server-status` checks only the local daemon. Its output includes `pid`, `uptime_seconds`, `socket_path`, `client_count`, `obs_connected`, `reconnecting`, and `last_error`.
 
-`obsctl validate-config` validates the local config file directly and does not require a running server. It prints a safe warning if plaintext `connection.password` is configured. The TUI palette command `/validate-config` asks the running server to validate its configured file.
+`obsctl validate-config` validates the local config file directly and does not require a running server. It prints a safe warning to stderr if plaintext `connection.password` is configured, including in JSON mode, and never echoes the password value. The TUI palette command `/validate-config` asks the running server to validate its configured file.
 
 `obsctl dump-config` and `/dump-config` ask the server to fetch OBS scenes/audio inputs and rewrite the config with a backup. Dump writes preserve `server` and `reconnect` settings and fail with a config error if existing aliases or shortcuts would conflict with discovered OBS names.
 

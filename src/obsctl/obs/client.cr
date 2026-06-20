@@ -265,13 +265,14 @@ module Obsctl
         return unless response
 
         channel = @pending_lock.synchronize { @pending[response.request_id]? }
-        channel.try(&.send(response))
+        send_pending(channel, response) if channel
       rescue ex
         fail_protocol_error(ex)
       end
 
       private def fail_protocol_error(error : Exception) : Nil
         fail_all_pending(Domain::ConnectionFailed.new("OBS WebSocket protocol error: #{error.message}"))
+        close_after_protocol_error
       end
 
       private def fail_all_pending(error : Exception) : Nil
@@ -281,8 +282,39 @@ module Obsctl
           @pending.clear
           channels
         end
-        pending.each { |channel| channel.send(error) }
-        spawn { @system_frames.send(error) }
+        pending.each { |channel| fail_pending(channel, error) }
+        send_system_error(error)
+      end
+
+      private def send_pending(channel : Channel(Protocol::Response | Exception), value : Protocol::Response | Exception) : Nil
+        select
+        when channel.send(value)
+        else
+        end
+      end
+
+      private def fail_pending(channel : Channel(Protocol::Response | Exception), error : Exception) : Nil
+        select
+        when channel.receive
+        else
+        end
+        send_pending(channel, error)
+      end
+
+      private def send_system_error(error : Exception) : Nil
+        select
+        when @system_frames.send(error)
+        else
+        end
+      end
+
+      private def close_after_protocol_error : Nil
+        return if @ws.closed?
+
+        spawn(name: "obs-protocol-error-close") do
+          @ws.close unless @ws.closed?
+        rescue
+        end
       end
     end
   end

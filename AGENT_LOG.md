@@ -527,3 +527,46 @@ M  src/obsctl/server/command_executor.cr
 M  src/obsctl/server/server.cr
 A  src/obsctl/tui/obs_session_client.cr
 M  src/obsctl/tui/session_client.cr
+2026-06-20T10:48:41Z iteration 2 started remaining=16501s
+2026-06-20T10:48:41Z iteration 2 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-20T10:48:41Z iteration 2 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-2xmxxf8i/repo copied_entries=128
+2026-06-20T10:48:41Z iteration 2 ideator phase started count=3
+2026-06-20T10:48:41Z iteration 2 ideator phase concurrency workers=3
+2026-06-20T10:48:41Z iteration 2 ideator 1 role="the pragmatist" started
+2026-06-20T10:48:41Z iteration 2 ideator 2 role="the architect" started
+2026-06-20T10:48:41Z iteration 2 ideator 3 role="the contrarian" started
+2026-06-20T10:48:49Z iteration 2 ideator 3 role="the contrarian" completed status=0
+2026-06-20T10:48:50Z iteration 2 ideator 2 role="the architect" completed status=0
+2026-06-20T10:48:50Z iteration 2 ideator 1 role="the pragmatist" completed status=0
+2026-06-20T10:48:50Z iteration 2 ideator phase completed approaches=3
+2026-06-20T10:48:50Z iteration 2 selector started approaches=3
+2026-06-20T10:49:00Z iteration 2 selector completed status=0
+2026-06-20T10:49:00Z iteration 2 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-2xmxxf8i/repo
+2026-06-20T10:49:00Z iteration 2 selector rejected alternative role="the contrarian" approach="Contract Triage Before Hardening: freeze the smallest externally visible surface first, then let runtime hardening follow only where it protects that surface." reason="Useful emphasis on contract triage, but not selected as-is because delaying runtime cleanup too much would leave the most failure-prone OBS lifecycle behavior implicit."
+2026-06-20T10:49:00Z iteration 2 selector rejected alternative role="the architect" approach="Proof-First Runtime Hardening: treat the next iteration as a contract validation pass rather than a feature pass, using adversarial behavior to drive the smallest code changes n..." reason="Strong on adversarial proof and daemon behavior, but not selected as-is because it can underweight remaining public-surface ambiguity that would make hardening tests encode unsettled contracts."
+2026-06-20T10:49:00Z iteration 2 selector rejected alternative role="the pragmatist" approach="Proof-First Contract Closure: treat the next slice as a narrow hardening pass that starts from observable contracts and only changes internals where a contract cannot currently..." reason="Closest fit overall, but selected as a hybrid because the planner needs a sharper ordering rule: settle only contract ambiguity that would affect hardening, then move directly into runtime proof."
+2026-06-20T10:49:00Z iteration 2 selector alternatives persisted count=3
+2026-06-20T10:49:00Z iteration 2 selector structured alternatives persisted count=3
+2026-06-20T10:49:00Z iteration 2 planner started
+2026-06-20T10:49:49Z iteration 2 plan: 6 task(s) in 5 phase(s). The first phase removes public-contract ambiguity before adding fixtures. Phase 2 can run in parallel because boundary/require proof and golden fixture expansion touch separate spec and fixture areas. Runtime cleanup follows after contracts are stable, with low-level OBS client behavior proven before supervisor reconnect behavior. The final phase is intentionally sequential so trackers, docs, validation, and commit state reflect the completed slice.
+2026-06-20T10:49:49Z iteration 2 phase 1 started parallel=False tasks=1
+2026-06-20T10:55:51Z iteration 2 task t1 ('Lock public JSON and error contracts') status=0
+2026-06-20T10:55:51Z iteration 2 phase 2 started parallel=True tasks=2
+2026-06-20T10:58:50Z iteration 2 task t2 ('Broaden daemon-first boundary proof') status=0
+2026-06-20T11:01:33Z iteration 2 task t3 ('Expand golden proxy contract fixtures') status=0
+2026-06-20T11:01:33Z iteration 2 phase 3 started parallel=False tasks=1
+2026-06-20T11:07:35Z iteration 2 task t4 ('Make OBS protocol-error cleanup explicit') status=0
+2026-06-20T11:07:35Z iteration 2 phase 4 started parallel=False tasks=1
+2026-06-20T11:11:13Z iteration 2 task t5 ('Prove supervisor reconnect after protocol error') status=0
+2026-06-20T11:11:13Z iteration 2 phase 5 started parallel=False tasks=1
+
+## 2026-06-20 Contract-freeze runtime-hardening closeout
+
+- Updated `TODO.md` to move completed contract-freeze and runtime-hardening work out of remaining/planned-next sections.
+- Recorded the completed broadened daemon-first boundary proof, embedded TUI adapter require proof, expanded golden CLI/IPC fixtures, explicit OBS protocol-error cleanup, and supervisor reconnect proof.
+- Confirmed `docs/commands.md` and `docs/protocol.md` remain consistent with the enforced JSON policy: exactly one JSON envelope on stdout, with secret-free human warnings allowed on stderr.
+- Validation passed:
+  - `make format`
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` (209 examples, 0 failures)
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`
+  - `make lint` (Ameba not installed; existing skip path)

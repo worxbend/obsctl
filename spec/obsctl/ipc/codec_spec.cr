@@ -93,6 +93,42 @@ describe Obsctl::IPC::Codec do
     payload.message.should contain("[redacted]")
   end
 
+  it "redacts quoted secret values from IPC error messages" do
+    payload = Obsctl::IPC::ErrorPayload.new(
+      Obsctl::IPC::ErrorCode::SERVER_ERROR,
+      "OBS rejected password \"super secret\" and token='abc 123'"
+    )
+
+    payload.message.should_not contain("super secret")
+    payload.message.should_not contain("abc 123")
+    payload.message.should contain("password [redacted]")
+    payload.message.should contain("token=[redacted]")
+  end
+
+  it "redacts YAML-like secret fields from IPC error messages" do
+    payload = Obsctl::IPC::ErrorPayload.new(
+      Obsctl::IPC::ErrorCode::CONFIG_INVALID,
+      "invalid config: password: hunter2 secret: 'abc 123'"
+    )
+
+    payload.message.should_not contain("hunter2")
+    payload.message.should_not contain("abc 123")
+    payload.message.should contain("password: [redacted]")
+    payload.message.should contain("secret: [redacted]")
+  end
+
+  it "redacts natural-language secret messages from IPC errors" do
+    payload = Obsctl::IPC::ErrorPayload.new(
+      Obsctl::IPC::ErrorCode::OBS_REQUEST_FAILED,
+      "OBS reported authentication string is generated-token and password is hunter2"
+    )
+
+    payload.message.should_not contain("generated-token")
+    payload.message.should_not contain("hunter2")
+    payload.message.should contain("authentication string is [redacted]")
+    payload.message.should contain("password is [redacted]")
+  end
+
   it "encodes and decodes events" do
     event = Obsctl::IPC::Event.new("state", JSON.parse(%({"connected":true})))
 
