@@ -20,6 +20,65 @@ private def wait_for_supervisor(timeout : Time::Span = 3.seconds, &block : -> Bo
   end
 end
 
+private class FailedAttemptBeforeDelayStateStore < Obsctl::Server::StateStore
+  def initialize
+    super()
+    @gate_lock = Mutex.new
+    @blocked = false
+    @released = false
+    @failed_attempt_before_delay = Channel(Nil).new(1)
+    @release_failed_attempt = Channel(Nil).new(1)
+  end
+
+  def mark_disconnected(
+    error : String? = nil,
+    reconnecting : Bool = false,
+    at : Time = Time.utc,
+    connection_failed : Bool = true,
+  ) : Nil
+    should_block = false
+    was_connected = snapshot.connected
+    @gate_lock.synchronize do
+      should_block = !@blocked && !was_connected && reconnecting && connection_failed
+      @blocked = true if should_block
+    end
+
+    super
+
+    return unless should_block
+
+    select
+    when @failed_attempt_before_delay.send(nil)
+    else
+    end
+    @release_failed_attempt.receive
+  end
+
+  def wait_for_failed_attempt_before_delay(timeout : Time::Span = 1.second) : Bool
+    select
+    when @failed_attempt_before_delay.receive
+      true
+    when timeout(timeout)
+      false
+    end
+  end
+
+  def release_failed_attempt : Nil
+    should_release = @gate_lock.synchronize do
+      next false unless @blocked && !@released
+
+      @released = true
+      true
+    end
+    return unless should_release
+
+    select
+    when @release_failed_attempt.send(nil)
+    else
+    end
+  end
+end
+
 describe Obsctl::Server::ObsSupervisor do
   it "reports alive while the supervisor loop is running" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
@@ -164,6 +223,44 @@ describe Obsctl::Server::ObsSupervisor do
 
     obs.next_identify(1.second).should_not be_nil
   ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "preserves an explicit reconnect request made after failure before retry delay starts" do
+    obs = nil.as(Obsctl::SpecSupport::FakeObsServer?)
+    obs_port = unused_tcp_port
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: obs_port,
+        password_env: "",
+        connect_timeout_ms: 100,
+        request_timeout_ms: 100
+      ),
+      reconnect: Obsctl::Config::ReconnectConfig.new(
+        enabled: true,
+        endless: true,
+        initial_delay_ms: 5_000,
+        max_delay_ms: 5_000,
+        multiplier: 1.0,
+        jitter_ms: 0
+      )
+    )
+    state = FailedAttemptBeforeDelayStateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(config, state)
+
+    supervisor.start
+    state.wait_for_failed_attempt_before_delay(2.seconds).should be_true
+
+    supervisor.reconnect.should be_true
+    obs = Obsctl::SpecSupport::FakeObsServer.new(port: obs_port).start
+    state.release_failed_attempt
+
+    obs.next_identify_received(1.second).should_not be_nil
+  ensure
+    state.try(&.release_failed_attempt)
     supervisor.try(&.stop)
     obs.try(&.stop)
     wait_for_supervisor { !supervisor.alive? } if supervisor

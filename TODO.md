@@ -66,8 +66,9 @@ CLI client mode:
 - `obsctl obs-status`: sends OBS status request to local server.
 - `obsctl server-status`: checks only the local obsctl server, not OBS.
 - `obsctl reconnect`: asks the server to reconnect its OBS WebSocket session;
-  if the OBS supervisor is running, the command accepts the request and wakes
-  retry backoff promptly; if the supervisor is no longer running, the command
+  if the OBS supervisor is running, the command accepts a generation-scoped
+  reconnect request or reports success because a prompt connection attempt is
+  already in progress; if the supervisor is no longer running, the command
   returns `OBS_UNAVAILABLE` instead of claiming that a reconnect was requested.
 - `obsctl shutdown-server`: asks the server to stop; disabled unless `server.allow_remote_shutdown` is true.
 - `obsctl scene <alias|shortcut|obs-name>`: sends scene-change request to server.
@@ -664,18 +665,20 @@ Implemented:
     lifecycle generation, stale stopped generations exit without reclaiming an
     OBS client, and stop followed by immediate start keeps OBS ownership with
     the newest generation
-  - reconnect wake signals are scoped to the active supervisor generation, so a
-    wake emitted while closing an active client cannot remain buffered and skip
-    a later retry delay; a fresh explicit reconnect still wakes live retry
-    backoff promptly
+  - explicit reconnect requests are generation-scoped durable request epochs:
+    a request accepted by a live supervisor is consumed at the next legitimate
+    retry boundary even when it arrives after a failed attempt but before the
+    retry-delay wait starts; active-client-close wakes remain transient and
+    cannot leak into a later unrelated retry delay
   - `last_disconnected_at` is updated only after an established OBS session
     disconnects; `last_connection_failed_at` records the most recent failed OBS
     connection attempt and is not cleared by later successful connections
   - explicit `obsctl reconnect` keeps public `last_error` as
     `OBS reconnect requested` until the next connection success or failure
     outcome only when the running supervisor can perform a reconnect attempt;
-    when the supervisor is sleeping in retry backoff, explicit reconnect wakes
-    the next OBS connection attempt promptly; if the supervisor has exited with
+    when the supervisor is sleeping in retry backoff or reaches the next retry
+    boundary, explicit reconnect wakes or skips the backoff so the next OBS
+    connection attempt runs promptly; if the supervisor has exited with
     reconnect disabled, the command returns `OBS_UNAVAILABLE` with the public message
     `OBS supervisor is not running; restart the server or enable reconnect.`
   - protocol-error client closes are observed by the supervisor; stale OBS clients are dropped, OBS is marked disconnected, IPC stays available, and reconnect resumes when enabled
@@ -727,7 +730,7 @@ Implemented:
   - strict `obsctl-rs` compatibility mode fails clearly for missing sibling repositories, missing fixture roots, missing counterparts, and content differences
   - fake OBS server support exposes deterministic probes for Identify frames,
     OBS request types, close events, and no-attempt windows
-  - server reconnect specs cover initial OBS unavailable startup, reconnect-disabled supervisor exit, established-session disconnects, protocol-error disconnects, explicit reconnect requests, wakeable retry backoff, generation-safe stop/start ownership, stale reconnect wake invalidation, and successful reconnects
+  - server reconnect specs cover initial OBS unavailable startup, reconnect-disabled supervisor exit, established-session disconnects, protocol-error disconnects, explicit reconnect requests, wakeable retry backoff, durable pre-delay reconnect requests, generation-safe stop/start ownership, stale reconnect wake invalidation, transient active-client-close wake behavior, and successful reconnects
 
 ## Not Yet Implemented
 
@@ -738,6 +741,9 @@ Implemented:
 - Stream/record controls and status.
 - Scene item visibility controls.
 - Volume meter events.
+- Remaining reconnect flake cleanup: replace `unused_tcp_port`
+  unavailable-then-bind windows and `wait_for_disconnect` polling with
+  deterministic hooks where practical.
 - `ameba` lint execution in this environment.
 - Release packaging beyond `make release`.
 - Unknown config field preservation.
@@ -882,8 +888,11 @@ Partial:
 - OBS event topic fanout from the server to IPC subscribers
 - reconnect handling wired into runtime
 - explicit OBS reconnect request command through IPC
-- explicit reconnect wakes retry backoff while the supervisor is alive
-- supervisor stop/start ownership and reconnect wake signals are generation-scoped
+- explicit reconnect requests are generation-scoped durable epochs that wake
+  retry backoff or survive until the next retry boundary while the supervisor
+  is alive
+- supervisor stop/start ownership and reconnect request/wake state are
+  generation-scoped
 - supervisor reconnect proof after protocol-error client closes while IPC remains available
 
 ### Milestone 8: Polish

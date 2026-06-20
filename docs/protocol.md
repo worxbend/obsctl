@@ -72,12 +72,13 @@ failed connection attempt replaces it. `last_reconnect_attempt_at` records when
 the supervisor last started an OBS connection attempt.
 
 Explicit `reconnect_obs` requests return success only when the supervisor loop
-is alive and can perform a reconnect attempt. In that case, `last_error` is set
-to `OBS reconnect requested`; the clean close caused by that intentional drop
-does not overwrite the message, and the next connection success or failure
-becomes the next public outcome. If the alive supervisor is sleeping in
-reconnect backoff, the request wakes that delay so the next OBS connection
-attempt starts promptly rather than waiting for the configured retry interval.
+is alive. Success means the running supervisor accepted a generation-scoped
+reconnect request, or already has a prompt OBS connection attempt in progress;
+it does not mean OBS is already connected. Accepted explicit requests are
+durable across the next retry boundary, so a request made after a failed
+connection attempt but before retry sleep starts is still acted on promptly. In
+that case, `last_error` is set to `OBS reconnect requested`; the next connection
+success or failure becomes the next public outcome.
 
 ```json
 {"id":"req-000005","type":"response","ok":true,"result":{"message":"OBS reconnect requested"}}
@@ -92,6 +93,11 @@ new OBS connection attempt was scheduled:
 ```json
 {"id":"req-000006","type":"response","ok":false,"error":{"code":"OBS_UNAVAILABLE","message":"OBS supervisor is not running; restart the server or enable reconnect."}}
 ```
+
+Internal wakes caused only by closing an active OBS client are transient
+implementation signals. They are not public reconnect requests and do not
+survive into an unrelated later retry delay, and stale supervisor generations
+cannot consume reconnect requests from the current generation.
 
 Error response:
 

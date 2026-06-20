@@ -56,6 +56,17 @@ module Obsctl
         end
       end
 
+      # Records a public operator reconnect request without treating it as an
+      # OBS connection failure.
+      def mark_reconnect_requested(at : Time = Time.utc) : Nil
+        mark_disconnected(
+          "OBS reconnect requested",
+          reconnecting: true,
+          at: at,
+          connection_failed: false
+        )
+      end
+
       # Records a successful OBS connection and publishes its fresh snapshot.
       def mark_connected(snapshot : OBS::State::ObsSnapshot, at : Time = Time.utc) : Nil
         @lock.synchronize do

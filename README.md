@@ -67,15 +67,19 @@ reconnecting state, reconnect timestamps, and last error. `last_disconnected_at`
 is set only after an established OBS session disconnects;
 `last_connection_failed_at` records the most recent failed OBS connection
 attempt. It is historical telemetry, not just the current disconnected episode,
-and a later successful connection does not clear it. After `obsctl reconnect`,
-`last_error` remains `OBS reconnect requested` until the next connection
-succeeds or fails, but only when the running supervisor can actually make a
-reconnect attempt. If the running supervisor is sleeping between retry attempts,
-`obsctl reconnect` wakes that backoff so the next OBS connection attempt starts
-promptly instead of waiting for the configured delay. If the supervisor has
-already exited, for example after startup failure with `reconnect.enabled:
-false`, `obsctl reconnect` returns `OBS_UNAVAILABLE` with a message telling the
-operator to restart the server or enable reconnect.
+and a later successful connection does not clear it. `obsctl reconnect` success
+means the running supervisor accepted a generation-scoped reconnect request, or
+already has a prompt OBS connection attempt in progress; it does not mean OBS is
+already connected. Accepted explicit requests are durable across the next retry
+boundary, so a request made after a failed connection attempt but before retry
+sleep starts is still acted on promptly. The public `last_error` remains
+`OBS reconnect requested` until the next connection succeeds or fails. Internal
+wakes caused only by closing an active OBS client are transient implementation
+signals; they are not public reconnect requests and do not survive into an
+unrelated later retry delay. If the supervisor has already exited, for example
+after startup failure with `reconnect.enabled: false`, `obsctl reconnect`
+returns `OBS_UNAVAILABLE` with a message telling the operator to restart the
+server or enable reconnect.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
@@ -93,8 +97,9 @@ commands such as `obsctl status` and `obsctl server-status` continue to work,
 but `obsctl reconnect` cannot schedule a reconnect from a stopped supervisor.
 Restart `obsctl server --headless` after OBS is available, or enable reconnect
 in the config and restart the service. With reconnect enabled, the supervisor
-stays alive while OBS is unavailable; `obsctl reconnect` is accepted and wakes
-the retry loop immediately when it is sleeping in backoff.
+stays alive while OBS is unavailable; `obsctl reconnect` is accepted as a
+durable request for the running generation, or succeeds because an OBS
+connection attempt is already running or will run promptly.
 
 ## Validation
 
