@@ -20,10 +20,16 @@ module Obsctl
       @mutex = Mutex.new
       @send_mutex = Mutex.new
       @identify_data = nil.as(JSON::Any?)
+      @connection_attempt_count = 0_i64
+      @identify_count = 0_i64
+      @request_count = 0_i64
+      @close_count = 0_i64
+      @connection_notifications = Channel(Nil).new(16)
       @identify_notifications = Channel(JSON::Any).new(16)
       @request_notifications = Channel(String).new(16)
       @delayed_response_notifications = Channel(String).new(16)
       @close_notifications = Channel(Nil).new(16)
+      @connection_or_identify_notifications = Channel(String).new(16)
       @websockets = [] of HTTP::WebSocket
 
       def initialize(
@@ -98,6 +104,31 @@ module Obsctl
         @mutex.synchronize { @identify_data }
       end
 
+      def connection_attempt_count : Int64
+        @mutex.synchronize { @connection_attempt_count }
+      end
+
+      def identify_count : Int64
+        @mutex.synchronize { @identify_count }
+      end
+
+      def request_count : Int64
+        @mutex.synchronize { @request_count }
+      end
+
+      def close_count : Int64
+        @mutex.synchronize { @close_count }
+      end
+
+      def next_connection_attempt(timeout : Time::Span = 1.second) : Bool
+        select
+        when @connection_notifications.receive
+          true
+        when timeout(timeout)
+          false
+        end
+      end
+
       def next_identify(timeout : Time::Span = 1.second) : JSON::Any?
         select
         when identify = @identify_notifications.receive
@@ -107,6 +138,10 @@ module Obsctl
         end
       end
 
+      def next_identify_received(timeout : Time::Span = 1.second) : JSON::Any?
+        next_identify(timeout)
+      end
+
       def next_request(timeout : Time::Span = 1.second) : String?
         select
         when request_type = @request_notifications.receive
@@ -114,6 +149,10 @@ module Obsctl
         when timeout(timeout)
           nil
         end
+      end
+
+      def next_obs_request_type(timeout : Time::Span = 1.second) : String?
+        next_request(timeout)
       end
 
       def next_delayed_response(timeout : Time::Span = 1.second) : String?
@@ -132,6 +171,33 @@ module Obsctl
         when timeout(timeout)
           false
         end
+      end
+
+      def next_close_observed(timeout : Time::Span = 1.second) : Bool
+        next_close(timeout)
+      end
+
+      def no_identify_or_connection_attempt?(timeout : Time::Span = 100.milliseconds) : Bool
+        start_connection_attempt_count, start_identify_count = identify_or_connection_counts
+        no_identify_or_connection_attempt_since?(
+          start_connection_attempt_count,
+          start_identify_count,
+          timeout
+        )
+      end
+
+      def assert_no_identify_or_connection_attempt(timeout : Time::Span = 100.milliseconds) : Nil
+        start_connection_attempt_count, start_identify_count = identify_or_connection_counts
+        return if no_identify_or_connection_attempt_since?(
+                    start_connection_attempt_count,
+                    start_identify_count,
+                    timeout
+                  )
+
+        connection_attempt_count, identify_count = identify_or_connection_counts
+        raise "fake OBS received unexpected Identify or connection attempt within #{timeout} " \
+              "(connections: #{start_connection_attempt_count} -> #{connection_attempt_count}, " \
+              "identifies: #{start_identify_count} -> #{identify_count})"
       end
 
       def emit_current_scene_changed(scene_name : String) : Nil
@@ -154,9 +220,16 @@ module Obsctl
 
       private def websocket_handler : HTTP::WebSocketHandler
         HTTP::WebSocketHandler.new do |websocket, _context|
-          @mutex.synchronize { @websockets << websocket }
+          @mutex.synchronize do
+            @websockets << websocket
+            @connection_attempt_count += 1
+          end
+          notify_connection_attempt
           websocket.on_close do
-            @mutex.synchronize { @websockets.delete(websocket) }
+            @mutex.synchronize do
+              @websockets.delete(websocket)
+              @close_count += 1
+            end
             notify_close
           end
           send_frame(websocket, hello_frame)
@@ -170,8 +243,12 @@ module Obsctl
         frame = JSON.parse(message)
         case frame["op"].as_i
         when 1
-          @mutex.synchronize { @identify_data = frame["d"] }
-          notify_identify(frame["d"])
+          identify = frame["d"]
+          @mutex.synchronize do
+            @identify_data = identify
+            @identify_count += 1
+          end
+          notify_identify(identify)
           send_frame(websocket, identified_frame)
         when 6
           request = frame["d"]
@@ -207,7 +284,55 @@ module Obsctl
         end
       end
 
+      private def identify_or_connection_counts
+        @mutex.synchronize { {@connection_attempt_count, @identify_count} }
+      end
+
+      private def identify_or_connection_counts_changed?(
+        start_connection_attempt_count : Int64,
+        start_identify_count : Int64,
+      ) : Bool
+        connection_attempt_count, identify_count = identify_or_connection_counts
+        connection_attempt_count > start_connection_attempt_count || identify_count > start_identify_count
+      end
+
+      private def no_identify_or_connection_attempt_since?(
+        start_connection_attempt_count : Int64,
+        start_identify_count : Int64,
+        timeout : Time::Span,
+      ) : Bool
+        deadline = Time.instant + timeout
+
+        loop do
+          remaining = deadline - Time.instant
+          return true if remaining <= 0.seconds
+
+          select
+          when @connection_or_identify_notifications.receive
+            return false if identify_or_connection_counts_changed?(
+                              start_connection_attempt_count,
+                              start_identify_count
+                            )
+          when timeout(remaining)
+            return !identify_or_connection_counts_changed?(
+              start_connection_attempt_count,
+              start_identify_count
+            )
+          end
+        end
+      end
+
+      private def notify_connection_attempt : Nil
+        select
+        when @connection_notifications.send(nil)
+        else
+        end
+
+        notify_connection_or_identify("connection")
+      end
+
       private def notify_request(request_type : String) : Nil
+        @mutex.synchronize { @request_count += 1 }
         select
         when @request_notifications.send(request_type)
         else
@@ -219,6 +344,8 @@ module Obsctl
         when @identify_notifications.send(data)
         else
         end
+
+        notify_connection_or_identify("identify")
       end
 
       private def notify_delayed_response(request_type : String) : Nil
@@ -231,6 +358,13 @@ module Obsctl
       private def notify_close : Nil
         select
         when @close_notifications.send(nil)
+        else
+        end
+      end
+
+      private def notify_connection_or_identify(kind : String) : Nil
+        select
+        when @connection_or_identify_notifications.send(kind)
         else
         end
       end

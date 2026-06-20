@@ -70,10 +70,12 @@ attempt. It is historical telemetry, not just the current disconnected episode,
 and a later successful connection does not clear it. After `obsctl reconnect`,
 `last_error` remains `OBS reconnect requested` until the next connection
 succeeds or fails, but only when the running supervisor can actually make a
-reconnect attempt. If the supervisor has already exited, for example after
-startup failure with `reconnect.enabled: false`, `obsctl reconnect` returns
-`OBS_UNAVAILABLE` with a message telling the operator to restart the server or
-enable reconnect.
+reconnect attempt. If the running supervisor is sleeping between retry attempts,
+`obsctl reconnect` wakes that backoff so the next OBS connection attempt starts
+promptly instead of waiting for the configured delay. If the supervisor has
+already exited, for example after startup failure with `reconnect.enabled:
+false`, `obsctl reconnect` returns `OBS_UNAVAILABLE` with a message telling the
+operator to restart the server or enable reconnect.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
@@ -90,16 +92,20 @@ configured, the OBS supervisor exits after that failed startup attempt. Local IP
 commands such as `obsctl status` and `obsctl server-status` continue to work,
 but `obsctl reconnect` cannot schedule a reconnect from a stopped supervisor.
 Restart `obsctl server --headless` after OBS is available, or enable reconnect
-in the config and restart the service.
+in the config and restart the service. With reconnect enabled, the supervisor
+stays alive while OBS is unavailable; `obsctl reconnect` is accepted and wakes
+the retry loop immediately when it is sleeping in backoff.
 
 ## Validation
 
-Default Crystal validation runs the local contract suite without requiring a
-sibling Rust checkout:
+Default Crystal validation is single-repo and deterministic. It runs the local
+contract suite without requiring a sibling Rust checkout:
 
 ```sh
-make test
-crystal spec
+make format
+CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test
+CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build
+make lint
 ```
 
 Optional `obsctl-rs` golden-fixture compatibility is skipped by default when
@@ -114,3 +120,9 @@ Strict mode sets `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1` and fails on a missing
 sibling repository, missing fixture root, missing counterpart files in either
 repository, or content differences. `OBSCTL_SKIP_OBSCTL_RS_COMPAT=1` remains an
 explicit override for skipping the optional compatibility check.
+
+The GitHub Actions strict compatibility workflow is intentionally not a
+push/pull-request gate while `obsctl-rs` lacks compatible fixtures. It runs by
+manual `workflow_dispatch` and on the scheduled cadence, with the Rust
+repository owner, name, and ref supplied by workflow inputs or repository
+variables.
