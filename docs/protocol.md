@@ -17,10 +17,13 @@ Command request:
 {"id":"req-000001","type":"command","command":{"name":"set_scene","target":"main"}}
 ```
 
-Supported command names are `ping`, `get_server_status`, `get_obs_status`,
-`get_snapshot`, `set_scene`, `mute`, `unmute`, `toggle_mute`, `set_volume`,
-`dump_config`, `reload_config`, `validate_config`, `reconnect_obs`, and
-`shutdown_server`. `shutdown_server` returns `SHUTDOWN_DISABLED` unless
+Supported command names are `ping`, `status`, `get_server_status`,
+`get_obs_status`, `get_snapshot`, `set_scene`, `mute`, `unmute`, `toggle_mute`,
+`set_volume`, `dump_config`, `reload_config`, `validate_config`,
+`reconnect_obs`, and `shutdown_server`. `status` returns the combined daemon
+and OBS payload, `get_obs_status` returns only the OBS snapshot, and
+`get_server_status` returns only daemon status. `shutdown_server` returns
+`SHUTDOWN_DISABLED` unless
 `server.allow_remote_shutdown` is enabled in the server config.
 
 Subscribe request:
@@ -50,6 +53,12 @@ Success response:
 
 ```json
 {"id":"req-000001","type":"response","ok":true,"result":{"message":"Scene changed to Main Camera"}}
+```
+
+Combined status response:
+
+```json
+{"id":"req-000004","type":"response","ok":true,"result":{"server":{"pid":4242,"uptime_seconds":37,"socket_path":"/tmp/obsctl/obsctl.sock","client_count":2,"obs_connected":true,"reconnecting":false,"last_connected_at":"2026-06-20T12:00:00Z","last_disconnected_at":null,"last_reconnect_attempt_at":"2026-06-20T11:59:59Z","last_error":null},"obs":{"connected":true,"current_scene":"Main Camera","scenes":[],"audio_inputs":[]}}}
 ```
 
 Error response:

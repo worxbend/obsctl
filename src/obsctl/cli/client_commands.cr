@@ -56,7 +56,7 @@ module Obsctl
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
         case command
         when Domain::StatusCommand
-          IPC::CommandPayload.new("get_obs_status")
+          IPC::CommandPayload.new("status")
         when Domain::ObsStatusCommand
           IPC::CommandPayload.new("get_obs_status")
         when Domain::ServerStatusCommand
@@ -90,13 +90,28 @@ module Obsctl
         return "ok" unless result
 
         case command
-        when Domain::StatusCommand, Domain::ObsStatusCommand
+        when Domain::StatusCommand
+          format_combined_status(result)
+        when Domain::ObsStatusCommand
           format_obs_status(result)
         when Domain::ServerStatusCommand
           format_server_status(result)
         else
           result["message"]?.try(&.as_s?) || "ok"
         end
+      end
+
+      private def format_combined_status(result : JSON::Any) : String
+        server = result["server"]?
+        obs = result["obs"]?
+        return format_obs_status(result) unless server && obs
+
+        [
+          "server:",
+          indent(format_server_status(server)),
+          "obs:",
+          indent(format_obs_status(obs)),
+        ].join('\n')
       end
 
       private def format_obs_status(result : JSON::Any) : String
@@ -123,6 +138,10 @@ module Obsctl
         lines.join('\n')
       end
 
+      private def indent(text : String) : String
+        text.lines.map { |line| "  #{line}" }.join('\n')
+      end
+
       private def format_server_status(result : JSON::Any) : String
         lines = [] of String
         lines << "pid: #{result["pid"]?.try(&.as_i?) || "-"}"
@@ -131,8 +150,15 @@ module Obsctl
         lines << "client_count: #{result["client_count"]?.try(&.as_i?) || 0}"
         lines << "obs_connected: #{result["obs_connected"]?.try(&.as_bool?) || false}"
         lines << "reconnecting: #{result["reconnecting"]?.try(&.as_bool?) || false}"
+        lines << "last_connected_at: #{timestamp_text(result["last_connected_at"]?)}"
+        lines << "last_disconnected_at: #{timestamp_text(result["last_disconnected_at"]?)}"
+        lines << "last_reconnect_attempt_at: #{timestamp_text(result["last_reconnect_attempt_at"]?)}"
         lines << "last_error: #{result["last_error"]?.try(&.as_s?) || "-"}"
         lines.join('\n')
+      end
+
+      private def timestamp_text(value : JSON::Any?) : String
+        value.try(&.as_s?) || "-"
       end
 
       private def raise_remote_error(error : IPC::ErrorPayload) : NoReturn

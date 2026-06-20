@@ -8,7 +8,7 @@ require "../../../src/obsctl/ipc/protocol"
 private GOLDEN_IPC_FIXTURE_ROOT = File.expand_path("../../fixtures/contracts", __DIR__)
 
 private GOLDEN_IPC_CASES = [
-  {name: "status", line: "/status", fixture: "ipc/status_request.json", command_name: "get_obs_status", target: nil, percent: nil},
+  {name: "status", line: "/status", fixture: "ipc/status_request.json", command_name: "status", target: nil, percent: nil},
   {name: "server-status", line: "/server-status", fixture: "ipc/server_status_request.json", command_name: "get_server_status", target: nil, percent: nil},
   {name: "obs-status", line: "/obs-status", fixture: "ipc/obs_status_request.json", command_name: "get_obs_status", target: nil, percent: nil},
   {name: "scene", line: "/scene main", fixture: "ipc/scene_request.json", command_name: "set_scene", target: "main", percent: nil},
@@ -87,21 +87,6 @@ describe "golden IPC proxy contracts" do
   end
 
   it "matches obsctl-rs IPC golden fixtures when the sibling repository is present" do
-    unless Obsctl::SpecSupport::OptionalObsctlRsCompat.sibling_present?
-      true.should be_true
-      next
-    end
-
-    compat_root = Obsctl::SpecSupport::OptionalObsctlRsCompat.fixture_root
-    unless compat_root
-      true.should be_true
-      next
-    end
-
-    Obsctl::SpecSupport::OptionalObsctlRsCompat.local_fixture_paths(GOLDEN_IPC_FIXTURE_ROOT).each do |path|
-      next unless path.starts_with?("ipc/")
-
-      File.read(File.join(compat_root, path)).strip.should eq(File.read(File.join(GOLDEN_IPC_FIXTURE_ROOT, path)).strip)
-    end
+    Obsctl::SpecSupport::OptionalObsctlRsCompat.assert_compatible!(GOLDEN_IPC_FIXTURE_ROOT, "ipc/")
   end
 end

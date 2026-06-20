@@ -48,7 +48,9 @@ module Obsctl
           object({"message" => "pong"})
         when "get_server_status"
           server_status
-        when "get_obs_status", "get_snapshot", "status"
+        when "status"
+          combined_status
+        when "get_obs_status", "get_snapshot"
           @state.snapshot_json
         when "validate_config"
           Config::ConfigLoader.new.load(@config_path)
@@ -113,16 +115,35 @@ module Obsctl
       end
 
       private def server_status : JSON::Any
+        server_status_for(@state.snapshot)
+      end
+
+      private def combined_status : JSON::Any
         snapshot = @state.snapshot
         object({
-          "pid"            => Process.pid,
-          "uptime_seconds" => (Time.utc - @started_at).total_seconds.to_i64,
-          "socket_path"    => @socket_path,
-          "client_count"   => @client_count.try(&.call) || 0,
-          "obs_connected"  => snapshot.connected,
-          "reconnecting"   => !snapshot.connected && @config.reconnect.enabled,
-          "last_error"     => snapshot.last_error,
+          "server" => server_status_for(snapshot),
+          "obs"    => StateStore.snapshot_to_json(snapshot),
         })
+      end
+
+      private def server_status_for(snapshot : OBS::State::ObsSnapshot) : JSON::Any
+        telemetry = @state.telemetry
+        object({
+          "pid"                       => Process.pid,
+          "uptime_seconds"            => (Time.utc - @started_at).total_seconds.to_i64,
+          "socket_path"               => @socket_path,
+          "client_count"              => @client_count.try(&.call) || 0,
+          "obs_connected"             => snapshot.connected,
+          "reconnecting"              => telemetry.reconnecting,
+          "last_connected_at"         => timestamp(telemetry.last_connected_at),
+          "last_disconnected_at"      => timestamp(telemetry.last_disconnected_at),
+          "last_reconnect_attempt_at" => timestamp(telemetry.last_reconnect_attempt_at),
+          "last_error"                => snapshot.last_error,
+        })
+      end
+
+      private def timestamp(value : Time?) : String?
+        value.try(&.to_rfc3339)
       end
 
       private def required_target(command : IPC::CommandPayload) : String

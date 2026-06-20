@@ -47,6 +47,22 @@ describe Obsctl::IPC::Codec do
     decoded.result.not_nil!["message"].as_s.should eq("pong")
   end
 
+  it "encodes and decodes combined status response payloads" do
+    response = Obsctl::IPC::Response.new(
+      "req-status",
+      true,
+      JSON.parse(%({"server":{"pid":123,"obs_connected":true},"obs":{"connected":true,"current_scene":"Main Camera"}}))
+    )
+
+    decoded = codec.decode(codec.encode(response)).as(Obsctl::IPC::Response)
+
+    decoded.ok.should be_true
+    decoded.result.not_nil!["server"]["pid"].as_i.should eq(123)
+    decoded.result.not_nil!["server"]["obs_connected"].as_bool.should be_true
+    decoded.result.not_nil!["obs"]["connected"].as_bool.should be_true
+    decoded.result.not_nil!["obs"]["current_scene"].as_s.should eq("Main Camera")
+  end
+
   it "encodes and decodes error responses" do
     response = Obsctl::IPC::Response.new(
       "req-000004",

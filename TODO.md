@@ -62,7 +62,7 @@ CLI client mode:
 - `obsctl server`: starts foreground server, useful for debugging.
 - `obsctl server --headless`: starts foreground headless server for systemd service execution.
 - `obsctl server --daemon`: optional later; prefer systemd user services.
-- `obsctl status`: sends status request to local server.
+- `obsctl status`: sends a combined daemon-and-OBS status request to the local server.
 - `obsctl obs-status`: sends OBS status request to local server.
 - `obsctl server-status`: checks only the local obsctl server, not OBS.
 - `obsctl reconnect`: asks the server to reconnect its OBS WebSocket session.
@@ -421,9 +421,9 @@ Implemented:
   - `obsctl toggle-mute <target>`
   - `obsctl volume <target> <0-100>`
   - `obsctl vol <target> <0-100>`
-  - `obsctl status`
-  - `obsctl obs-status`
-  - `obsctl server-status`
+  - `obsctl status` (combined daemon plus OBS)
+  - `obsctl obs-status` (OBS-only)
+  - `obsctl server-status` (daemon-only)
   - `obsctl reconnect`
   - `obsctl shutdown-server` (guarded by `server.allow_remote_shutdown`)
   - `--json` envelope output for scriptable commands
@@ -543,6 +543,7 @@ Implemented:
   - configured `server.socket_path` is honored by server, CLI clients, and TUI clients
 - CLI IPC proxying:
   - non-interactive `status`, `obs-status`, `server-status`, `reconnect`, `shutdown-server`, `scene`, `mute`, `unmute`, `toggle-mute`, `vol`/`volume`, `dump-config`, and `reload-config` commands send typed IPC requests
+  - `status` returns a combined daemon-and-OBS payload, while `obs-status` is OBS-only and `server-status` is daemon-only
   - JSON envelope output for scriptable commands uses stable `ok`, `result`, `error`, and `exit_code` keys
   - JSON failures carry canonical IPC error objects and return the same exit code reported in the envelope
   - CLI no longer creates an OBS WebSocket client for normal scriptable OBS-control commands
@@ -650,13 +651,15 @@ Implemented:
   - foreground/headless runtime exists
   - OBS supervisor owns the OBS WebSocket client
   - IPC command executor can control scene/audio and dump/reload config
+  - IPC command executor returns distinct combined, OBS-only, and daemon-only status payloads
   - IPC command executor validates config, handles explicit OBS reconnect requests, and rejects shutdown unless `server.allow_remote_shutdown` is enabled
   - reconnect loop detects established OBS WebSocket disconnects, marks state disconnected, clears the stale client, and retries when reconnect is enabled
   - protocol-error client closes are observed by the supervisor; stale OBS clients are dropped, OBS is marked disconnected, IPC stays available, and reconnect resumes when enabled
   - subscription handling maintains a client registry and broadcasts state, OBS event, and log topic updates
 - CLI:
   - non-interactive OBS control commands are thin IPC clients
-  - `server-status` exists with PID, uptime, socket path, connected state, reconnecting state, last error, and subscribed client count
+  - `status` is the combined daemon-and-OBS status command
+  - `server-status` exists with PID, uptime, socket path, connected state, explicit reconnecting state, reconnect timestamps, last error, and subscribed client count
   - `obs-status`, `reconnect`, and guarded `shutdown-server` are thin IPC client commands
 - TUI:
   - currently a simple ANSI dashboard with raw key input and a command palette state machine
@@ -703,8 +706,6 @@ Implemented:
 - Full termisu integration.
 - Replace ANSI redraw backend with termisu after dependency integration is accepted.
 - Low-level client reconnect loop independent of TUI session.
-- Honest reconnect status timestamps such as `last_connected_at` and
-  `last_reconnect_attempt_at`.
 - Studio mode support.
 - Stream/record controls and status.
 - Scene item visibility controls.
@@ -785,8 +786,8 @@ Done:
 - `obsctl toggle-mute`
 - `obsctl volume`
 - `obsctl vol`
-- `obsctl status`
-- `obsctl obs-status`
+- `obsctl status` returns combined daemon and OBS status
+- `obsctl obs-status` returns OBS-only status
 - `obsctl reconnect`
 - guarded `obsctl shutdown-server`
 - CLI command execution through local server IPC
@@ -898,7 +899,7 @@ Done:
 - non-interactive CLI command proxying through local IPC
 - missing-server CLI exit behavior and startup/service instructions
 - `server-status` command path
-- full `server-status` payload and CLI formatting for PID, uptime, socket path, subscribed client count, OBS connection state, reconnecting state, and last error
+- full `server-status` payload and CLI formatting for PID, uptime, socket path, subscribed client count, OBS connection state, explicit reconnecting state, reconnect timestamps, and last error
 - persistent client registry and state broadcast fanout for subscriptions
 - TUI IPC session client with subscription acknowledgement, initial state handling, command forwarding, and server-pushed state updates
 - event/log topic broadcast fanout for server-side OBS events and command failures
@@ -936,10 +937,7 @@ Remaining:
 
 ## Planned Next
 
-1. Make server reconnect status more explicit by tracking
-   `last_connected_at`, `last_reconnect_attempt_at`, and any direct
-   reconnecting state needed by `server-status`.
-2. Return to demo config, packaging polish, and optional `termisu` backend
-   evaluation after the remaining reconnect-status polish is complete.
-3. Continue feature expansion only after the daemon/IPC contract remains stable
+1. Return to demo config, packaging polish, and optional `termisu` backend
+   evaluation now that the status/reconnect observability work is complete.
+2. Continue feature expansion only after the daemon/IPC contract remains stable
    through the full Crystal gates.
