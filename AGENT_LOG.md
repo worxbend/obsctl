@@ -935,3 +935,132 @@ M  spec/support/optional_obsctl_rs_compat.cr
 M  src/obsctl/server/command_executor.cr
 M  src/obsctl/server/obs_supervisor.cr
 M  src/obsctl/server/state_store.cr
+2026-06-20T12:21:03Z iteration 6 started remaining=10959s
+2026-06-20T12:21:03Z iteration 6 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-20T12:21:03Z iteration 6 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-zsb8g7_c/repo copied_entries=178
+2026-06-20T12:21:03Z iteration 6 ideator phase started count=3
+2026-06-20T12:21:03Z iteration 6 ideator phase concurrency workers=3
+2026-06-20T12:21:03Z iteration 6 ideator 1 role="the pragmatist" started
+2026-06-20T12:21:03Z iteration 6 ideator 2 role="the architect" started
+2026-06-20T12:21:03Z iteration 6 ideator 3 role="the contrarian" started
+2026-06-20T12:21:12Z iteration 6 ideator 2 role="the architect" completed status=0
+2026-06-20T12:21:13Z iteration 6 ideator 1 role="the pragmatist" completed status=0
+2026-06-20T12:21:49Z iteration 6 ideator 3 role="the contrarian" completed status=0
+2026-06-20T12:21:49Z iteration 6 ideator phase completed approaches=3
+2026-06-20T12:21:49Z iteration 6 selector started approaches=3
+2026-06-20T12:21:59Z iteration 6 selector completed status=0
+2026-06-20T12:21:59Z iteration 6 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-zsb8g7_c/repo
+2026-06-20T12:21:59Z iteration 6 selector rejected alternative role="the architect" approach="Stabilize the reconnect control plane before adding product breadth: treat supervisor lifecycle, explicit reconnect behavior, and CI signal ownership as one operational reliabil..." reason="Strong direction, but selected as part of a hybrid because it under-emphasizes deterministic test proof compared with the other approaches."
+2026-06-20T12:21:59Z iteration 6 selector rejected alternative role="the pragmatist" approach="Stabilize the operator contract before expanding features: prioritize making reconnect behavior, strict compatibility CI, and flaky integration signals boring and explicit befor..." reason="Strong direction, but selected as part of a hybrid because it frames the work slightly more tactically than strategically."
+2026-06-20T12:21:59Z iteration 6 selector rejected alternative role="the contrarian" approach="Stabilize the contract perimeter before adding product surface: treat the current daemon, IPC, CLI envelopes, reconnect semantics, and compatibility fixtures as the product boun..." reason="Strong direction, but not selected as-is because its contract-freezing emphasis could make the Planner too conservative about behavior that still needs deliberate design decisions."
+2026-06-20T12:21:59Z iteration 6 selector alternatives persisted count=3
+2026-06-20T12:21:59Z iteration 6 selector structured alternatives persisted count=3
+2026-06-20T12:21:59Z iteration 6 planner started
+2026-06-20T12:22:53Z iteration 6 plan: 5 task(s) in 4 phase(s). This slice stabilizes operational trust before product expansion. CI scoping and fake-server probe support can proceed in parallel because they touch disjoint files. The supervisor behavior change is serialized because integration specs and docs depend on the final reconnect contract. Documentation and tracker updates come last so they reflect the implemented behavior and observed validation.
+2026-06-20T12:22:53Z iteration 6 phase 1 started parallel=True tasks=2
+2026-06-20T12:23:51Z iteration 6 task t1 ('Make obsctl-rs compatibility workflow opt-in') status=0
+2026-06-20T12:26:03Z iteration 6 task t2 ('Add deterministic fake OBS probe helpers') status=0
+2026-06-20T12:26:03Z iteration 6 phase 2 started parallel=False tasks=1
+2026-06-20T12:29:56Z iteration 6 task t3 ('Make supervisor lifecycle and reconnect wake explicit') status=0
+2026-06-20T12:29:56Z iteration 6 phase 3 started parallel=False tasks=1
+2026-06-20T12:31:42Z iteration 6 task t4 ('Cover wakeable reconnect in server integration specs') status=0
+2026-06-20T12:31:42Z iteration 6 phase 4 started parallel=False tasks=1
+
+## 2026-06-20 Iteration 6 docs and validation refresh
+
+- Documented strict `obsctl-rs` fixture compatibility as an explicit
+  manual/scheduled signal until the Rust repository has compatible fixtures; the
+  default Crystal gate remains single-repo and deterministic.
+- Documented the explicit reconnect contract: stopped supervisors return
+  `OBS_UNAVAILABLE` with
+  `OBS supervisor is not running; restart the server or enable reconnect.`,
+  while live supervisors accept reconnect and wake retry backoff promptly.
+- Refreshed `TODO.md` current-status bullets and Planned Next for the explicit
+  lifecycle state, wakeable reconnect behavior, deterministic fake OBS probes,
+  opt-in compatibility workflow, and remaining Rust fixture coordination.
+- Validation:
+  - `make format` passed.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` passed with 244
+    examples, 0 failures.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build` passed.
+  - `make lint` exited 0 with the existing skip message:
+    `ameba not installed; run shards install`.
+- Remaining gap: strict `make contract-rs-compat` still needs a prepared
+  dual-repo workspace with compatible `obsctl-rs` contract fixtures before it
+  can become a required signal.
+2026-06-20T12:34:26Z iteration 6 task t5 ('Refresh docs, trackers, and validation notes') status=0
+2026-06-20T12:34:26Z iteration 6 reviewer started
+
+## 2026-06-20 Fresh reviewer audit: iteration 6 reconnect control
+
+- Iteration reviewed:
+  - opt-in/manual/scheduled `obsctl-rs` compatibility workflow
+  - `ObsSupervisor` lifecycle state, double-start guard, stop behavior, and
+    reconnect wake channel
+  - fake OBS server deterministic probes for connection, Identify, request,
+    close, and no-attempt assertions
+  - focused supervisor specs and server integration coverage for wakeable
+    reconnect while retry backoff is sleeping
+  - README, command docs, protocol docs, `TODO.md`, and validation notes
+- What was done correctly:
+  - Strict `obsctl-rs` compatibility is no longer an always-on push/PR gate;
+    the workflow is manual plus scheduled and can select the Rust repository
+    owner, name, and ref.
+  - `ObsSupervisor#start` marks the supervisor alive synchronously and ignores
+    accidental double starts while the supervisor is alive.
+  - `obsctl reconnect` now wakes retry backoff when the supervisor is alive and
+    OBS becomes available before the configured retry delay expires.
+  - The new integration spec proves an IPC `reconnect_obs` request wakes a long
+    retry backoff, receives an OBS Identify promptly, and restores combined
+    status to connected.
+  - The fake OBS probe APIs are a clear improvement over fixed sleeps for
+    Identify, close, request, and no-attempt assertions.
+  - Validation run during review passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr spec/obsctl/server/server_spec.cr`
+    with 21 examples, and
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` with 244 examples.
+- What was found:
+  - No blocking default-gate regression was found.
+  - `ObsSupervisor` stop/start reuse is not generation-safe. `stop` increments
+    the generation and sets global state to `Stopped`, but an immediate `start`
+    can set the same global state back to `Starting`/`Running` before the old
+    fiber exits. The old fiber's `stopped?` check is not generation-scoped, so
+    it can continue and race the new fiber.
+  - The reconnect wake channel can retain stale wake tokens. A wake sent while
+    no backoff wait is active can make a later retry delay return immediately,
+    which weakens retry-delay semantics.
+  - The fake server's `connection_attempt_count` counts accepted WebSocket
+    connections, not failed TCP connection attempts. The probe names are useful
+    but should be interpreted carefully.
+  - Scheduled strict compatibility runs will continue to fail until
+    `obsctl-rs` has a recognized fixture root with matching `cli/` and `ipc`
+    fixtures.
+- Top improvement proposals:
+  - Make supervisor lifecycle checks generation-scoped and add a stop-then-start
+    spec proving only one supervisor loop can own OBS.
+  - Recreate or drain the reconnect wake channel per supervisor generation, and
+    prove stale wake tokens cannot skip unrelated retry delays.
+  - Add a deterministic unavailable-then-bind helper to remove remaining
+    `unused_tcp_port` races from reconnect specs.
+  - Add or coordinate Rust-side contract fixtures, then run
+    `make contract-rs-compat` in a prepared dual-repo workspace before promoting
+    compatibility to a required signal.
+2026-06-20T12:38:17Z iteration 6 reviewer completed status=0
+2026-06-20T12:38:17Z iteration 6 memory updated
+2026-06-20T12:38:17Z iteration 6 completed validation_status=0
+2026-06-20T12:38:17Z iteration 6 checkpoint started
+2026-06-20T12:38:17Z iteration 6 checkpoint status before commit:
+M  .github/workflows/obsctl-rs-compat.yml
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  README.md
+M  SCORES.jsonl
+M  TODO.md
+M  docs/commands.md
+M  docs/protocol.md
+M  spec/obsctl/server/obs_supervisor_spec.cr
+M  spec/obsctl/server/server_spec.cr
+M  spec/support/fake_obs_server.cr
+M  src/obsctl/server/obs_supervisor.cr

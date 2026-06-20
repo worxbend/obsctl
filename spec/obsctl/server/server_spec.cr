@@ -132,6 +132,91 @@ describe Obsctl::Server::Server do
     File.delete(path) if path && File.exists?(path)
   end
 
+  it "wakes retry backoff when explicit reconnect is requested over IPC" do
+    obs = nil.as(Obsctl::SpecSupport::FakeObsServer?)
+    path = temp_socket_path
+    obs_port = unused_tcp_port
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: obs_port,
+        password_env: "",
+        connect_timeout_ms: 100,
+        request_timeout_ms: 100
+      ),
+      reconnect: Obsctl::Config::ReconnectConfig.new(
+        enabled: true,
+        endless: true,
+        initial_delay_ms: 30_000,
+        max_delay_ms: 30_000,
+        multiplier: 1.0,
+        jitter_ms: 0
+      )
+    )
+    server = Obsctl::Server::Server.new(config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    wait_for_socket(path)
+
+    client = Obsctl::IPC::UnixClient.new(path)
+    reconnecting = wait_for_server_status(client) do |data|
+      data["reconnecting"].as_bool && !data["last_connection_failed_at"].raw.nil?
+    end
+    reconnecting["obs_connected"].as_bool.should be_false
+    reconnecting["last_connected_at"].raw.should be_nil
+    reconnecting["last_disconnected_at"].raw.should be_nil
+    parse_rfc3339(reconnecting["last_reconnect_attempt_at"])
+    parse_rfc3339(reconnecting["last_connection_failed_at"])
+    reconnecting["last_error"].as_s.should_not contain("OBS reconnect requested")
+
+    obs = Obsctl::SpecSupport::FakeObsServer.new(port: obs_port).start
+    obs.assert_no_identify_or_connection_attempt(150.milliseconds)
+
+    reconnect = client.request(
+      Obsctl::IPC::Request.new(
+        "req-wake-reconnect-backoff",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("reconnect_obs")
+      )
+    )
+    reconnect.ok.should be_true
+
+    identify = obs.next_identify_received(1.second) || raise "explicit reconnect did not wake OBS Identify promptly"
+    identify["eventSubscriptions"].as_i.should eq(Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT)
+
+    connected = wait_for_server_status(client) do |data|
+      data["obs_connected"].as_bool && !data["reconnecting"].as_bool
+    end
+    connected["last_error"].raw.should be_nil
+    parse_rfc3339(connected["last_connected_at"])
+    parse_rfc3339(connected["last_reconnect_attempt_at"])
+    parse_rfc3339(connected["last_connection_failed_at"])
+
+    status = client.request(
+      Obsctl::IPC::Request.new(
+        "req-wake-reconnect-combined-status",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("status")
+      )
+    )
+    status.ok.should be_true
+    status.result.not_nil!["server"]["obs_connected"].as_bool.should be_true
+    status.result.not_nil!["server"]["reconnecting"].as_bool.should be_false
+    status.result.not_nil!["server"]["last_error"].raw.should be_nil
+    status.result.not_nil!["obs"]["connected"].as_bool.should be_true
+    status.result.not_nil!["obs"]["last_error"].raw.should be_nil
+  ensure
+    obs.try(&.stop)
+    server.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
   it "reports daemon status fields through IPC" do
     path = temp_socket_path
     config = Obsctl::Config::Config.new(

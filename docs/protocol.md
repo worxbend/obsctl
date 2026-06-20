@@ -75,7 +75,9 @@ Explicit `reconnect_obs` requests return success only when the supervisor loop
 is alive and can perform a reconnect attempt. In that case, `last_error` is set
 to `OBS reconnect requested`; the clean close caused by that intentional drop
 does not overwrite the message, and the next connection success or failure
-becomes the next public outcome.
+becomes the next public outcome. If the alive supervisor is sleeping in
+reconnect backoff, the request wakes that delay so the next OBS connection
+attempt starts promptly rather than waiting for the configured retry interval.
 
 ```json
 {"id":"req-000005","type":"response","ok":true,"result":{"message":"OBS reconnect requested"}}
@@ -153,6 +155,14 @@ OBS request is made.
 dual-repo compatibility check is explicitly enabled. The default `make test`
 gate does not require a sibling checkout and skips optional cross-repo
 compatibility unless `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1` is set.
+
+The GitHub Actions strict compatibility workflow follows the same boundary: it
+is a manual or scheduled signal, not an always-on push/pull-request gate while
+the Rust repository lacks compatible fixtures. The workflow checks out this
+repository as `obsctl`, checks out the selected Rust repository as `obsctl-rs`,
+installs Crystal, and runs `make contract-rs-compat` from the Crystal checkout.
+The Rust owner, repository name, and ref can come from workflow inputs or
+repository variables.
 
 Both repositories should expose the same shared fixture layout under one of
 these recognized roots:

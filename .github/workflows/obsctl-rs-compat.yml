@@ -1,22 +1,49 @@
 name: obsctl-rs fixture compatibility
 
 on:
-  pull_request:
-  push:
+  workflow_dispatch:
+    inputs:
+      obsctl_rs_owner:
+        description: GitHub owner for the obsctl-rs repository
+        required: false
+        default: w0rxbend
+      obsctl_rs_repository:
+        description: GitHub repository name for obsctl-rs
+        required: false
+        default: obsctl-rs
+      obsctl_rs_ref:
+        description: Optional branch, tag, or SHA to check out
+        required: false
+        default: ""
+  schedule:
+    - cron: "17 4 * * 6"
 
 jobs:
   compatibility:
     runs-on: ubuntu-latest
+    env:
+      OBSCTL_RS_OWNER: ${{ github.event.inputs.obsctl_rs_owner || vars.OBSCTL_RS_OWNER || 'w0rxbend' }}
+      OBSCTL_RS_REPOSITORY: ${{ github.event.inputs.obsctl_rs_repository || vars.OBSCTL_RS_REPOSITORY || 'obsctl-rs' }}
+      OBSCTL_RS_REF: ${{ github.event.inputs.obsctl_rs_ref || vars.OBSCTL_RS_REF || '' }}
     steps:
       - name: Check out obsctl
         uses: actions/checkout@v4
         with:
           path: obsctl
 
-      - name: Check out obsctl-rs
+      - name: Check out obsctl-rs default ref
+        if: ${{ env.OBSCTL_RS_REF == '' }}
         uses: actions/checkout@v4
         with:
-          repository: w0rxbend/obsctl-rs
+          repository: ${{ env.OBSCTL_RS_OWNER }}/${{ env.OBSCTL_RS_REPOSITORY }}
+          path: obsctl-rs
+
+      - name: Check out obsctl-rs selected ref
+        if: ${{ env.OBSCTL_RS_REF != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.OBSCTL_RS_OWNER }}/${{ env.OBSCTL_RS_REPOSITORY }}
+          ref: ${{ env.OBSCTL_RS_REF }}
           path: obsctl-rs
 
       - name: Install Crystal

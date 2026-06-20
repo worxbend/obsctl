@@ -134,7 +134,10 @@ when the supervisor last started an OBS connection attempt.
 `obsctl reconnect` asks the running server supervisor to drop any active OBS
 client and attempt a new connection. When the supervisor is alive, the command
 returns success and the public `last_error` stays `OBS reconnect requested`
-until the next OBS connection success or failure outcome:
+until the next OBS connection success or failure outcome. If the supervisor is
+alive but sleeping between retry attempts, the reconnect request wakes that
+backoff so the next OBS connection attempt starts promptly instead of waiting
+for the configured delay:
 
 ```json
 {"ok":true,"result":{"message":"OBS reconnect requested"},"error":null,"exit_code":0}

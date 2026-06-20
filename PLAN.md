@@ -1,10 +1,9 @@
 # obsctl Improvement Plan
 
-This plan reflects the fresh reviewer pass on the June 20, 2026 iteration 5
-truthful-reconnect work. The default Crystal gate is green in the current
-workspace, explicit reconnect no longer reports success after the supervisor
-has exited, and reconnect timestamp semantics are now documented and covered by
-focused specs.
+This plan reflects the fresh reviewer pass on the June 20, 2026 iteration 6
+reconnect-control and compatibility-CI work. The default Crystal gate is green,
+strict `obsctl-rs` compatibility is no longer an always-on push/PR gate, and
+explicit reconnect now wakes retry backoff when the supervisor is alive.
 
 ## Current Assessment
 
@@ -22,75 +21,91 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
 
 Completed in the latest implementation iteration:
 
-- `obsctl reconnect` now checks supervisor liveness before reporting success.
-  If the supervisor loop has exited, the server returns `OBS_UNAVAILABLE` with
-  the public message
-  `OBS supervisor is not running; restart the server or enable reconnect.`
-- `ObsSupervisor` exposes `alive?` lifecycle state and returns a boolean from
-  `reconnect`, allowing `CommandExecutor` to distinguish a real reconnect
-  request from a stopped-supervisor no-op.
-- Integration coverage now proves the reconnect-disabled startup-failure case:
-  OBS unavailable at startup, `reconnect.enabled: false`, supervisor exits, OBS
-  later appears, and `reconnect_obs` fails without sending an OBS Identify.
-- Focused `StateStore` specs freeze reconnect timestamp semantics:
-  `last_disconnected_at` records connected-to-disconnected transitions;
-  `last_connection_failed_at` records the most recent failed connection attempt
-  and persists across later successful connections.
-- CLI unit specs now assert all reconnect timestamp fields for combined status,
-  daemon-only status, human output, and JSON envelopes, while remaining tolerant
-  of older daemon payloads missing `last_connection_failed_at`.
-- Strict `obsctl-rs` compatibility diagnostics now print the selected sibling
-  repository and fixture root, and missing-root errors explain the expected
-  `cli/` and `ipc/` fixture layout.
+- `.github/workflows/obsctl-rs-compat.yml` now runs through manual
+  `workflow_dispatch` and a scheduled cadence instead of push/pull-request
+  triggers. The Rust repository owner, name, and ref are configurable through
+  workflow inputs or repository variables.
+- `ObsSupervisor#start` now marks the supervisor alive synchronously with an
+  explicit lifecycle state, ignores double `start` calls while alive, and
+  `stop` marks the supervisor stopped before closing the active client.
+- `obsctl reconnect` still rejects stopped supervisors with `OBS_UNAVAILABLE`,
+  but live supervisors now wake retry backoff promptly when OBS is unavailable.
+- The fake OBS server now exposes deterministic probes for accepted WebSocket
+  connections, Identify frames, OBS request types, close notifications, and
+  no-attempt windows.
+- Server integration coverage proves the wakeable reconnect path: OBS is
+  unavailable, reconnect is enabled with a long backoff, OBS appears, an IPC
+  `reconnect_obs` request wakes the loop, Identify is sent promptly, and
+  combined status reports the reconnected state.
 - README, command docs, protocol docs, and `TODO.md` were refreshed for the
-  reconnect liveness and timestamp contract.
+  opt-in strict compatibility workflow and wakeable reconnect contract.
 
 Validation observed during review:
 
 - Focused touched specs passed:
-  `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec ...`
-  with 72 examples.
+  `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr spec/obsctl/server/server_spec.cr`
+  with 21 examples.
 - Default validation passed:
   `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`
-  with 240 examples.
-- Strict compatibility intentionally failed in this workspace because
-  `/home/worxbend/Worxpace/obsctl-rs` has no recognized contract fixture root.
-  The failure is now actionable and lists the expected roots and fixture layout.
+  with 244 examples.
+- The implementation log reports `make format`, `make build`, and `make lint`
+  passing; `make lint` still uses the existing Ameba-not-installed skip path.
+- Strict `make contract-rs-compat` still requires a prepared dual-repo
+  workspace with compatible `obsctl-rs` fixtures before it can become a
+  required signal.
 
 Reviewer findings:
 
 - No blocking default-gate regression was found.
-- The reconnect-disabled false-success bug is fixed for the exited-supervisor
-  path.
-- `last_connection_failed_at` is now a historical "most recent failed attempt"
-  field by contract; successful connections intentionally do not clear it.
-- `ObsSupervisor#alive?` is useful but still a coarse lifecycle signal. There is
-  a small startup/stop race window because `alive?` is set by the spawned fiber,
-  not synchronously by `start`.
-- A reconnect request while the supervisor is alive but sleeping between retry
-  attempts records `"OBS reconnect requested"` but does not wake the retry loop
-  immediately. That is truthful enough for "the supervisor can act eventually,"
-  but it is not yet an operator-friendly "attempt now" command.
-- The strict `obsctl-rs` GitHub workflow remains always-on. It will be red until
-  the Rust repository has compatible fixtures, even though the local strict
-  failure message is now clear.
-- Reconnect and server integration specs still use polling loops, sleeps, and an
-  `unused_tcp_port` helper. They pass, but deterministic fake-server probes
-  would reduce flake risk around absence/presence of connection attempts.
+- The reconnect-disabled false-success path remains fixed, and reconnect while
+  alive in retry backoff now attempts OBS promptly instead of waiting out the
+  configured delay.
+- The new fake OBS probes are useful and reduce several sleep-heavy assertions,
+  but they currently count accepted WebSocket connections rather than failed TCP
+  connection attempts; absence assertions should be interpreted accordingly.
+- `ObsSupervisor` lifecycle state is clearer than before, but stop-then-start
+  reuse is not generation-safe. After `stop` sets the global state to
+  `Stopped`, a quick `start` can set it back to `Starting`/`Running` before the
+  old fiber exits. The old fiber's `stopped?` check is not generation-scoped, so
+  it can continue and race the new fiber.
+- Wake signals are buffered on a single channel shared across the supervisor
+  lifetime. A wake emitted while no delay is waiting can become stale and make a
+  later backoff return immediately. This is probably harmless for the current
+  server lifecycle, but it weakens the exact retry-delay contract.
+- Reconnect monitoring still uses polling inside `wait_for_disconnect`
+  (`sleep 250.milliseconds`), so reconnect after dropping an active client is
+  prompt but not fully event-driven.
+- The strict compatibility workflow is now scoped correctly for this repository,
+  but scheduled runs will continue to fail until `obsctl-rs` publishes a
+  recognized fixture root with matching `cli/` and `ipc/` counterparts.
 
-## P0: Make Strict Compatibility CI Actionable
+## P0: Make Supervisor Lifecycle Generation-Safe
 
-1. Decide how the `obsctl-rs` compatibility workflow should run before it
-   becomes a required signal.
-   - If strict compatibility is required on every push/PR, add compatible
-     `cli/` and `ipc/` contract fixtures to `obsctl-rs` first.
-   - If the Rust repository is not ready, change the workflow to
-     `workflow_dispatch`, scheduled/manual, or a clearly named non-required job
-     until fixtures exist.
-   - Consider making the sibling repository configurable with a workflow input
-     or repository variable instead of hardcoding `w0rxbend/obsctl-rs`.
+1. Fix stop-then-start reuse or explicitly make supervisors single-use.
+   - Preferred: pass the lifecycle generation into the run loop and make
+     `stopped?` generation-aware, so an old fiber exits even if a newer
+     generation has already started.
+   - Clear any stale wake token when starting a new generation.
+   - Add coverage for `start`, `stop`, immediate `start`, and prove only one OBS
+     connection owner remains active.
 
-2. Add or coordinate the Rust-side shared fixture root.
+2. Separate wake reasons from lifecycle state.
+   - Replace the shared buffered `Channel(Nil)` with a small per-generation
+     signal object or a channel recreated on each `start`.
+   - Drain or invalidate stale wake tokens after reconnect requests that close
+     an active client but do not enter a backoff wait.
+   - Add a spec proving a stale wake does not skip the next scheduled retry
+     unless a new explicit reconnect was requested.
+
+3. Keep stopped-supervisor behavior as an explicit public error.
+   - Preserve `OBS_UNAVAILABLE` for exited supervisors unless a deliberate
+     one-shot reconnect feature is added.
+   - If one-shot reconnect is added later, expose it as a clear state
+     transition with tests proving a real OBS connection attempt starts.
+
+## P0: Finish Strict Compatibility Signal Ownership
+
+1. Add or coordinate the Rust-side shared fixture root.
    - Create one recognized root in `obsctl-rs`:
      `spec/fixtures/contracts/`, `tests/fixtures/contracts/`, or
      `fixtures/contracts/`.
@@ -98,59 +113,48 @@ Reviewer findings:
    - Run `make contract-rs-compat` in a prepared dual-repo workspace and treat
      content differences as real public-contract decisions.
 
-3. Keep strict compatibility separate from the default gate.
-   - The default suite must remain deterministic in single-repo and accidental
+2. Keep strict compatibility separate from the default gate until fixtures
+   exist.
+   - Default `make test` must stay deterministic in single-repo and accidental
      sibling-checkout workspaces.
    - Strict compatibility should fail loudly only in explicitly prepared
      dual-repo contexts.
+   - Once the Rust fixtures exist and pass, decide whether scheduled/manual is
+     enough or whether the workflow should become a required PR signal.
 
-## P0: Tighten Supervisor Lifecycle Semantics
-
-1. Make supervisor lifecycle state explicit enough to avoid edge races.
-   - Consider setting an intermediate `starting` or `running` state
-     synchronously in `start`, then transitioning to `stopped` in the fiber
-     ensure block.
-   - Guard against accidental double `start` calls or document that supervisors
-     are single-start objects.
-   - Add unit coverage for reconnect immediately after `start` and during
-     `stop`.
-
-2. Decide whether `obsctl reconnect` should wake the retry loop immediately.
-   - Current behavior reports success when the supervisor loop is alive, even if
-     it is sleeping before the next retry.
-   - A more operator-friendly command would interrupt the backoff sleep or send a
-     reconnect signal channel to the supervisor loop.
-   - Add coverage for `reconnect.enabled: true`, OBS unavailable, supervisor
-     alive in retry backoff, then explicit reconnect after OBS becomes
-     available.
-
-3. Keep stopped-supervisor behavior as an explicit public error.
-   - Preserve `OBS_UNAVAILABLE` for exited supervisors unless a deliberate
-     one-shot reconnect feature is added.
-   - If one-shot reconnect is added later, expose it as a clear state transition
-     with tests proving a real OBS connection attempt starts.
-
-## P1: Test Determinism And Main CI
+## P1: Reduce Reconnect Test Flake Surface
 
 1. Continue replacing polling/sleep-based reconnect specs.
-   - Extend the fake OBS server with deterministic probes for connection
-     attempt started, Identify received, close observed, reconnect attempt
-     completed, and no-attempt windows.
-   - Prefer channels over fixed `sleep 50.milliseconds` loops where practical.
-   - Avoid `unused_tcp_port` races by adding a fake-server or socket helper that
-     can reserve or intentionally delay binding more deterministically.
+   - Convert remaining reconnect tests from generic polling helpers to fake OBS
+     probes for Identify received, close observed, request received, and
+     no-attempt windows.
+   - Keep polling only for state-store changes that are inherently asynchronous
+     across IPC.
 
-2. Add main CI for the Crystal gates.
+2. Remove `unused_tcp_port` races from reconnect specs.
+   - Add a deterministic unavailable-then-bind helper that owns port selection
+     and delayed fake-server startup.
+   - Prefer helpers that reserve the intended port until the exact test moment
+     when OBS should become reachable.
+
+3. Make disconnect detection more event-driven.
+   - Replace or supplement the `wait_for_disconnect` polling sleep with a close
+     notification from `OBS::Client` when practical.
+   - Keep a fallback timeout path for defensive cleanup.
+
+## P1: Main CI And Validation Polish
+
+1. Add main CI for the Crystal gates.
    - `crystal tool format --check`
    - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec`
    - `crystal build src/obsctl.cr -o bin/obsctl`
    - `make lint` or Ameba when dependencies are installed
 
-3. Add a small lifecycle-focused spec layer.
-   - Cover `ObsSupervisor#alive?` around start, clean stop, startup failure,
-     reconnect-disabled exit, and retry-enabled backoff.
-   - Keep these specs mostly unit-level so integration tests do not carry all
-     lifecycle proof.
+2. Make lint meaningful in CI.
+   - Decide whether Ameba should be a development dependency.
+   - If yes, install it in CI and fail on lint issues.
+   - If no, keep the skip explicit and document that lint is currently a local
+     optional gate.
 
 ## P1: Config And Security
 
@@ -269,13 +273,11 @@ Add breadth only after the daemon/IPC contract remains stable.
 
 ## Suggested Next Pull Requests
 
-1. Make strict compatibility CI conditional/manual until `obsctl-rs` has the
-   expected fixture root, or add the Rust-side fixtures and keep the workflow
-   required.
-2. Add a reconnect wake/signal path so explicit reconnect interrupts retry
-   backoff, with coverage for retry-enabled OBS-unavailable startup.
-3. Replace the highest-risk reconnect polling specs with deterministic fake OBS
-   probes.
+1. Make `ObsSupervisor` generation-safe around stop/start and stale wake tokens.
+2. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
+   `make contract-rs-compat` in a prepared dual-repo workspace.
+3. Replace the remaining reconnect polling and `unused_tcp_port` helpers with
+   deterministic fake OBS probe and delayed-bind helpers.
 
 ## Build Gates
 
