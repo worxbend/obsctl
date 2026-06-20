@@ -12,5 +12,7 @@
 [anti-pattern] Optional cross-repo compatibility specs in the default suite can break local gates when a sibling checkout exists accidentally; strict dual-repo checks should be target-scoped or explicitly enabled.
 [learning] A GitHub Actions sibling-repo compatibility job must checkout both repositories; checking for `../repo` after a single checkout only proves the job will skip.
 [learning] Reconnect telemetry fields need precise transition semantics; `last_disconnected_at` should not be updated by connection attempts that never reached a connected state.
+[learning] A strict cross-repo compatibility workflow should not be required until the counterpart repo has the expected fixture roots, or CI will be truthfully but unhelpfully red.
+[learning] An explicit reconnect command must account for supervisor liveness; detaching an active client is insufficient when the reconnect loop has already exited.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
 [security] Never log or expose OBS passwords, generated authentication strings, tokens, or secret-like values in IPC errors, JSON envelopes, logs, specs, or TUI output.

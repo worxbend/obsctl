@@ -45,6 +45,14 @@ describe Obsctl::Server::Server do
 
     response.ok.should be_true
     response.result.not_nil!["connected"].as_bool.should be_false
+
+    status = wait_for_server_status(client) { |data| !data["last_connection_failed_at"].raw.nil? }
+    status["obs_connected"].as_bool.should be_false
+    status["last_connected_at"].raw.should be_nil
+    status["last_disconnected_at"].raw.should be_nil
+    parse_rfc3339(status["last_reconnect_attempt_at"])
+    parse_rfc3339(status["last_connection_failed_at"])
+    status["last_error"].as_s.should_not be_empty
   ensure
     server.try(&.stop)
     File.delete(path) if path && File.exists?(path)
@@ -92,6 +100,7 @@ describe Obsctl::Server::Server do
     status.as_h.has_key?("last_connected_at").should be_true
     status.as_h.has_key?("last_disconnected_at").should be_true
     status.as_h.has_key?("last_reconnect_attempt_at").should be_true
+    status.as_h.has_key?("last_connection_failed_at").should be_true
     status["last_connected_at"].raw.should be_nil
   ensure
     subscriber.try(&.close)
@@ -360,6 +369,15 @@ describe Obsctl::Server::Server do
     status["connected"].as_bool.should be_false
     status["last_error"].as_s.should contain("OBS WebSocket disconnected")
 
+    daemon_status = wait_for_server_status(client) do |data|
+      !data["last_disconnected_at"].raw.nil?
+    end
+    daemon_status["obs_connected"].as_bool.should be_false
+    parse_rfc3339(daemon_status["last_connected_at"])
+    parse_rfc3339(daemon_status["last_disconnected_at"])
+    daemon_status["last_connection_failed_at"].raw.should be_nil
+    daemon_status["last_error"].as_s.should contain("OBS WebSocket disconnected")
+
     log = read_log_until(logs, "obs_disconnected")
     log["message"].as_s.should contain("OBS WebSocket disconnected")
 
@@ -379,12 +397,19 @@ describe Obsctl::Server::Server do
     File.delete(path) if path && File.exists?(path)
   end
 
-  it "reports clean OBS closes from explicit reconnect requests" do
+  it "keeps reconnect requests as the public state until reconnect succeeds" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     base_config = obs.config
     config = Obsctl::Config::Config.new(
       connection: base_config.connection,
-      reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false),
+      reconnect: Obsctl::Config::ReconnectConfig.new(
+        enabled: true,
+        endless: true,
+        initial_delay_ms: 50,
+        max_delay_ms: 50,
+        multiplier: 1.0,
+        jitter_ms: 0
+      ),
       scenes: base_config.scenes,
       audio: base_config.audio
     )
@@ -414,26 +439,33 @@ describe Obsctl::Server::Server do
     response.ok.should be_true
     obs.next_close(2.seconds).should be_true
 
-    disconnected = read_state_error_until(state, "closed cleanly")
+    disconnected = read_state_error_until(state, "OBS reconnect requested")
     disconnected["connected"].as_bool.should be_false
-    disconnected["last_error"].as_s.should contain("closed cleanly")
+    disconnected["last_error"].as_s.should eq("OBS reconnect requested")
 
-    log = read_log_until(state, "obs_closed_cleanly")
-    log["message"].as_s.should contain("closed cleanly")
+    log = read_log_until(state, "obs_reconnect_requested")
+    log["message"].as_s.should eq("OBS reconnect requested")
+
+    obs.next_identify(3.seconds).should_not be_nil
+    reconnected = read_state_until_reconnected_without_clean_close(state)
+    reconnected["connected"].as_bool.should be_true
+    reconnected["last_error"].raw.should be_nil
 
     status = Obsctl::IPC::UnixClient.new(path).request(
       Obsctl::IPC::Request.new(
-        "req-server-status-clean-close",
+        "req-server-status-reconnect-success",
         Obsctl::IPC::Request::TYPE_COMMAND,
         Obsctl::IPC::CommandPayload.new("get_server_status")
       )
     )
     status.ok.should be_true
-    status.result.not_nil!["obs_connected"].as_bool.should be_false
+    status.result.not_nil!["obs_connected"].as_bool.should be_true
+    status.result.not_nil!["reconnecting"].as_bool.should be_false
     parse_rfc3339(status.result.not_nil!["last_connected_at"])
     parse_rfc3339(status.result.not_nil!["last_disconnected_at"])
     parse_rfc3339(status.result.not_nil!["last_reconnect_attempt_at"])
-    status.result.not_nil!["last_error"].as_s.should contain("closed cleanly")
+    status.result.not_nil!["last_connection_failed_at"].raw.should be_nil
+    status.result.not_nil!["last_error"].raw.should be_nil
   ensure
     state.try(&.close)
     server.try(&.stop)
@@ -490,6 +522,7 @@ describe Obsctl::Server::Server do
     parse_rfc3339(status.result.not_nil!["last_connected_at"])
     parse_rfc3339(status.result.not_nil!["last_disconnected_at"])
     parse_rfc3339(status.result.not_nil!["last_reconnect_attempt_at"])
+    status.result.not_nil!["last_connection_failed_at"].raw.should be_nil
     status.result.not_nil!["last_error"].as_s.should contain("malformed OBS frame")
   ensure
     state.try(&.close)
@@ -557,6 +590,7 @@ describe Obsctl::Server::Server do
     parse_rfc3339(status.result.not_nil!["last_connected_at"])
     parse_rfc3339(status.result.not_nil!["last_disconnected_at"])
     parse_rfc3339(status.result.not_nil!["last_reconnect_attempt_at"])
+    status.result.not_nil!["last_connection_failed_at"].raw.should be_nil
     status.result.not_nil!["last_error"].as_s.should contain("response parser error")
 
     scene_response = ipc.request(
@@ -769,6 +803,31 @@ private def wait_for_obs_disconnected(client : Obsctl::IPC::UnixClient) : JSON::
   wait_for_obs_status(client, connected: false)
 end
 
+private def wait_for_server_status(
+  client : Obsctl::IPC::UnixClient,
+  timeout : Time::Span = 3.seconds,
+  &block : JSON::Any -> Bool
+) : JSON::Any
+  deadline = Time.instant + timeout
+
+  loop do
+    remaining = deadline - Time.instant
+    raise "timed out waiting for matching server status" if remaining <= 0.seconds
+
+    response = client.request(
+      Obsctl::IPC::Request.new(
+        "req-server-status-wait",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("get_server_status")
+      )
+    )
+    response.ok.should be_true
+    status = response.result.not_nil!
+    return status if yield status
+    sleep(remaining < 50.milliseconds ? remaining : 50.milliseconds)
+  end
+end
+
 private def parse_rfc3339(value : JSON::Any) : Time
   Time.parse_rfc3339(value.as_s)
 end
@@ -829,6 +888,27 @@ private def read_state_error_until(session : Obsctl::IPC::ClientSession, error_t
 
     data = event.data.not_nil!
     return data if data["last_error"]?.try(&.as_s?).try(&.includes?(error_text))
+  end
+end
+
+private def read_state_until_reconnected_without_clean_close(
+  session : Obsctl::IPC::ClientSession,
+  timeout : Time::Span = 3.seconds,
+) : JSON::Any
+  deadline = Time.instant + timeout
+
+  loop do
+    remaining = deadline - Time.instant
+    raise "timed out waiting for reconnect success" if remaining <= 0.seconds
+
+    message = read_ipc_message(session, remaining)
+    next unless event = message.as?(Obsctl::IPC::Event)
+    next unless event.topic == "state"
+
+    data = event.data.not_nil!
+    error = data["last_error"]?.try(&.as_s?)
+    raise "reconnect close overwrote requested state: #{error}" if error.try(&.includes?("closed cleanly"))
+    return data if data["connected"].as_bool && error.nil?
   end
 end
 

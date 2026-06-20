@@ -10,7 +10,8 @@ module Obsctl
       reconnecting : Bool = false,
       last_connected_at : Time? = nil,
       last_disconnected_at : Time? = nil,
-      last_reconnect_attempt_at : Time? = nil
+      last_reconnect_attempt_at : Time? = nil,
+      last_connection_failed_at : Time? = nil
 
     # Authoritative OBS snapshot cache owned by the local daemon.
     class StateStore
@@ -47,7 +48,8 @@ module Obsctl
             reconnecting: true,
             last_connected_at: @telemetry.last_connected_at,
             last_disconnected_at: @telemetry.last_disconnected_at,
-            last_reconnect_attempt_at: at
+            last_reconnect_attempt_at: at,
+            last_connection_failed_at: @telemetry.last_connection_failed_at
           )
         end
       end
@@ -59,7 +61,8 @@ module Obsctl
             reconnecting: false,
             last_connected_at: at,
             last_disconnected_at: @telemetry.last_disconnected_at,
-            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at
+            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at,
+            last_connection_failed_at: @telemetry.last_connection_failed_at
           )
           @snapshot = snapshot
         end
@@ -67,7 +70,12 @@ module Obsctl
       end
 
       # Marks OBS unavailable while preserving the last known lists and versions.
-      def mark_disconnected(error : String? = nil, reconnecting : Bool = false, at : Time = Time.utc) : Nil
+      def mark_disconnected(
+        error : String? = nil,
+        reconnecting : Bool = false,
+        at : Time = Time.utc,
+        connection_failed : Bool = true,
+      ) : Nil
         next_snapshot = nil
         @lock.synchronize do
           current = @snapshot
@@ -82,11 +90,13 @@ module Obsctl
             last_error: error,
             updated_at: at
           )
+          was_connected = current.connected
           @telemetry = ServerTelemetry.new(
             reconnecting: reconnecting,
             last_connected_at: @telemetry.last_connected_at,
-            last_disconnected_at: at,
-            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at
+            last_disconnected_at: was_connected ? at : @telemetry.last_disconnected_at,
+            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at,
+            last_connection_failed_at: was_connected || !connection_failed ? @telemetry.last_connection_failed_at : at
           )
           @snapshot = next_snapshot.not_nil!
         end
@@ -145,14 +155,16 @@ module Obsctl
             reconnecting: false,
             last_connected_at: Time.utc,
             last_disconnected_at: @telemetry.last_disconnected_at,
-            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at
+            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at,
+            last_connection_failed_at: @telemetry.last_connection_failed_at
           )
         elsif current.connected && !snapshot.connected
           ServerTelemetry.new(
             reconnecting: @telemetry.reconnecting,
             last_connected_at: @telemetry.last_connected_at,
             last_disconnected_at: Time.utc,
-            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at
+            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at,
+            last_connection_failed_at: @telemetry.last_connection_failed_at
           )
         else
           @telemetry

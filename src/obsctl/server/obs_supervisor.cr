@@ -48,8 +48,12 @@ module Obsctl
 
       # Drops the active client so the supervisor reconnect loop starts over.
       def reconnect : Nil
-        client = @client_lock.synchronize { @client }
-        @state.mark_disconnected("OBS reconnect requested", reconnecting: @config.reconnect.enabled)
+        client = @client_lock.synchronize do
+          existing = @client
+          @client = nil
+          existing
+        end
+        @state.mark_disconnected("OBS reconnect requested", reconnecting: true, connection_failed: false)
         publish_log("info", "obs_reconnect_requested", "OBS reconnect requested")
         client.try(&.close)
       end

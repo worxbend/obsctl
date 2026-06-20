@@ -86,7 +86,7 @@ describe "golden IPC proxy contracts" do
     end
   end
 
-  it "matches obsctl-rs IPC golden fixtures when the sibling repository is present" do
+  it "optionally matches obsctl-rs IPC golden fixtures in strict compatibility mode" do
     Obsctl::SpecSupport::OptionalObsctlRsCompat.assert_compatible!(GOLDEN_IPC_FIXTURE_ROOT, "ipc/")
   end
 end

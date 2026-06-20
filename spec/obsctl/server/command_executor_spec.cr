@@ -67,6 +67,7 @@ describe Obsctl::Server::CommandExecutor do
     parse_rfc3339(combined_result["server"]["last_connected_at"]).should be_a(Time)
     combined_result["server"]["last_disconnected_at"].raw.should be_nil
     combined_result["server"]["last_reconnect_attempt_at"].raw.should be_nil
+    combined_result["server"]["last_connection_failed_at"].raw.should be_nil
     combined_result["obs"]["connected"].as_bool.should be_true
     combined_result["obs"]["current_scene"].as_s.should eq("Main Camera")
 
@@ -84,6 +85,7 @@ describe Obsctl::Server::CommandExecutor do
     parse_rfc3339(daemon_result["last_connected_at"]).should be_a(Time)
     daemon_result["last_disconnected_at"].raw.should be_nil
     daemon_result["last_reconnect_attempt_at"].raw.should be_nil
+    daemon_result["last_connection_failed_at"].raw.should be_nil
     daemon_result["connected"]?.should be_nil
   end
 
@@ -97,6 +99,7 @@ describe Obsctl::Server::CommandExecutor do
     result["last_connected_at"].raw.should be_nil
     result["last_disconnected_at"].raw.should be_nil
     result["last_reconnect_attempt_at"].raw.should be_nil
+    result["last_connection_failed_at"].raw.should be_nil
   end
 
   it "returns IPC_PROTOCOL_ERROR for malformed command requests" do

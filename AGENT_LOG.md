@@ -733,3 +733,95 @@ M  src/obsctl/runtime/logger.cr
 M  src/obsctl/server/command_executor.cr
 M  src/obsctl/server/obs_supervisor.cr
 M  src/obsctl/server/state_store.cr
+2026-06-20T11:45:34Z iteration 4 started remaining=13087s
+2026-06-20T11:45:34Z iteration 4 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-20T11:45:34Z iteration 4 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-n4gfykev/repo copied_entries=176
+2026-06-20T11:45:34Z iteration 4 ideator phase started count=3
+2026-06-20T11:45:34Z iteration 4 ideator phase concurrency workers=3
+2026-06-20T11:45:34Z iteration 4 ideator 1 role="the pragmatist" started
+2026-06-20T11:45:34Z iteration 4 ideator 2 role="the architect" started
+2026-06-20T11:45:34Z iteration 4 ideator 3 role="the contrarian" started
+2026-06-20T11:45:42Z iteration 4 ideator 3 role="the contrarian" completed status=0
+2026-06-20T11:45:44Z iteration 4 ideator 2 role="the architect" completed status=0
+2026-06-20T11:45:51Z iteration 4 ideator 1 role="the pragmatist" completed status=0
+2026-06-20T11:45:51Z iteration 4 ideator phase completed approaches=3
+2026-06-20T11:45:51Z iteration 4 selector started approaches=3
+2026-06-20T11:46:01Z iteration 4 selector completed status=0
+2026-06-20T11:46:01Z iteration 4 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-n4gfykev/repo
+2026-06-20T11:46:01Z iteration 4 selector rejected alternative role="the contrarian" approach="Stability Freeze Before Feature Motion: pause product expansion and treat the next iteration as a contract-reliability correction pass, where default validation, strict compatib..." reason="Selected in spirit, but too broadly framed as a freeze; the Planner still needs a bounded stabilization theme rather than a general pause on all motion."
+2026-06-20T11:46:01Z iteration 4 selector rejected alternative role="the architect" approach="Validation-Contract First: treat the failing default gate and reconnect telemetry ambiguity as public contract defects before resuming feature work. The next planner should sequ..." reason="Strong on contract framing, but it underemphasizes the practical sequencing value of restoring the default local gate before deeper reconnect and CI work."
+2026-06-20T11:46:01Z iteration 4 selector rejected alternative role="the pragmatist" approach="Contract-stabilization wedge: first re-establish the default validation contract as boring and deterministic, then use that restored gate as the boundary for reconnect semantics..." reason="Strong on sequencing, but too narrow if interpreted as only making `make test` pass; the Planner should also preserve strict compatibility value and resolve public telemetry ambiguity."
+2026-06-20T11:46:01Z iteration 4 selector alternatives persisted count=3
+2026-06-20T11:46:01Z iteration 4 selector structured alternatives persisted count=3
+2026-06-20T11:46:01Z iteration 4 planner started
+2026-06-20T11:46:45Z iteration 4 plan: 4 task(s) in 3 phase(s). This slice freezes contract reliability before product expansion. Phase 1 restores deterministic local validation and creates an explicit strict compatibility boundary. Phase 2 can run CI workflow repair and reconnect telemetry work in parallel because they touch disjoint implementation surfaces. Phase 3 waits for both so docs, fixtures, TODO, and AGENT_LOG reflect the final settled contracts without competing edits.
+2026-06-20T11:46:45Z iteration 4 phase 1 started parallel=False tasks=1
+2026-06-20T11:51:31Z iteration 4 task t1 ('Restore deterministic default compatibility checks') status=0
+2026-06-20T11:51:31Z iteration 4 phase 2 started parallel=True tasks=2
+2026-06-20T11:52:33Z iteration 4 task t2 ('Fix dual-repo obsctl-rs compatibility workflow') status=0
+2026-06-20T11:56:58Z iteration 4 task t3 ('Make reconnect telemetry semantically truthful') status=0
+2026-06-20T11:56:58Z iteration 4 phase 3 started parallel=False tasks=1
+2026-06-20T11:59:29Z iteration 4 task t4 ('Refresh public contract docs and trackers') changes: documented default optional obsctl-rs compatibility skip behavior, strict `make contract-rs-compat` failure boundaries, reconnect timestamp semantics, and explicit reconnect lifecycle; exposed `last_connection_failed_at` in human server-status/status output; refreshed CLI golden JSON/human fixtures and contract assertion; updated TODO current status and planned next.
+2026-06-20T11:59:29Z iteration 4 task t4 validation: make format status=0; CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/contract/cli_contract_spec.cr spec/obsctl/contracts/golden_cli_spec.cr spec/obsctl/server/command_executor_spec.cr status=0.
+2026-06-20T11:59:29Z iteration 4 task t4 remaining gaps: full Crystal gates and strict dual-repo `make contract-rs-compat` should run separately in the prepared validation stage/workspace.
+2026-06-20T12:00:13Z iteration 4 task t4 ('Refresh public contract docs and trackers') status=0
+2026-06-20T12:00:13Z iteration 4 reviewer started
+
+## 2026-06-20 Fresh reviewer audit: iteration 4 contract reliability
+
+- Iteration reviewed:
+  - default versus strict `obsctl-rs` contract compatibility behavior
+  - `make contract-rs-compat` target and optional compatibility helper specs
+  - dual-repo GitHub Actions workflow
+  - reconnect telemetry fields in `StateStore`, `ObsSupervisor`, `CommandExecutor`, CLI formatting, docs, and fixtures
+  - reconnect lifecycle tests for startup failure, established disconnect, protocol-error disconnect, explicit reconnect, and successful reconnect
+- What was done correctly:
+  - Default `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` passed in this workspace even though `../obsctl-rs` exists without recognized contract fixtures.
+  - Strict `make contract-rs-compat` now fails loudly and usefully for the same missing-fixture-root sibling workspace.
+  - The compatibility helper now has explicit default, strict, and skip env modes, plus bidirectional counterpart/content checks.
+  - `last_disconnected_at` now represents an actual connected-to-disconnected transition instead of startup connection failures.
+  - `last_connection_failed_at` is exposed through server status, combined status, CLI human output, JSON fixtures, README, command docs, and protocol docs.
+  - Explicit reconnect now preserves `OBS reconnect requested` until reconnect success or failure, and the active client is detached before closing so clean-close state does not overwrite the requested lifecycle message.
+- What was found:
+  - No blocking default-gate regression was found.
+  - The new GitHub workflow checks out both repositories, but because it runs on every push and pull request, it will be red until `obsctl-rs` actually has compatible fixture roots and counterparts.
+  - `reconnect_obs` can still return success without starting any new OBS connection attempt if the supervisor fiber already exited after startup failure with `reconnect.enabled: false`.
+  - The exact long-term meaning of `last_connection_failed_at` remains slightly under-specified: it currently persists after later success, which may be correct if it means "last failure" but not if it means "current disconnected episode failure".
+  - Reconnect specs still rely on polling loops and short sleeps; the fake OBS server should eventually expose more deterministic probes.
+- Top improvement proposals:
+  - Make `reconnect_obs` truthful when no active client or live supervisor loop exists: either start a one-shot attempt or return a clear public error.
+  - Coordinate or add `obsctl-rs` contract fixtures before making the strict compatibility workflow a required always-on CI signal, or make that workflow manual/conditional until the Rust side is ready.
+  - Add focused `StateStore` unit specs and CLI status unit assertions for `last_connection_failed_at`.
+  - Replace reconnect polling helpers with fake-server channels for attempt-started, close-observed, and reconnect-completed milestones.
+2026-06-20T12:05:04Z iteration 4 reviewer completed status=0
+2026-06-20T12:05:04Z iteration 4 memory updated
+2026-06-20T12:05:04Z iteration 4 completed validation_status=0
+2026-06-20T12:05:04Z iteration 4 checkpoint started
+2026-06-20T12:05:04Z iteration 4 checkpoint status before commit:
+M  .github/workflows/obsctl-rs-compat.yml
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  Makefile
+M  PLAN.md
+M  README.md
+M  SCORES.jsonl
+M  TODO.md
+M  docs/commands.md
+M  docs/protocol.md
+M  spec/fixtures/contracts/cli/human/server_status_success.txt
+M  spec/fixtures/contracts/cli/human/status_success.txt
+M  spec/fixtures/contracts/cli/json/server_status_success.json
+M  spec/fixtures/contracts/cli/json/status_success.json
+M  spec/fixtures/contracts/cli_status_success.json
+M  spec/obsctl/contract/cli_contract_spec.cr
+M  spec/obsctl/contracts/golden_cli_spec.cr
+M  spec/obsctl/contracts/golden_ipc_spec.cr
+M  spec/obsctl/contracts/optional_obsctl_rs_compat_spec.cr
+M  spec/obsctl/server/command_executor_spec.cr
+M  spec/obsctl/server/server_spec.cr
+M  spec/support/optional_obsctl_rs_compat.cr
+M  src/obsctl/cli/client_commands.cr
+M  src/obsctl/server/command_executor.cr
+M  src/obsctl/server/obs_supervisor.cr
+M  src/obsctl/server/state_store.cr

@@ -8,27 +8,24 @@ jobs:
   compatibility:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out obsctl
+        uses: actions/checkout@v4
+        with:
+          path: obsctl
 
-      - name: Detect sibling obsctl-rs checkout
-        id: sibling
-        run: |
-          if [ -d ../obsctl-rs ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Skip single-repo checkout
-        if: steps.sibling.outputs.present != 'true'
-        run: echo "obsctl-rs sibling not found; skipping fixture compatibility"
+      - name: Check out obsctl-rs
+        uses: actions/checkout@v4
+        with:
+          repository: w0rxbend/obsctl-rs
+          path: obsctl-rs
 
       - name: Install Crystal
-        if: steps.sibling.outputs.present == 'true'
         uses: crystal-lang/install-crystal@v1
 
       - name: Compare obsctl-rs fixtures
-        if: steps.sibling.outputs.present == 'true'
+        working-directory: obsctl
         env:
           CRYSTAL_CACHE_DIR: /tmp/obsctl-crystal-cache
-        run: make contract-rs-compat
+        run: |
+          test -d ../obsctl-rs
+          make contract-rs-compat

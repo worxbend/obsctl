@@ -119,7 +119,16 @@ single envelope and places the combined payload under `result.server` and
 `obsctl obs-status` asks the local daemon for only the OBS snapshot. It is the
 OBS-only command and is not an alias for the combined `status` command.
 
-`obsctl server-status` checks only the local daemon. Its output includes `pid`, `uptime_seconds`, `socket_path`, `client_count`, `obs_connected`, `reconnecting`, `last_connected_at`, `last_disconnected_at`, `last_reconnect_attempt_at`, and `last_error`. Timestamp fields are RFC3339 strings when known and `null` in JSON when absent.
+`obsctl server-status` checks only the local daemon. Its output includes `pid`,
+`uptime_seconds`, `socket_path`, `client_count`, `obs_connected`,
+`reconnecting`, `last_connected_at`, `last_disconnected_at`,
+`last_reconnect_attempt_at`, `last_connection_failed_at`, and `last_error`.
+Timestamp fields are RFC3339 strings when known and `null` in JSON when absent.
+`last_disconnected_at` is updated only when an established OBS session
+transitions to disconnected. Startup failures and failed reconnect attempts
+before any successful session update `last_connection_failed_at` instead. After
+`obsctl reconnect`, the public `last_error` stays `OBS reconnect requested`
+until the next OBS connection success or failure outcome.
 
 `obsctl validate-config` validates the local config file directly and does not require a running server. It prints a safe warning to stderr if plaintext `connection.password` is configured, including in JSON mode, and never echoes the password value. The TUI palette command `/validate-config` asks the running server to validate its configured file.
 
