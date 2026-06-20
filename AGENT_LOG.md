@@ -1277,3 +1277,46 @@ M  docs/protocol.md
 M  spec/obsctl/server/obs_supervisor_spec.cr
 M  src/obsctl/server/obs_supervisor.cr
 M  src/obsctl/server/state_store.cr
+2026-06-20T13:04:58Z iteration 9 started remaining=8324s
+2026-06-20T13:04:58Z iteration 9 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-20T13:04:58Z iteration 9 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-v5eajr5q/repo copied_entries=178
+2026-06-20T13:04:58Z iteration 9 ideator phase started count=3
+2026-06-20T13:04:58Z iteration 9 ideator phase concurrency workers=3
+2026-06-20T13:04:58Z iteration 9 ideator 1 role="the pragmatist" started
+2026-06-20T13:04:58Z iteration 9 ideator 2 role="the architect" started
+2026-06-20T13:04:58Z iteration 9 ideator 3 role="the contrarian" started
+2026-06-20T13:05:06Z iteration 9 ideator 1 role="the pragmatist" completed status=0
+2026-06-20T13:05:08Z iteration 9 ideator 3 role="the contrarian" completed status=0
+2026-06-20T13:05:08Z iteration 9 ideator 2 role="the architect" completed status=0
+2026-06-20T13:05:08Z iteration 9 ideator phase completed approaches=3
+2026-06-20T13:05:08Z iteration 9 selector started approaches=3
+2026-06-20T13:05:19Z iteration 9 selector completed status=0
+2026-06-20T13:05:19Z iteration 9 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-v5eajr5q/repo
+2026-06-20T13:05:19Z iteration 9 selector rejected alternative role="the pragmatist" approach="Signal-first hardening: treat reconnect correctness as a small concurrency primitive problem before touching broader supervisor behavior, then let existing integration specs rem..." reason="Strong on scope control and correctly prioritizes the known lost-wake bug, but selected as-is it underemphasizes first pinning down the semantic boundary between durable reconnect requests, transient internal wakes, stop wakes, and gener..."
+2026-06-20T13:05:19Z iteration 9 selector rejected alternative role="the contrarian" approach="Stabilize the Contract Before Chasing the Wake: Treat the remaining reconnect race as one symptom of a broader concurrency contract gap, and have the next planner first define t..." reason="Correctly warns that this is a semantic contract problem, but selected as-is it risks spending too much of the next iteration formalizing guarantees instead of closing the concrete P0 race with focused code and tests."
+2026-06-20T13:05:19Z iteration 9 selector rejected alternative role="the architect" approach="Signal-Primitive First: treat reconnect hardening as a concurrency contract redesign before touching supervisor behavior, then let higher-level reconnect cleanup proceed only af..." reason="Very close to the selected direction, but the synthesized version makes the contract step more explicit and keeps it bounded so the Planner does not expand the work into broader supervisor redesign or reconnect flake cleanup."
+2026-06-20T13:05:19Z iteration 9 selector alternatives persisted count=3
+2026-06-20T13:05:19Z iteration 9 selector structured alternatives persisted count=3
+2026-06-20T13:05:19Z iteration 9 planner started
+2026-06-20T13:06:41Z iteration 9 plan: 4 task(s) in 3 phase(s). This iteration is intentionally narrow: first harden the internal reconnect synchronization primitive, then prove the race at the primitive boundary, then verify public docs and trackers still match the existing reconnect contract. Rust compatibility, unavailable-then-bind helpers, and disconnect polling cleanup remain outside this slice.
+2026-06-20T13:06:41Z iteration 9 phase 1 started parallel=False tasks=1
+2026-06-20T13:09:25Z iteration 9 task t1 ('Make reconnect signal wait atomic') status=0
+2026-06-20T13:09:25Z iteration 9 phase 2 started parallel=True tasks=2
+2026-06-20T13:10:11Z iteration 9 task t3 ('Audit reconnect public docs') status=0
+2026-06-20T13:12:34Z iteration 9 task t2 ('Add signal-level reconnect tests') status=0
+2026-06-20T13:12:34Z iteration 9 phase 3 started parallel=False tasks=1
+2026-06-20T13:14:43Z iteration 9 task t4 ('Update trackers and run gates') status=0
+- Implemented:
+  - Updated `TODO.md` and `MEMORY.md` to record that `ReconnectSignal#wait`
+    now closes the primitive-level lost-wake window with atomic waiter
+    registration, signal-level reconnect specs were added, and remaining
+    reconnect flake cleanup still includes `unused_tcp_port` replacement and
+    `wait_for_disconnect` polling cleanup.
+- Validation:
+  - `make format` passed.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/reconnect_signal_spec.cr spec/obsctl/server/obs_supervisor_spec.cr`
+    passed with 15 examples.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` passed with 254
+    examples.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build` passed.
+  - `make lint` exited 0 through the existing `ameba not installed` skip path.

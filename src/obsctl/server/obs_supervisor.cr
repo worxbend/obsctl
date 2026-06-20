@@ -5,6 +5,7 @@ require "../obs/client"
 require "../obs/protocol/event_subscription"
 require "../runtime/logger"
 require "../runtime/reconnect_policy"
+require "./reconnect_signal"
 require "./state_store"
 
 module Obsctl
@@ -15,46 +16,6 @@ module Obsctl
         Starting
         Running
         Stopped
-      end
-
-      private class ReconnectSignal
-        def initialize
-          @wake = Channel(Nil).new
-          @lock = Mutex.new
-          @request_epoch = 0_u64
-        end
-
-        def latest_request_epoch : UInt64
-          @lock.synchronize { @request_epoch }
-        end
-
-        def request : UInt64
-          epoch = @lock.synchronize do
-            @request_epoch += 1
-            @request_epoch
-          end
-          wake
-          epoch
-        end
-
-        def wait(delay : Time::Span, handled_request_epoch : UInt64) : UInt64
-          current_epoch = latest_request_epoch
-          return current_epoch if current_epoch > handled_request_epoch
-
-          select
-          when @wake.receive
-            latest_request_epoch
-          when timeout(delay)
-            handled_request_epoch
-          end
-        end
-
-        def wake : Nil
-          select
-          when @wake.send(nil)
-          else
-          end
-        end
       end
 
       # Creates a supervisor that updates server state and optional event/log broadcasts.
@@ -99,7 +60,7 @@ module Obsctl
           @reconnect_signal = nil
           signal
         end
-        reconnect_signal.try(&.wake)
+        reconnect_signal.try(&.cancel)
         current_client = @client_lock.synchronize do
           existing = @client
           @client = nil

@@ -94,11 +94,6 @@ new OBS connection attempt was scheduled:
 {"id":"req-000006","type":"response","ok":false,"error":{"code":"OBS_UNAVAILABLE","message":"OBS supervisor is not running; restart the server or enable reconnect."}}
 ```
 
-Internal wakes caused only by closing an active OBS client are transient
-implementation signals. They are not public reconnect requests and do not
-survive into an unrelated later retry delay, and stale supervisor generations
-cannot consume reconnect requests from the current generation.
-
 Error response:
 
 ```json

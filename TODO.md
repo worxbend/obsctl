@@ -670,6 +670,10 @@ Implemented:
     retry boundary even when it arrives after a failed attempt but before the
     retry-delay wait starts; active-client-close wakes remain transient and
     cannot leak into a later unrelated retry delay
+  - reconnect retry-delay waiting is delegated to `Server::ReconnectSignal`,
+    whose waiter registration is atomic with the request-epoch check so an
+    explicit reconnect request cannot be lost between checking the epoch and
+    sleeping
   - `last_disconnected_at` is updated only after an established OBS session
     disconnects; `last_connection_failed_at` records the most recent failed OBS
     connection attempt and is not cleared by later successful connections
@@ -731,6 +735,10 @@ Implemented:
   - fake OBS server support exposes deterministic probes for Identify frames,
     OBS request types, close events, and no-attempt windows
   - server reconnect specs cover initial OBS unavailable startup, reconnect-disabled supervisor exit, established-session disconnects, protocol-error disconnects, explicit reconnect requests, wakeable retry backoff, durable pre-delay reconnect requests, generation-safe stop/start ownership, stale reconnect wake invalidation, transient active-client-close wake behavior, and successful reconnects
+  - signal-level reconnect specs cover explicit request-before-wait,
+    request-during-wait, handled-request stale wake behavior, transient internal
+    wakes, cancel wakes, and repeated durable request epochs without needing a
+    fake OBS server
 
 ## Not Yet Implemented
 
@@ -891,6 +899,9 @@ Partial:
 - explicit reconnect requests are generation-scoped durable epochs that wake
   retry backoff or survive until the next retry boundary while the supervisor
   is alive
+- reconnect retry-delay waiting uses an atomic `Server::ReconnectSignal`
+  primitive, so request epochs cannot be lost between the pre-wait check and
+  waiter registration
 - supervisor stop/start ownership and reconnect request/wake state are
   generation-scoped
 - supervisor reconnect proof after protocol-error client closes while IPC remains available
@@ -982,9 +993,12 @@ Remaining:
 
 ## Planned Next
 
-1. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
+1. Replace the remaining reconnect `unused_tcp_port` unavailable-then-bind
+   windows and `wait_for_disconnect` polling with deterministic hooks where
+   practical.
+2. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
    when `../obsctl-rs` is available with compatible contract fixtures.
-2. Add or coordinate the Rust-side shared contract fixture root so the manual
+3. Add or coordinate the Rust-side shared contract fixture root so the manual
    or scheduled strict compatibility workflow can become a required signal.
-3. Return to demo config, packaging polish, and optional `termisu` backend
+4. Return to demo config, packaging polish, and optional `termisu` backend
    evaluation once the stabilized contract gates stay green.
