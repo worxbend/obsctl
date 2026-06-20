@@ -65,7 +65,9 @@ CLI client mode:
 - `obsctl status`: sends a combined daemon-and-OBS status request to the local server.
 - `obsctl obs-status`: sends OBS status request to local server.
 - `obsctl server-status`: checks only the local obsctl server, not OBS.
-- `obsctl reconnect`: asks the server to reconnect its OBS WebSocket session.
+- `obsctl reconnect`: asks the server to reconnect its OBS WebSocket session;
+  if the OBS supervisor is no longer running, the command returns
+  `OBS_UNAVAILABLE` instead of claiming that a reconnect was requested.
 - `obsctl shutdown-server`: asks the server to stop; disabled unless `server.allow_remote_shutdown` is true.
 - `obsctl scene <alias|shortcut|obs-name>`: sends scene-change request to server.
 - `obsctl mute <audio-target>`: sends mute request to server.
@@ -654,8 +656,15 @@ Implemented:
   - IPC command executor returns distinct combined, OBS-only, and daemon-only status payloads
   - IPC command executor validates config, handles explicit OBS reconnect requests, and rejects shutdown unless `server.allow_remote_shutdown` is enabled
   - reconnect loop detects established OBS WebSocket disconnects, marks state disconnected, clears the stale client, and retries when reconnect is enabled
-  - `last_disconnected_at` is updated only after an established OBS session disconnects; failed startup/connection attempts before a successful session update `last_connection_failed_at`
-  - explicit `obsctl reconnect` keeps public `last_error` as `OBS reconnect requested` until the next connection success or failure outcome
+  - `last_disconnected_at` is updated only after an established OBS session
+    disconnects; `last_connection_failed_at` records the most recent failed OBS
+    connection attempt and is not cleared by later successful connections
+  - explicit `obsctl reconnect` keeps public `last_error` as
+    `OBS reconnect requested` until the next connection success or failure
+    outcome only when the running supervisor can perform a reconnect attempt; if
+    the supervisor has exited with reconnect disabled, the command returns
+    `OBS_UNAVAILABLE` with the public message
+    `OBS supervisor is not running; restart the server or enable reconnect.`
   - protocol-error client closes are observed by the supervisor; stale OBS clients are dropped, OBS is marked disconnected, IPC stays available, and reconnect resumes when enabled
   - subscription handling maintains a client registry and broadcasts state, OBS event, and log topic updates
 - CLI:
@@ -703,7 +712,7 @@ Implemented:
   - contract-freeze specs cover public IPC errors, JSON CLI envelopes, daemon-first boundaries, embedded TUI adapter require behavior, and golden CLI/IPC fixtures
   - optional `../obsctl-rs` compatibility checks skip cleanly in default mode when the sibling repository is absent or has no recognized fixture root
   - strict `obsctl-rs` compatibility mode fails clearly for missing sibling repositories, missing fixture roots, missing counterparts, and content differences
-  - server reconnect specs cover initial OBS unavailable startup, established-session disconnects, protocol-error disconnects, explicit reconnect requests, and successful reconnects
+  - server reconnect specs cover initial OBS unavailable startup, reconnect-disabled supervisor exit, established-session disconnects, protocol-error disconnects, explicit reconnect requests, and successful reconnects
 
 ## Not Yet Implemented
 

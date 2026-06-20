@@ -56,8 +56,9 @@ describe Obsctl::CLI::ClientCommands do
         "obs_connected": true,
         "reconnecting": false,
         "last_connected_at": "2026-06-20T12:00:00Z",
-        "last_disconnected_at": null,
+        "last_disconnected_at": "2026-06-20T11:55:00Z",
         "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+        "last_connection_failed_at": "2026-06-20T11:58:00Z",
         "last_error": null
       },
       "obs": {
@@ -77,10 +78,63 @@ describe Obsctl::CLI::ClientCommands do
     output.should contain("server:\n  pid: 123")
     output.should contain("  socket_path: /tmp/obsctl.sock")
     output.should contain("  last_connected_at: 2026-06-20T12:00:00Z")
-    output.should contain("  last_disconnected_at: -")
+    output.should contain("  last_disconnected_at: 2026-06-20T11:55:00Z")
     output.should contain("  last_reconnect_attempt_at: 2026-06-20T11:59:59Z")
+    output.should contain("  last_connection_failed_at: 2026-06-20T11:58:00Z")
     output.should contain("obs:\n  connected: true")
     output.should contain("  current_scene: Main Camera")
+  end
+
+  it "formats daemon status with every reconnect timestamp field" do
+    result = JSON.parse(<<-JSON)
+    {
+      "pid": 123,
+      "uptime_seconds": 9,
+      "socket_path": "/tmp/obsctl.sock",
+      "client_count": 2,
+      "obs_connected": false,
+      "reconnecting": true,
+      "last_connected_at": "2026-06-20T12:00:00Z",
+      "last_disconnected_at": "2026-06-20T12:05:00Z",
+      "last_reconnect_attempt_at": "2026-06-20T12:06:00Z",
+      "last_connection_failed_at": "2026-06-20T12:07:00Z",
+      "last_error": "connection failed"
+    }
+    JSON
+    response = Obsctl::IPC::Response.new("req-000001", true, result)
+
+    output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
+      .execute(Obsctl::Domain::ServerStatusCommand.new)
+      .message
+
+    output.should contain("last_connected_at: 2026-06-20T12:00:00Z")
+    output.should contain("last_disconnected_at: 2026-06-20T12:05:00Z")
+    output.should contain("last_reconnect_attempt_at: 2026-06-20T12:06:00Z")
+    output.should contain("last_connection_failed_at: 2026-06-20T12:07:00Z")
+  end
+
+  it "keeps formatting older daemon status payloads without last connection failure time" do
+    result = JSON.parse(<<-JSON)
+    {
+      "pid": 123,
+      "uptime_seconds": 9,
+      "socket_path": "/tmp/obsctl.sock",
+      "client_count": 2,
+      "obs_connected": true,
+      "reconnecting": false,
+      "last_connected_at": "2026-06-20T12:00:00Z",
+      "last_disconnected_at": null,
+      "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+      "last_error": null
+    }
+    JSON
+    response = Obsctl::IPC::Response.new("req-000001", true, result)
+
+    output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
+      .execute(Obsctl::Domain::ServerStatusCommand.new)
+      .message
+
+    output.should contain("last_connection_failed_at: -")
   end
 
   it "maps every canonical IPC error to an audited process exit code" do

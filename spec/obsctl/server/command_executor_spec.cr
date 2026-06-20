@@ -11,6 +11,27 @@ private class FailingSupervisor < Obsctl::Server::ObsSupervisor
   end
 end
 
+private class ReconnectSupervisor < Obsctl::Server::ObsSupervisor
+  getter reconnect_calls
+
+  def initialize(@test_state : Obsctl::Server::StateStore, @test_alive : Bool)
+    super(Obsctl::Config::Config.default, @test_state)
+    @reconnect_calls = 0
+  end
+
+  def alive? : Bool
+    @test_alive
+  end
+
+  def reconnect : Bool
+    @reconnect_calls += 1
+    return false unless @test_alive
+
+    @test_state.mark_disconnected("OBS reconnect requested", reconnecting: true, connection_failed: false)
+    true
+  end
+end
+
 private def command_request(command : Obsctl::IPC::CommandPayload?) : Obsctl::IPC::Request
   Obsctl::IPC::Request.new("req-error", Obsctl::IPC::Request::TYPE_COMMAND, command)
 end
@@ -185,6 +206,35 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     expect_error(response, Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE)
+  end
+
+  it "accepts reconnect only when the supervisor is alive" do
+    state = Obsctl::Server::StateStore.new
+    supervisor = ReconnectSupervisor.new(state, true)
+
+    response = default_executor(supervisor: supervisor, state: state).execute(
+      command_request(Obsctl::IPC::CommandPayload.new("reconnect_obs"))
+    )
+
+    response.ok.should be_true
+    response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
+    supervisor.reconnect_calls.should eq(1)
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+  end
+
+  it "returns a public error for reconnect when the supervisor has exited" do
+    state = Obsctl::Server::StateStore.new
+    state.mark_disconnected("startup connection failed")
+    supervisor = ReconnectSupervisor.new(state, false)
+
+    response = default_executor(supervisor: supervisor, state: state).execute(
+      command_request(Obsctl::IPC::CommandPayload.new("reconnect_obs"))
+    )
+
+    error = expect_error(response, Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE)
+    error.message.should eq("OBS supervisor is not running; restart the server or enable reconnect.")
+    supervisor.reconnect_calls.should eq(0)
+    state.snapshot.last_error.should eq("startup connection failed")
   end
 
   it "returns REQUEST_TIMEOUT for OBS request timeouts" do

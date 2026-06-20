@@ -14,5 +14,7 @@
 [learning] Reconnect telemetry fields need precise transition semantics; `last_disconnected_at` should not be updated by connection attempts that never reached a connected state.
 [learning] A strict cross-repo compatibility workflow should not be required until the counterpart repo has the expected fixture roots, or CI will be truthfully but unhelpfully red.
 [learning] An explicit reconnect command must account for supervisor liveness; detaching an active client is insufficient when the reconnect loop has already exited.
+[pattern] `obsctl reconnect` success should mean a live supervisor loop can act; stopped supervisors should return `OBS_UNAVAILABLE` instead of publishing requested state.
+[learning] `last_connection_failed_at` is historical telemetry for the most recent failed OBS connection attempt and intentionally persists across later successful connections.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
 [security] Never log or expose OBS passwords, generated authentication strings, tokens, or secret-like values in IPC errors, JSON envelopes, logs, specs, or TUI output.

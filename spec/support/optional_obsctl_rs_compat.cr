@@ -44,19 +44,23 @@ module Obsctl
         local_root : String,
         prefix : String,
         repo : String = sibling_repo,
+        diagnostics : IO = STDERR,
       ) : Nil
         return if skip_requested?
         return unless strict_requested?
 
         unless File.directory?(repo)
+          print_strict_selection(diagnostics, repo, nil)
           raise missing_sibling_repo_message(repo)
         end
 
         compat_root = fixture_root(repo)
         unless compat_root
+          print_strict_selection(diagnostics, repo, nil)
           raise missing_fixture_root_message(repo)
         end
 
+        print_strict_selection(diagnostics, repo, compat_root)
         failures = fixture_compatibility_failures(local_root, compat_root, prefix)
         return if failures.empty?
 
@@ -96,8 +100,15 @@ module Obsctl
         obsctl-rs fixture compatibility is running in strict mode and the sibling repository at #{repo} has no recognized contract fixture root.
         Expected one of:
         #{fixture_candidates(repo).map { |path| "  - #{path}" }.join("\n")}
+        Shared contract fixtures should live under that root with cli/ fixtures for CLI output/envelopes and ipc/ fixtures for typed IPC request payloads.
         Set #{SKIP_ENV}=1 to skip this optional compatibility check.
         MESSAGE
+      end
+
+      private def self.print_strict_selection(diagnostics : IO, repo : String, fixture_root : String?) : Nil
+        diagnostics.puts "obsctl-rs compatibility strict mode:"
+        diagnostics.puts "  sibling repository: #{repo}"
+        diagnostics.puts "  fixture root: #{fixture_root || "none recognized"}"
       end
 
       private def self.prefixed_fixture_paths(root : String, prefix : String) : Array(String)

@@ -6,6 +6,8 @@ require "../obs/state/audio_state"
 module Obsctl
   module Server
     # Server-owned OBS connection telemetry exposed by daemon status.
+    # `last_connection_failed_at` records the most recent failed OBS connection
+    # attempt and is preserved across later successful connections.
     record ServerTelemetry,
       reconnecting : Bool = false,
       last_connected_at : Time? = nil,

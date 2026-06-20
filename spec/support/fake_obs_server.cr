@@ -33,12 +33,13 @@ module Obsctl
           AudioInput.new("Mic/Aux", "input", false, 0.7, -3.0),
           AudioInput.new("Desktop Audio", "output", true, 0.4, -8.0),
         ],
+        port : Int32? = nil,
         @request_delays : Hash(String, Time::Span) = {} of String => Time::Span,
         @request_timeout_ms : Int32 = 500,
       )
         @host = "127.0.0.1"
         @server = HTTP::Server.new([websocket_handler])
-        address = @server.bind_tcp(@host, 0)
+        address = @server.bind_tcp(@host, port || 0)
         @port = address.port
       end
 

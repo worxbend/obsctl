@@ -65,9 +65,15 @@ scene, scenes, and audio inputs.
 socket path, subscribed client count, OBS connection state, explicit
 reconnecting state, reconnect timestamps, and last error. `last_disconnected_at`
 is set only after an established OBS session disconnects;
-`last_connection_failed_at` records failed connection attempts before a session
-is established. After `obsctl reconnect`, `last_error` remains
-`OBS reconnect requested` until the next connection succeeds or fails.
+`last_connection_failed_at` records the most recent failed OBS connection
+attempt. It is historical telemetry, not just the current disconnected episode,
+and a later successful connection does not clear it. After `obsctl reconnect`,
+`last_error` remains `OBS reconnect requested` until the next connection
+succeeds or fails, but only when the running supervisor can actually make a
+reconnect attempt. If the supervisor has already exited, for example after
+startup failure with `reconnect.enabled: false`, `obsctl reconnect` returns
+`OBS_UNAVAILABLE` with a message telling the operator to restart the server or
+enable reconnect.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
@@ -76,6 +82,15 @@ The TUI is also a local IPC client in normal mode. It subscribes to server state
 `dump-config` is performed by the local server, which owns the OBS connection, reads scenes and audio inputs, and writes a generated config. Existing config files are backed up before dump writes. The dump keeps top-level daemon settings such as `server` and `reconnect`, and it refuses to write if aliases or shortcuts would become ambiguous with discovered OBS names.
 
 Config files reject unknown top-level fields so future settings are not silently lost during rewrites.
+
+## Troubleshooting
+
+If OBS was unavailable when the server started and `reconnect.enabled: false` is
+configured, the OBS supervisor exits after that failed startup attempt. Local IPC
+commands such as `obsctl status` and `obsctl server-status` continue to work,
+but `obsctl reconnect` cannot schedule a reconnect from a stopped supervisor.
+Restart `obsctl server --headless` after OBS is available, or enable reconnect
+in the config and restart the service.
 
 ## Validation
 
