@@ -44,7 +44,7 @@ describe Obsctl::Server::ReconnectSignal do
     registered = Channel(Nil).new(1)
     result = Channel(WaitResult).new(1)
 
-    signal.on_waiter_registered = ->{ registered.send(nil) }
+    signal.on_waiter_registered = -> { registered.send(nil) }
     spawn { result.send(signal.wait(5.seconds, 0_u64)) }
 
     wait_for_waiter_registered(registered)
@@ -61,7 +61,7 @@ describe Obsctl::Server::ReconnectSignal do
     registered = Channel(Nil).new(1)
     result = Channel(WaitResult).new(1)
 
-    signal.on_waiter_registered = ->{ registered.send(nil) }
+    signal.on_waiter_registered = -> { registered.send(nil) }
     spawn { result.send(signal.wait(5.seconds, 0_u64)) }
 
     wait_for_waiter_registered(registered)
@@ -87,7 +87,7 @@ describe Obsctl::Server::ReconnectSignal do
     registered = Channel(Nil).new(1)
     result = Channel(WaitResult).new(1)
 
-    signal.on_waiter_registered = ->{ registered.send(nil) }
+    signal.on_waiter_registered = -> { registered.send(nil) }
     spawn { result.send(signal.wait(5.seconds, 0_u64)) }
 
     wait_for_waiter_registered(registered)
@@ -105,7 +105,7 @@ describe Obsctl::Server::ReconnectSignal do
     registered = Channel(Nil).new(1)
     result = Channel(WaitResult).new(1)
 
-    signal.on_waiter_registered = ->{ registered.send(nil) }
+    signal.on_waiter_registered = -> { registered.send(nil) }
     spawn { result.send(signal.wait(5.seconds, 0_u64)) }
 
     wait_for_waiter_registered(registered)
@@ -123,13 +123,13 @@ describe Obsctl::Server::ReconnectSignal do
   end
 
   # cancel-during-wait: probe confirms the waiter is registered before cancel
-  # is sent, so the Interrupted result is a true concurrent cancel wake.
-  it "interrupts a waiter on cancel without advancing the explicit request epoch" do
+  # is sent, so the Cancelled result is a true concurrent cancel wake.
+  it "returns Cancelled (not Interrupted) when cancel is called during wait" do
     signal = Obsctl::Server::ReconnectSignal.new
     registered = Channel(Nil).new(1)
     result = Channel(WaitResult).new(1)
 
-    signal.on_waiter_registered = ->{ registered.send(nil) }
+    signal.on_waiter_registered = -> { registered.send(nil) }
     spawn { result.send(signal.wait(5.seconds, 0_u64)) }
 
     wait_for_waiter_registered(registered)
@@ -137,7 +137,7 @@ describe Obsctl::Server::ReconnectSignal do
     signal.cancel
 
     wait_result = receive_signal_result(result)
-    wait_result.should be_a(WaitResult::Interrupted)
+    wait_result.should be_a(WaitResult::Cancelled)
     wait_result.epoch.should eq(0_u64)
     signal.latest_request_epoch.should eq(0_u64)
   end

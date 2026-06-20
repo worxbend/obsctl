@@ -31,6 +31,13 @@ module Obsctl
         @lifecycle_state = LifecycleState::Stopped
         @lifecycle_generation = 0_u64
         @reconnect_signal = nil.as(ReconnectSignal?)
+        @stopped_reconnect_attempted = Atomic(Bool).new(false)
+      end
+
+      # Returns true if the run fiber observed stopped state before performing a
+      # connection attempt (e.g. when stop wins the reconnect-vs-stop race).
+      def stopped_reconnect_attempted? : Bool
+        @stopped_reconnect_attempted.get
       end
 
       # Returns true while the supervisor loop is starting or can still act.
@@ -46,6 +53,7 @@ module Obsctl
           @lifecycle_generation += 1
           @lifecycle_state = LifecycleState::Starting
           @reconnect_signal = ReconnectSignal.new
+          @stopped_reconnect_attempted.set(false)
           {@lifecycle_generation, @reconnect_signal.not_nil!}
         end
         spawn(name: "obsctl-obs-supervisor") { run(generation, reconnect_signal) }
@@ -118,7 +126,10 @@ module Obsctl
             attempt = 0
 
             disconnect_error = wait_for_disconnect(generation, client)
-            next if client_detached?(client)
+            if client_detached?(client)
+              @stopped_reconnect_attempted.set(true) if stopped?(generation)
+              next
+            end
             raise disconnect_error || Domain::ConnectionFailed.new("OBS WebSocket disconnected") unless stopped?(generation)
           rescue ex : Domain::ObsctlError
             break if stopped?(generation)
@@ -133,9 +144,9 @@ module Obsctl
             case result
             when ReconnectSignal::WaitResult::Requested
               # Explicit reconnect request consumed — retry immediately without incrementing backoff.
+            when ReconnectSignal::WaitResult::Cancelled
+              break # Stop-initiated cancel; exit the retry loop immediately.
             when ReconnectSignal::WaitResult::TimedOut, ReconnectSignal::WaitResult::Interrupted
-              # Normal timeout or transient wake — advance backoff. A cancel-driven Interrupted
-              # will cause the loop to exit at the next stopped? check.
               attempt += 1
             end
           rescue ex
@@ -151,9 +162,9 @@ module Obsctl
             case result
             when ReconnectSignal::WaitResult::Requested
               # Explicit reconnect request consumed — retry immediately without incrementing backoff.
+            when ReconnectSignal::WaitResult::Cancelled
+              break # Stop-initiated cancel; exit the retry loop immediately.
             when ReconnectSignal::WaitResult::TimedOut, ReconnectSignal::WaitResult::Interrupted
-              # Normal timeout or transient wake — advance backoff. A cancel-driven Interrupted
-              # will cause the loop to exit at the next stopped? check.
               attempt += 1
             end
           end
