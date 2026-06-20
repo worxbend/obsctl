@@ -3,6 +3,7 @@ require "../config/config"
 require "../domain/errors"
 require "../obs/client"
 require "../obs/protocol/event_subscription"
+require "../runtime/logger"
 require "../runtime/reconnect_policy"
 require "./state_store"
 
@@ -47,12 +48,8 @@ module Obsctl
 
       # Drops the active client so the supervisor reconnect loop starts over.
       def reconnect : Nil
-        client = @client_lock.synchronize do
-          existing = @client
-          @client = nil
-          existing
-        end
-        @state.mark_disconnected("OBS reconnect requested")
+        client = @client_lock.synchronize { @client }
+        @state.mark_disconnected("OBS reconnect requested", reconnecting: @config.reconnect.enabled)
         publish_log("info", "obs_reconnect_requested", "OBS reconnect requested")
         client.try(&.close)
       end
@@ -65,26 +62,30 @@ module Obsctl
           client = OBS::Client.new(@config, event_subscriptions: OBS::Protocol::EventSubscription::SERVER_DEFAULT)
           connected = false
           begin
+            @state.mark_reconnect_attempt
             client.connect
             connected = true
             @client_lock.synchronize { @client = client }
-            @state.update(client.snapshot)
+            @state.mark_connected(client.snapshot)
             publish_log("info", "obs_connected", "Connected to OBS WebSocket")
             attempt = 0
 
-            wait_for_disconnect(client)
-            raise Domain::ConnectionFailed.new("OBS WebSocket closed") unless @stopped
+            disconnect_error = wait_for_disconnect(client)
+            next if client_detached?(client)
+            raise disconnect_error || Domain::ConnectionFailed.new("OBS WebSocket disconnected") unless @stopped
           rescue ex : Domain::ObsctlError
-            @state.mark_disconnected(ex.message)
-            publish_log("warn", "obs_disconnected", ex.message || "OBS unavailable")
+            message = public_message(ex.message, "OBS unavailable")
+            @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
+            publish_log("warn", disconnect_log_code(message), message)
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
             break unless @config.reconnect.enabled
             sleep policy.delay_for(attempt)
             attempt += 1
           rescue ex
-            @state.mark_disconnected(ex.message)
-            publish_log("error", "obs_supervisor_error", ex.message || "OBS supervisor failed")
+            message = public_message(ex.message, "OBS supervisor failed")
+            @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
+            publish_log("error", "obs_supervisor_error", message)
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
             break unless @config.reconnect.enabled
@@ -94,11 +95,14 @@ module Obsctl
         end
       end
 
-      private def wait_for_disconnect(client : OBS::Client) : Nil
+      private def wait_for_disconnect(client : OBS::Client) : Domain::ConnectionFailed?
         until @stopped || !client.connected?
           drain_events(client)
+          return client.terminal_error if client.terminal_error
           sleep 250.milliseconds
         end
+
+        client.terminal_error
       end
 
       private def drain_events(client : OBS::Client) : Nil
@@ -112,8 +116,13 @@ module Obsctl
           end
         end
       rescue ex : Domain::ObsctlError
-        @state.mark_disconnected(ex.message)
-        publish_log("warn", "obs_event_refresh_failed", ex.message || "failed to refresh OBS state after event")
+        message = public_message(ex.message, "failed to refresh OBS state after event")
+        @state.mark_disconnected(message)
+        publish_log("warn", "obs_event_refresh_failed", message)
+      end
+
+      private def client_detached?(client : OBS::Client) : Bool
+        @client_lock.synchronize { @client != client }
       end
 
       private def publish_event(event : OBS::Protocol::Event) : Nil
@@ -127,9 +136,28 @@ module Obsctl
         @log_broadcast.try(&.call(JSON.parse({
           level:      level,
           code:       code,
-          message:    message,
+          message:    Runtime::Logger.redact_secrets(message),
           created_at: Time.utc.to_rfc3339,
         }.to_json)))
+      end
+
+      private def public_message(message : String?, fallback : String) : String
+        Runtime::Logger.redact_secrets(message || fallback)
+      end
+
+      private def disconnect_log_code(message : String) : String
+        case message
+        when /response parser error/
+          "obs_response_parser_error"
+        when /malformed OBS frame/
+          "obs_malformed_frame"
+        when /closed cleanly/
+          "obs_closed_cleanly"
+        when /disconnected/
+          "obs_disconnected"
+        else
+          "obs_disconnected"
+        end
       end
     end
   end

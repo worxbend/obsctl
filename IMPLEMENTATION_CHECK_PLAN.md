@@ -32,7 +32,9 @@ Hard rule:
 - `obsctl unmute <target>`: CLI client command through server.
 - `obsctl toggle-mute <target>`: CLI client command through server.
 - `obsctl vol <target> <0-100>`: CLI client command through server.
-- `obsctl status`: asks local server for server and OBS status.
+- `obsctl status`: asks local server for combined server and OBS status.
+- `obsctl obs-status`: asks local server for OBS-only status.
+- `obsctl server-status`: asks local server for daemon-only status.
 - `obsctl dump-config`: asks server to fetch OBS state and merge into config.
 - `obsctl reload-config`: asks server to reload config and rebroadcast state.
 - `obsctl service install/start/stop/restart/status/uninstall`: manages `systemd --user` service.
@@ -257,6 +259,7 @@ Pushed event:
 Required IPC commands:
 
 - `Ping`
+- `Status` / `GetStatus` for combined daemon and OBS status
 - `GetServerStatus`
 - `GetObsStatus`
 - `GetSnapshot`
@@ -440,6 +443,14 @@ Or install service:
 8. Print concise output.
 9. Exit with mapped code.
 
+Status command contract:
+
+- `obsctl status` sends the IPC `status` command and returns one combined
+  payload with `server` and `obs` objects.
+- `obsctl obs-status` sends `get_obs_status` and returns only the OBS snapshot.
+- `obsctl server-status` sends `get_server_status` and returns only daemon
+  status.
+
 Do not silently start server from non-interactive CLI commands unless explicitly configured.
 
 Exit codes:
@@ -531,6 +542,9 @@ Rules:
 - `client_count : Int32`
 - `obs_connected : Bool`
 - `reconnecting : Bool`
+- `last_connected_at : Time?`
+- `last_disconnected_at : Time?`
+- `last_reconnect_attempt_at : Time?`
 - `last_error : String?`
 
 State rules:

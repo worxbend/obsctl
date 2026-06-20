@@ -30,6 +30,9 @@ module Obsctl
 
     # Small file logger for server lifecycle and command-failure diagnostics.
     class Logger
+      SENSITIVE_KEY_PATTERN   = "(?:password|authentication(?:[ _-]?string)?|auth(?:[ _-]?string)?|token|secret)"
+      SENSITIVE_VALUE_PATTERN = "(?:\"[^\"]*\"|'[^']*'|\\S+)"
+
       # Creates a logger writing to the configured runtime log path.
       def initialize(@level : LogLevel = LogLevel::Info, @path : String = Config::ConfigPaths.log_path)
       end
@@ -60,7 +63,7 @@ module Obsctl
 
         FileUtils.mkdir_p(File.dirname(@path))
         File.open(@path, "a") do |file|
-          file.puts("#{Time.utc.to_rfc3339} level=#{label_for(level)} #{redact(message)}")
+          file.puts("#{Time.utc.to_rfc3339} level=#{label_for(level)} #{self.class.redact_secrets(message)}")
         end
       rescue
       end
@@ -72,8 +75,13 @@ module Obsctl
         write(LogLevel::Info, message)
       end
 
-      private def redact(message : String) : String
-        message.gsub(/(?i)(password|authentication)=\S+/, "\\1=[redacted]")
+      # Redacts secret-like values from public logs and state messages.
+      def self.redact_secrets(message : String) : String
+        message
+          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*=\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1=[redacted]")
+          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*:\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1: [redacted]")
+          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(\"[^\"]*\"|'[^']*')"), "\\1 [redacted]")
+          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(is|was|equals|set to|configured as|provided as)\\s+#{SENSITIVE_VALUE_PATTERN}"), "\\1 \\2 [redacted]")
       end
 
       private def label_for(level : LogLevel) : String

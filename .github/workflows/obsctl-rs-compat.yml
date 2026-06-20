@@ -1,0 +1,34 @@
+name: obsctl-rs fixture compatibility
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect sibling obsctl-rs checkout
+        id: sibling
+        run: |
+          if [ -d ../obsctl-rs ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip single-repo checkout
+        if: steps.sibling.outputs.present != 'true'
+        run: echo "obsctl-rs sibling not found; skipping fixture compatibility"
+
+      - name: Install Crystal
+        if: steps.sibling.outputs.present == 'true'
+        uses: crystal-lang/install-crystal@v1
+
+      - name: Compare obsctl-rs fixtures
+        if: steps.sibling.outputs.present == 'true'
+        env:
+          CRYSTAL_CACHE_DIR: /tmp/obsctl-crystal-cache
+        run: make contract-rs-compat

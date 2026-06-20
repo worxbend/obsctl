@@ -111,7 +111,15 @@ Canonical JSON/IPC error codes map to CLI exit codes as follows:
 `ALIAS_AMBIGUOUS` exits as command parse error code `5` because the user's
 target is ambiguous before any OBS request is made.
 
-`obsctl server-status` checks only the local daemon. Its output includes `pid`, `uptime_seconds`, `socket_path`, `client_count`, `obs_connected`, `reconnecting`, and `last_error`.
+`obsctl status` asks the local daemon for a combined status response. Human
+output has separate `server:` and `obs:` sections. JSON output keeps the normal
+single envelope and places the combined payload under `result.server` and
+`result.obs`.
+
+`obsctl obs-status` asks the local daemon for only the OBS snapshot. It is the
+OBS-only command and is not an alias for the combined `status` command.
+
+`obsctl server-status` checks only the local daemon. Its output includes `pid`, `uptime_seconds`, `socket_path`, `client_count`, `obs_connected`, `reconnecting`, `last_connected_at`, `last_disconnected_at`, `last_reconnect_attempt_at`, and `last_error`. Timestamp fields are RFC3339 strings when known and `null` in JSON when absent.
 
 `obsctl validate-config` validates the local config file directly and does not require a running server. It prints a safe warning to stderr if plaintext `connection.password` is configured, including in JSON mode, and never echoes the password value. The TUI palette command `/validate-config` asks the running server to validate its configured file.
 

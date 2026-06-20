@@ -131,6 +131,8 @@ describe Obsctl::OBS::Client do
 
       error = receive_result(result, 1.second)
       error.should be_a(Obsctl::Domain::ConnectionFailed)
+      error.not_nil!.message.to_s.should contain("malformed OBS frame")
+      client.terminal_error.not_nil!.message.to_s.should contain("malformed OBS frame")
       client.pending_request_count_for_spec.should eq(0)
       client.connected?.should be_false
       server.next_close.should be_true
@@ -164,6 +166,8 @@ describe Obsctl::OBS::Client do
 
       error = receive_result(result, 1.second)
       error.should be_a(Obsctl::Domain::ConnectionFailed)
+      error.not_nil!.message.to_s.should contain("response parser error")
+      client.terminal_error.not_nil!.message.to_s.should contain("response parser error")
       client.pending_request_count_for_spec.should eq(0)
       client.connected?.should be_false
       server.next_close.should be_true

@@ -9,5 +9,8 @@
 [learning] OBS pending request cleanup must cover timeout, late response, concurrent response correlation, disconnect, and malformed frame paths.
 [learning] Golden fixtures can freeze accidental behavior; reconcile command semantics against acceptance docs before treating fixtures as final contracts.
 [learning] Protocol-error cleanup should preserve the root cause through supervisor state/logs, not only close the websocket and report a generic disconnect.
+[anti-pattern] Optional cross-repo compatibility specs in the default suite can break local gates when a sibling checkout exists accidentally; strict dual-repo checks should be target-scoped or explicitly enabled.
+[learning] A GitHub Actions sibling-repo compatibility job must checkout both repositories; checking for `../repo` after a single checkout only proves the job will skip.
+[learning] Reconnect telemetry fields need precise transition semantics; `last_disconnected_at` should not be updated by connection attempts that never reached a connected state.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
 [security] Never log or expose OBS passwords, generated authentication strings, tokens, or secret-like values in IPC errors, JSON envelopes, logs, specs, or TUI output.

@@ -84,23 +84,93 @@ describe Obsctl::CLI::Main do
     FileUtils.rm_rf(runtime_dir) if runtime_dir
   end
 
+  it "prints combined human status through the IPC client path" do
+    with_cli_json_runtime do
+      result = JSON.parse(<<-JSON)
+      {
+        "server": {
+          "pid": 123,
+          "uptime_seconds": 5,
+          "socket_path": "/tmp/obsctl.sock",
+          "client_count": 1,
+          "obs_connected": true,
+          "reconnecting": false,
+          "last_connected_at": "2026-06-20T12:00:00Z",
+          "last_disconnected_at": null,
+          "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+          "last_error": null
+        },
+        "obs": {
+          "connected": true,
+          "current_scene": "Main Camera",
+          "scenes": [{"name":"Main Camera","active":true}],
+          "audio_inputs": [{"name":"Mic/Aux","muted":false,"volume_percent":72}]
+        }
+      }
+      JSON
+      response = Obsctl::IPC::Response.new("req-000001", true, result)
+
+      with_fake_ipc_response(response) do |received|
+        stdout = IO::Memory.new
+        stderr = IO::Memory.new
+        exit_code = Obsctl::CLI::Main.run(["status"], nil, stdout, stderr)
+        request = received.receive
+
+        request.command.try(&.name).should eq("status")
+        exit_code.should eq(0)
+        stderr.to_s.should eq("")
+        stdout.to_s.should contain("server:\n  pid: 123")
+        stdout.to_s.should contain("  last_connected_at: 2026-06-20T12:00:00Z")
+        stdout.to_s.should contain("  last_disconnected_at: -")
+        stdout.to_s.should contain("  last_reconnect_attempt_at: 2026-06-20T11:59:59Z")
+        stdout.to_s.should contain("obs:\n  connected: true")
+        stdout.to_s.should contain("  current_scene: Main Camera")
+      end
+    end
+  end
+
   it "emits a JSON envelope for successful proxy commands" do
     with_cli_json_runtime do
-      result = JSON.parse(%({"connected":true,"current_scene":"Main Camera","scenes":[],"audio_inputs":[]}))
+      result = JSON.parse(<<-JSON)
+      {
+        "server": {
+          "pid": 123,
+          "uptime_seconds": 5,
+          "socket_path": "/tmp/obsctl.sock",
+          "client_count": 1,
+          "obs_connected": true,
+          "reconnecting": false,
+          "last_connected_at": "2026-06-20T12:00:00Z",
+          "last_disconnected_at": null,
+          "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+          "last_error": null
+        },
+        "obs": {
+          "connected": true,
+          "current_scene": "Main Camera",
+          "scenes": [],
+          "audio_inputs": []
+        }
+      }
+      JSON
       response = Obsctl::IPC::Response.new("req-000001", true, result)
 
       with_fake_ipc_response(response) do |received|
         exit_code, stdout, stderr = run_cli_json(["--json", "status"])
         request = received.receive
 
-        request.command.try(&.name).should eq("get_obs_status")
+        request.command.try(&.name).should eq("status")
         exit_code.should eq(0)
         stderr.should eq("")
 
         envelope = parse_single_json(stdout)
         envelope["ok"].as_bool.should be_true
-        envelope["result"]["connected"].as_bool.should be_true
-        envelope["result"]["current_scene"].as_s.should eq("Main Camera")
+        envelope["result"]["server"]["obs_connected"].as_bool.should be_true
+        envelope["result"]["server"]["last_connected_at"].as_s.should eq("2026-06-20T12:00:00Z")
+        envelope["result"]["server"]["last_disconnected_at"].raw.should be_nil
+        envelope["result"]["server"]["last_reconnect_attempt_at"].as_s.should eq("2026-06-20T11:59:59Z")
+        envelope["result"]["obs"]["connected"].as_bool.should be_true
+        envelope["result"]["obs"]["current_scene"].as_s.should eq("Main Camera")
         envelope["error"].raw.should be_nil
         envelope["exit_code"].as_i.should eq(0)
       end

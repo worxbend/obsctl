@@ -16,6 +16,22 @@ private class FakeClientCommandsUnixClient < Obsctl::IPC::UnixClient
 end
 
 describe Obsctl::CLI::ClientCommands do
+  it "sends distinct IPC commands for combined, OBS-only, and daemon-only status" do
+    response = Obsctl::IPC::Response.new("req-000001", true, JSON.parse(%({"message":"ok"})))
+
+    status_client = FakeClientCommandsUnixClient.new(response)
+    Obsctl::CLI::ClientCommands.new(status_client).request(Obsctl::Domain::StatusCommand.new)
+    status_client.request_payload.not_nil!.command.not_nil!.name.should eq("status")
+
+    obs_client = FakeClientCommandsUnixClient.new(response)
+    Obsctl::CLI::ClientCommands.new(obs_client).request(Obsctl::Domain::ObsStatusCommand.new)
+    obs_client.request_payload.not_nil!.command.not_nil!.name.should eq("get_obs_status")
+
+    server_client = FakeClientCommandsUnixClient.new(response)
+    Obsctl::CLI::ClientCommands.new(server_client).request(Obsctl::Domain::ServerStatusCommand.new)
+    server_client.request_payload.not_nil!.command.not_nil!.name.should eq("get_server_status")
+  end
+
   it "returns the raw IPC response for JSON envelope callers" do
     result = JSON.parse(%({"message":"muted: Mic/Aux"}))
     response = Obsctl::IPC::Response.new("req-000001", true, result)
@@ -27,6 +43,44 @@ describe Obsctl::CLI::ClientCommands do
     payload = client.request_payload.not_nil!.command.not_nil!
     payload.name.should eq("mute")
     payload.target.should eq("mic")
+  end
+
+  it "formats combined status with separate server and OBS sections" do
+    result = JSON.parse(<<-JSON)
+    {
+      "server": {
+        "pid": 123,
+        "uptime_seconds": 9,
+        "socket_path": "/tmp/obsctl.sock",
+        "client_count": 2,
+        "obs_connected": true,
+        "reconnecting": false,
+        "last_connected_at": "2026-06-20T12:00:00Z",
+        "last_disconnected_at": null,
+        "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+        "last_error": null
+      },
+      "obs": {
+        "connected": true,
+        "current_scene": "Main Camera",
+        "scenes": [{"name":"Main Camera","active":true}],
+        "audio_inputs": [{"name":"Mic/Aux","muted":false,"volume_percent":72}]
+      }
+    }
+    JSON
+    response = Obsctl::IPC::Response.new("req-000001", true, result)
+
+    output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
+      .execute(Obsctl::Domain::StatusCommand.new)
+      .message
+
+    output.should contain("server:\n  pid: 123")
+    output.should contain("  socket_path: /tmp/obsctl.sock")
+    output.should contain("  last_connected_at: 2026-06-20T12:00:00Z")
+    output.should contain("  last_disconnected_at: -")
+    output.should contain("  last_reconnect_attempt_at: 2026-06-20T11:59:59Z")
+    output.should contain("obs:\n  connected: true")
+    output.should contain("  current_scene: Main Camera")
   end
 
   it "maps every canonical IPC error to an audited process exit code" do

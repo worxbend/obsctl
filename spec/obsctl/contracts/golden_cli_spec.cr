@@ -9,7 +9,7 @@ require "../../../src/obsctl/ipc/socket_path"
 private GOLDEN_CLI_FIXTURE_ROOT = File.expand_path("../../fixtures/contracts", __DIR__)
 
 private GOLDEN_CLI_SUCCESS_CASES = [
-  {name: "status", args: ["status"], json: "cli/json/status_success.json", human: "cli/human/status_success.txt", command_name: "get_obs_status", target: nil, percent: nil},
+  {name: "status", args: ["status"], json: "cli/json/status_success.json", human: "cli/human/status_success.txt", command_name: "status", target: nil, percent: nil},
   {name: "server-status", args: ["server-status"], json: "cli/json/server_status_success.json", human: "cli/human/server_status_success.txt", command_name: "get_server_status", target: nil, percent: nil},
   {name: "obs-status", args: ["obs-status"], json: "cli/json/obs_status_success.json", human: "cli/human/obs_status_success.txt", command_name: "get_obs_status", target: nil, percent: nil},
   {name: "scene", args: ["scene", "main"], json: "cli/json/scene_success.json", human: "cli/human/scene_success.txt", command_name: "set_scene", target: "main", percent: nil},
@@ -27,7 +27,7 @@ private GOLDEN_CLI_ERROR_CASES = [
   {name: "obs-unavailable", args: ["scene", "main"], fixture: "cli/json/obs_unavailable_error.json", command_name: "set_scene", target: "main", percent: nil, exit_code: 3},
   {name: "config-invalid", args: ["reload-config"], fixture: "cli/json/config_invalid_error.json", command_name: "reload_config", target: nil, percent: nil, exit_code: 2},
   {name: "timeout", args: ["scene", "main"], fixture: "cli/json/timeout_error.json", command_name: "set_scene", target: "main", percent: nil, exit_code: 3},
-  {name: "protocol-error", args: ["status"], fixture: "cli/json/protocol_error.json", command_name: "get_obs_status", target: nil, percent: nil, exit_code: 6},
+  {name: "protocol-error", args: ["status"], fixture: "cli/json/protocol_error.json", command_name: "status", target: nil, percent: nil, exit_code: 6},
 ]
 
 private def golden_cli_fixture(path : String) : String
@@ -195,21 +195,6 @@ describe "golden CLI proxy contracts" do
   end
 
   it "matches obsctl-rs CLI golden fixtures when the sibling repository is present" do
-    unless Obsctl::SpecSupport::OptionalObsctlRsCompat.sibling_present?
-      true.should be_true
-      next
-    end
-
-    compat_root = Obsctl::SpecSupport::OptionalObsctlRsCompat.fixture_root
-    unless compat_root
-      true.should be_true
-      next
-    end
-
-    Obsctl::SpecSupport::OptionalObsctlRsCompat.local_fixture_paths(GOLDEN_CLI_FIXTURE_ROOT).each do |path|
-      next unless path.starts_with?("cli/")
-
-      File.read(File.join(compat_root, path)).strip.should eq(File.read(File.join(GOLDEN_CLI_FIXTURE_ROOT, path)).strip)
-    end
+    Obsctl::SpecSupport::OptionalObsctlRsCompat.assert_compatible!(GOLDEN_CLI_FIXTURE_ROOT, "cli/")
   end
 end

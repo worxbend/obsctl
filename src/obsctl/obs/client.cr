@@ -31,6 +31,9 @@ module Obsctl
         @events = Channel(Protocol::Event).new
         @pending = {} of String => Channel(Protocol::Response | Exception)
         @pending_lock = Mutex.new
+        @terminal_error = nil.as(Domain::ConnectionFailed?)
+        @terminal_error_lock = Mutex.new
+        @close_requested = false
       end
 
       # Channel of parsed OBS events from opcode 5 frames.
@@ -41,17 +44,23 @@ module Obsctl
         @identified && !@ws.closed?
       end
 
+      # Returns the safe terminal connection error that closed this client.
+      def terminal_error : Domain::ConnectionFailed?
+        @terminal_error_lock.synchronize { @terminal_error }
+      end
+
       # Opens the WebSocket, performs Hello/Identify/Identified, and starts the
       # reader fiber used for events and request responses.
       def connect : Nil
+        reset_terminal_state
         @ws = Connection.new(@config.connection).connect
         @ws.on_message { |message| handle_frame(message) }
-        @ws.on_close { fail_all_pending(Domain::ConnectionFailed.new("OBS WebSocket closed")) }
+        @ws.on_close { fail_all_pending(close_terminal_error) }
         spawn do
           begin
             @ws.run
           rescue ex
-            fail_all_pending(Domain::ConnectionFailed.new("OBS WebSocket reader failed: #{ex.message}"))
+            fail_all_pending(record_terminal_error(Domain::ConnectionFailed.new("OBS WebSocket reader failed")))
           end
         end
         hello = read_system_frame
@@ -61,6 +70,7 @@ module Obsctl
 
       # Closes the WebSocket and marks this client as no longer identified.
       def close : Nil
+        @terminal_error_lock.synchronize { @close_requested = true }
         @identified = false
         @ws.close unless @ws.closed?
       rescue
@@ -246,18 +256,27 @@ module Obsctl
       end
 
       private def handle_frame(frame : String) : Nil
-        case Protocol::Message.opcode(frame)
-        when 7
-          route_response(frame)
-        when 5
-          if event = Protocol::Event.from_frame(frame)
-            spawn { @events.send(event) }
+        opcode = Protocol::Message.opcode(frame)
+        begin
+          case opcode
+          when 7
+            route_response(frame)
+          when 5
+            if event = Protocol::Event.from_frame(frame)
+              spawn { @events.send(event) }
+            end
+          else
+            @system_frames.send(frame)
           end
-        else
-          @system_frames.send(frame)
+        rescue ex
+          if opcode == 7
+            fail_response_parser_error
+          else
+            fail_malformed_frame
+          end
         end
       rescue ex
-        fail_protocol_error(ex)
+        fail_malformed_frame
       end
 
       private def route_response(frame : String) : Nil
@@ -267,11 +286,19 @@ module Obsctl
         channel = @pending_lock.synchronize { @pending[response.request_id]? }
         send_pending(channel, response) if channel
       rescue ex
-        fail_protocol_error(ex)
+        fail_response_parser_error
       end
 
-      private def fail_protocol_error(error : Exception) : Nil
-        fail_all_pending(Domain::ConnectionFailed.new("OBS WebSocket protocol error: #{error.message}"))
+      private def fail_malformed_frame : Nil
+        fail_protocol_error("OBS WebSocket protocol error: malformed OBS frame")
+      end
+
+      private def fail_response_parser_error : Nil
+        fail_protocol_error("OBS WebSocket protocol error: response parser error")
+      end
+
+      private def fail_protocol_error(message : String) : Nil
+        fail_all_pending(record_terminal_error(Domain::ConnectionFailed.new(message)))
         close_after_protocol_error
       end
 
@@ -305,6 +332,29 @@ module Obsctl
         select
         when @system_frames.send(error)
         else
+        end
+      end
+
+      private def reset_terminal_state : Nil
+        @terminal_error_lock.synchronize do
+          @terminal_error = nil
+          @close_requested = false
+        end
+      end
+
+      private def close_terminal_error : Domain::ConnectionFailed
+        existing = terminal_error
+        return existing if existing
+
+        message = @terminal_error_lock.synchronize do
+          @close_requested ? "OBS WebSocket closed cleanly" : "OBS WebSocket disconnected"
+        end
+        record_terminal_error(Domain::ConnectionFailed.new(message))
+      end
+
+      private def record_terminal_error(error : Domain::ConnectionFailed) : Domain::ConnectionFailed
+        @terminal_error_lock.synchronize do
+          @terminal_error ||= error
         end
       end
 

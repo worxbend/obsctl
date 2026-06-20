@@ -54,7 +54,14 @@ obsctl service start|stop|restart|status|uninstall
 
 Except for `init`, `validate-config`, `server`, and `service`, scriptable OBS-control commands are thin IPC clients. Start `obsctl server --headless` first; if the server is missing, commands print startup/service instructions and exit `3`. `shutdown-server` is disabled unless `server.allow_remote_shutdown: true` is set.
 
-`obsctl server-status` reports only the local daemon status: PID, uptime, socket path, subscribed client count, OBS connection state, reconnecting state, and last error.
+`obsctl status` reports combined local daemon and OBS status. Its JSON result
+has a `server` object with daemon fields and an `obs` object with the OBS
+snapshot.
+
+`obsctl obs-status` reports only the OBS snapshot: connection state, current
+scene, scenes, and audio inputs.
+
+`obsctl server-status` reports only the local daemon status: PID, uptime, socket path, subscribed client count, OBS connection state, explicit reconnecting state, reconnect timestamps, and last error.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
