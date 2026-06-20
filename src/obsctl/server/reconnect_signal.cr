@@ -17,10 +17,8 @@ module Obsctl
         struct Requested < WaitResult
         end
 
-        # A transient internal wake or cancel interrupt occurred without
-        # advancing the explicit reconnect epoch. The supervisor should follow
-        # the normal backoff path. A cancel wake also sets the stopped lifecycle
-        # state, so the retry loop will exit at the next `stopped?` check.
+        # A transient internal wake occurred without advancing the explicit
+        # reconnect epoch. The supervisor should follow the normal backoff path.
         struct Interrupted < WaitResult
         end
 
@@ -28,10 +26,15 @@ module Obsctl
         # The supervisor should follow the normal backoff path.
         struct TimedOut < WaitResult
         end
+
+        # A stop-initiated cancel wake. The supervisor can break the retry loop
+        # immediately without incrementing backoff; the stopped lifecycle state
+        # is already set and the next `stopped?` check would also exit the loop.
+        struct Cancelled < WaitResult
+        end
       end
 
-      # Test-only hook called under the lock after a waiter is registered.
-      # Nil in production; set in specs to synchronize request-during-wait tests.
+      # Test-only hook called under `@lock` immediately after a waiter is appended; must not block or send on an unbuffered channel or it will deadlock.
       property on_waiter_registered : Proc(Nil)?
 
       def initialize
@@ -64,7 +67,7 @@ module Obsctl
             return WaitResult::Requested.new(current_epoch)
           end
           if @cancelled
-            return WaitResult::Interrupted.new(handled_request_epoch)
+            return WaitResult::Cancelled.new(handled_request_epoch)
           end
 
           @waiters << waiter
@@ -91,7 +94,7 @@ module Obsctl
         if current_epoch > handled_request_epoch
           WaitResult::Requested.new(current_epoch)
         elsif cancelled
-          WaitResult::Interrupted.new(current_epoch)
+          WaitResult::Cancelled.new(current_epoch)
         elsif timed_out
           WaitResult::TimedOut.new(current_epoch)
         else
