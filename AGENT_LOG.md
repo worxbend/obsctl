@@ -1733,3 +1733,7 @@ M  spec/obsctl/server/reconnect_signal_spec.cr
 A  spec/support/tcp_gate.cr
 M  src/obsctl/server/obs_supervisor.cr
 M  src/obsctl/server/reconnect_signal.cr
+2026-06-20T15:24:46Z final checkpoint policy behavior=source_and_telemetry terminal_reason=iterations_complete
+2026-06-20T15:24:46Z iteration final-2 checkpoint started
+2026-06-20T15:24:46Z iteration final-2 checkpoint status before commit:
+M  AGENT_LOG.md
