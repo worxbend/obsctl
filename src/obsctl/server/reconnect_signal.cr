@@ -34,7 +34,9 @@ module Obsctl
         end
       end
 
-      # Test-only hook called under `@lock` immediately after a waiter is appended; must not block or send on an unbuffered channel or it will deadlock.
+      # Test-only hook invoked while `@lock` is held, immediately after a waiter
+      # is appended. Callbacks must not block and must not send on an unbuffered
+      # channel because that can deadlock waiter registration.
       property on_waiter_registered : Proc(Nil)?
 
       def initialize

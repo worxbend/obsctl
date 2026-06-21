@@ -26,6 +26,7 @@
 [learning] Remaining reconnect flake cleanup still includes replacing `unused_tcp_port` unavailable-then-bind windows and reducing `wait_for_disconnect` polling.
 [learning] A test-only probe called under a mutex must use only non-blocking callbacks (e.g. buffered channel sends); blocking or unbuffered calls deadlock. Document this constraint on the property.
 [pattern] A race-witness spec that makes an assertion conditional on which side wins is useful documentation but not a closed proof; add a synchronization barrier or observable bit for strict proof.
-[pattern] Returning a typed result enum from a synchronization primitive eliminates inference at call sites; callers should match on `Requested`/`Interrupted`/`TimedOut` rather than comparing epoch values.
+[anti-pattern] A post-stop reconnect test does not prove the reconnect-vs-stop race; if reconnect can pass liveness before stop, re-check generation before publishing public state.
+[pattern] Returning a typed result enum from a synchronization primitive eliminates inference at call sites; callers should match on `Requested`/`Interrupted`/`TimedOut`/`Cancelled` rather than comparing epoch values.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
 [security] Never log or expose OBS passwords, generated authentication strings, tokens, or secret-like values in IPC errors, JSON envelopes, logs, specs, or TUI output.
