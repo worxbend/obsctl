@@ -42,5 +42,7 @@
 [pattern] Returning a typed result enum from a synchronization primitive eliminates inference at call sites; callers should match on `Requested`/`Interrupted`/`TimedOut`/`Cancelled` rather than comparing epoch values.
 [pattern] OBS established-disconnect detection should wait on client close/error notifications first and keep only a short defensive fallback timeout.
 [learning] A single buffered close notification is adequate for one supervisor owner, but concurrent waiters need per-waiter or condition-style notification semantics.
+[anti-pattern] A manifest-driven compatibility check can silently weaken coverage if active fixture files remain outside the manifest; add completeness checks against spec-used fixtures.
+[pattern] Bootstrap helpers for cross-repo fixtures should use or explicitly select an existing recognized fixture root, not create a higher-priority copied root that can shadow the counterpart repo's owned fixtures.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
 [security] Never log or expose OBS passwords, generated authentication strings, tokens, or secret-like values in IPC errors, JSON envelopes, logs, specs, or TUI output.

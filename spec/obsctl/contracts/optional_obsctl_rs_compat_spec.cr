@@ -20,6 +20,29 @@ private def write_contract_fixture(root : String, path : String, content : Strin
   File.write(full_path, content)
 end
 
+private def write_contract_manifest(root : String, fixture_paths : Array(String)) : Nil
+  write_contract_fixture(root, "contract_manifest.yml", <<-YAML)
+  version: 1
+  fixture_root: spec/fixtures/contracts
+  required_directories:
+    - cli/human/
+    - cli/json/
+    - ipc/
+  recognized_rust_roots:
+    - spec/fixtures/contracts/
+    - tests/fixtures/contracts/
+    - fixtures/contracts/
+  fixtures:
+  #{fixture_paths.map { |path| "  - category: #{path.split("/")[0, 2].join("/")}\n    relative_path: #{path}\n    purpose: Test fixture.\n    behavior: current_daemon\n    contains_dropped_reconnect_diagnostic_logs: false" }.join("\n")}
+  YAML
+end
+
+private def create_required_contract_directories(root : String) : Nil
+  ["cli/human", "cli/json", "ipc"].each do |directory|
+    FileUtils.mkdir_p(File.join(root, directory))
+  end
+end
+
 private def with_default_obsctl_rs_compat_env(&) : Nil
   with_env_value(Obsctl::SpecSupport::OptionalObsctlRsCompat::SKIP_ENV, nil) do
     with_env_value(Obsctl::SpecSupport::OptionalObsctlRsCompat::STRICT_ENV, nil) do
@@ -129,7 +152,8 @@ describe Obsctl::SpecSupport::OptionalObsctlRsCompat do
 
       diagnostics.to_s.should contain("sibling repository: #{sibling_repo}")
       diagnostics.to_s.should contain("fixture root: none recognized")
-      error.message.to_s.should contain("cli/ fixtures for CLI output/envelopes and ipc/ fixtures for typed IPC request payloads")
+      error.message.to_s.should contain("contract_manifest.yml, cli/human/, cli/json/, and ipc/")
+      error.message.to_s.should contain("scripts/bootstrap_obsctl_rs_contract_fixtures")
     ensure
       FileUtils.rm_rf(root) if root
     end
@@ -139,8 +163,12 @@ describe Obsctl::SpecSupport::OptionalObsctlRsCompat do
     with_strict_obsctl_rs_compat_env do
       with_obsctl_rs_compat_roots do |local_root, sibling_repo, sibling_root|
         diagnostics = IO::Memory.new
-        write_contract_fixture(local_root, "cli/shared.json", %({"ok":true}))
-        write_contract_fixture(sibling_root, "cli/shared.json", %({"ok":true}))
+        create_required_contract_directories(local_root)
+        create_required_contract_directories(sibling_root)
+        write_contract_manifest(local_root, ["cli/json/shared.json"])
+        write_contract_manifest(sibling_root, ["cli/json/shared.json"])
+        write_contract_fixture(local_root, "cli/json/shared.json", %({"ok":true}))
+        write_contract_fixture(sibling_root, "cli/json/shared.json", %({"ok":true}))
 
         Obsctl::SpecSupport::OptionalObsctlRsCompat.assert_compatible!(local_root, "cli/", sibling_repo, diagnostics)
 
@@ -151,21 +179,86 @@ describe Obsctl::SpecSupport::OptionalObsctlRsCompat do
     end
   end
 
-  it "fails on missing counterpart fixtures and content differences in strict mode" do
+  it "fails on missing required directories in strict mode before comparing contents" do
     with_strict_obsctl_rs_compat_env do
       with_obsctl_rs_compat_roots do |local_root, sibling_repo, sibling_root|
-        write_contract_fixture(local_root, "cli/shared.json", %({"ok":true}))
-        write_contract_fixture(local_root, "cli/local_only.json", %({"local":true}))
-        write_contract_fixture(sibling_root, "cli/shared.json", %({"ok":false}))
-        write_contract_fixture(sibling_root, "cli/sibling_only.json", %({"sibling":true}))
+        create_required_contract_directories(local_root)
+        FileUtils.mkdir_p(File.join(sibling_root, "cli/json"))
+        FileUtils.mkdir_p(File.join(sibling_root, "ipc"))
+        write_contract_manifest(local_root, ["cli/json/shared.json"])
+        write_contract_manifest(sibling_root, ["cli/json/shared.json"])
+        write_contract_fixture(local_root, "cli/json/shared.json", %({"ok":true}))
+        write_contract_fixture(sibling_root, "cli/json/shared.json", %({"ok":false}))
+
+        error = expect_raises(Exception, "contract manifest validation failed") do
+          Obsctl::SpecSupport::OptionalObsctlRsCompat.assert_compatible!(local_root, "cli/", sibling_repo, IO::Memory.new)
+        end
+
+        error.message.to_s.should contain("missing required obsctl-rs directories: cli/human/")
+        error.message.to_s.should contain("scripts/bootstrap_obsctl_rs_contract_fixtures")
+        error.message.to_s.should_not contain("content differs")
+      end
+    end
+  end
+
+  it "fails on manifest-listed missing counterpart fixtures in strict mode" do
+    with_strict_obsctl_rs_compat_env do
+      with_obsctl_rs_compat_roots do |local_root, sibling_repo, sibling_root|
+        create_required_contract_directories(local_root)
+        create_required_contract_directories(sibling_root)
+        write_contract_manifest(local_root, ["cli/json/shared.json", "cli/json/local_only.json"])
+        write_contract_manifest(sibling_root, ["cli/json/shared.json", "cli/json/local_only.json"])
+        write_contract_fixture(local_root, "cli/json/shared.json", %({"ok":true}))
+        write_contract_fixture(local_root, "cli/json/local_only.json", %({"local":true}))
+        write_contract_fixture(sibling_root, "cli/json/shared.json", %({"ok":true}))
+
+        error = expect_raises(Exception, "contract manifest validation failed") do
+          Obsctl::SpecSupport::OptionalObsctlRsCompat.assert_compatible!(local_root, "cli/", sibling_repo, IO::Memory.new)
+        end
+
+        error.message.to_s.should contain("missing from obsctl-rs: cli/json/local_only.json")
+        error.message.to_s.should contain("recognized roots: spec/fixtures/contracts/")
+      end
+    end
+  end
+
+  it "fails on a stale obsctl-rs contract manifest before comparing contents" do
+    with_strict_obsctl_rs_compat_env do
+      with_obsctl_rs_compat_roots do |local_root, sibling_repo, sibling_root|
+        create_required_contract_directories(local_root)
+        create_required_contract_directories(sibling_root)
+        write_contract_manifest(local_root, ["cli/json/shared.json"])
+        write_contract_manifest(sibling_root, ["cli/json/shared.json", "cli/json/extra.json"])
+        write_contract_fixture(local_root, "cli/json/shared.json", %({"ok":true}))
+        write_contract_fixture(sibling_root, "cli/json/shared.json", %({"ok":false}))
+
+        error = expect_raises(Exception, "contract manifest validation failed") do
+          Obsctl::SpecSupport::OptionalObsctlRsCompat.assert_compatible!(local_root, "cli/", sibling_repo, IO::Memory.new)
+        end
+
+        error.message.to_s.should contain("contract manifest differs: contract_manifest.yml")
+        error.message.to_s.should_not contain("content differs")
+      end
+    end
+  end
+
+  it "fails on manifest-listed content differences in strict mode" do
+    with_strict_obsctl_rs_compat_env do
+      with_obsctl_rs_compat_roots do |local_root, sibling_repo, sibling_root|
+        create_required_contract_directories(local_root)
+        create_required_contract_directories(sibling_root)
+        write_contract_manifest(local_root, ["cli/json/shared.json"])
+        write_contract_manifest(sibling_root, ["cli/json/shared.json"])
+        write_contract_fixture(local_root, "cli/json/shared.json", %({"ok":true}))
+        write_contract_fixture(sibling_root, "cli/json/shared.json", %({"ok":false}))
+        write_contract_fixture(sibling_root, "cli/json/sibling_only.json", %({"sibling":true}))
 
         error = expect_raises(Exception, "obsctl-rs fixture compatibility failed") do
           Obsctl::SpecSupport::OptionalObsctlRsCompat.assert_compatible!(local_root, "cli/", sibling_repo, IO::Memory.new)
         end
 
-        error.message.to_s.should contain("missing from obsctl-rs: cli/local_only.json")
-        error.message.to_s.should contain("missing locally: cli/sibling_only.json")
-        error.message.to_s.should contain("content differs: cli/shared.json")
+        error.message.to_s.should contain("content differs: cli/json/shared.json")
+        error.message.to_s.should_not contain("cli/json/sibling_only.json")
       end
     end
   end

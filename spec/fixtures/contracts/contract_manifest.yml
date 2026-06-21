@@ -1,0 +1,224 @@
+version: 1
+fixture_root: spec/fixtures/contracts
+required_directories:
+  - cli/human/
+  - cli/json/
+  - ipc/
+recognized_rust_roots:
+  - spec/fixtures/contracts/
+  - tests/fixtures/contracts/
+  - fixtures/contracts/
+behaviors:
+  current_daemon: Fixture represents the current daemon and CLI contract.
+  mixed_version: Fixture preserves compatibility behavior for older daemon payloads.
+fixtures:
+  - category: cli/human
+    relative_path: cli/human/dump_config_success.txt
+    purpose: Human output for a successful server-performed dump-config command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/mute_success.txt
+    purpose: Human output for a successful mute command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/obs_status_success.txt
+    purpose: Human output for a successful OBS-only status command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/reconnect_success.txt
+    purpose: Human output for an accepted explicit OBS reconnect request.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/reload_config_success.txt
+    purpose: Human output for a successful server-side config reload.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/scene_success.txt
+    purpose: Human output for a successful scene change command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/server_status_success.txt
+    purpose: Human daemon-only status output including dropped reconnect diagnostic log telemetry.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: true
+  - category: cli/human
+    relative_path: cli/human/shutdown_server_success.txt
+    purpose: Human output for an allowed shutdown-server command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/status_success.txt
+    purpose: Human combined server and OBS status output including dropped reconnect diagnostic log telemetry.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: true
+  - category: cli/human
+    relative_path: cli/human/toggle_mute_success.txt
+    purpose: Human output for a successful toggle-mute command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/unmute_success.txt
+    purpose: Human output for a successful unmute command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/vol_success.txt
+    purpose: Human output for a successful volume command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/config_invalid_error.json
+    purpose: JSON envelope for a config-invalid command failure.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/dump_config_success.json
+    purpose: JSON envelope for a successful server-performed dump-config command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/mute_success.json
+    purpose: JSON envelope for a successful mute command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/obs_status_success.json
+    purpose: JSON envelope for a successful OBS-only status command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/obs_unavailable_error.json
+    purpose: JSON envelope for an OBS-unavailable command failure.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/parse_error.json
+    purpose: JSON envelope for a command parse failure before IPC dispatch.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/protocol_error.json
+    purpose: JSON envelope for an IPC protocol command failure.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/reconnect_success.json
+    purpose: JSON envelope for an accepted explicit OBS reconnect request.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/reload_config_success.json
+    purpose: JSON envelope for a successful server-side config reload.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/scene_success.json
+    purpose: JSON envelope for a successful scene change command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/server_status_success.json
+    purpose: JSON daemon-only status envelope including dropped reconnect diagnostic log telemetry.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: true
+  - category: cli/json
+    relative_path: cli/json/server_unavailable_error.json
+    purpose: JSON envelope for a missing local obsctl server.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/shutdown_server_success.json
+    purpose: JSON envelope for an allowed shutdown-server command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/status_success.json
+    purpose: JSON combined server and OBS status envelope including dropped reconnect diagnostic log telemetry.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: true
+  - category: cli/json
+    relative_path: cli/json/timeout_error.json
+    purpose: JSON envelope for a request-timeout command failure.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/toggle_mute_success.json
+    purpose: JSON envelope for a successful toggle-mute command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/unmute_success.json
+    purpose: JSON envelope for a successful unmute command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/vol_success.json
+    purpose: JSON envelope for a successful volume command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/dump_config_request.json
+    purpose: Typed IPC request payload for dump-config.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/mute_request.json
+    purpose: Typed IPC request payload for mute.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/obs_status_request.json
+    purpose: Typed IPC request payload for OBS-only status.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/reconnect_request.json
+    purpose: Typed IPC request payload for explicit OBS reconnect.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/reload_config_request.json
+    purpose: Typed IPC request payload for reload-config.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/scene_request.json
+    purpose: Typed IPC request payload for scene change.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/server_status_request.json
+    purpose: Typed IPC request payload for daemon-only status.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/shutdown_server_request.json
+    purpose: Typed IPC request payload for shutdown-server.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/status_request.json
+    purpose: Typed IPC request payload for combined server and OBS status.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/toggle_mute_request.json
+    purpose: Typed IPC request payload for toggle-mute.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/unmute_request.json
+    purpose: Typed IPC request payload for unmute.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/vol_request.json
+    purpose: Typed IPC request payload for volume.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
