@@ -59,7 +59,14 @@ module Obsctl
       # Records a public operator reconnect request without treating it as an
       # OBS connection failure.
       def mark_reconnect_requested(at : Time = Time.utc) : Nil
-        mark_disconnected(
+        publish_snapshot_payload(mark_reconnect_requested_payload(at))
+      end
+
+      # Records a public operator reconnect request and returns the state-event
+      # payload so callers can defer subscriber fanout until their own locks are
+      # released.
+      def mark_reconnect_requested_payload(at : Time = Time.utc) : JSON::Any
+        mark_disconnected_payload(
           "OBS reconnect requested",
           reconnecting: true,
           at: at,
@@ -89,6 +96,20 @@ module Obsctl
         at : Time = Time.utc,
         connection_failed : Bool = true,
       ) : Nil
+        publish_snapshot_payload(mark_disconnected_payload(error, reconnecting, at, connection_failed))
+      end
+
+      # Publishes a precomputed state-event payload to subscribers.
+      def publish_snapshot_payload(payload : JSON::Any) : Nil
+        @on_update.try(&.call(payload))
+      end
+
+      private def mark_disconnected_payload(
+        error : String? = nil,
+        reconnecting : Bool = false,
+        at : Time = Time.utc,
+        connection_failed : Bool = true,
+      ) : JSON::Any
         next_snapshot = nil
         @lock.synchronize do
           current = @snapshot
@@ -113,7 +134,7 @@ module Obsctl
           )
           @snapshot = next_snapshot.not_nil!
         end
-        publish_snapshot(next_snapshot.not_nil!)
+        snapshot_to_json(next_snapshot.not_nil!)
       end
 
       # Returns the latest snapshot as the IPC state-event JSON payload.

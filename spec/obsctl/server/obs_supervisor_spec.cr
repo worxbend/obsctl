@@ -354,6 +354,82 @@ describe Obsctl::Server::ObsSupervisor do
     wait_for_supervisor { !supervisor.alive? } if supervisor
   end
 
+  it "stops promptly while accepted reconnect publication fanout is blocked" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    block_reconnect_publication = false
+    block_lock = Mutex.new
+    publication_blocked = Channel(Nil).new(1)
+    release_publication = Channel(Nil).new(1)
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
+      should_block = block_lock.synchronize do
+        block_reconnect_publication && payload["last_error"]?.try(&.as_s?) == "OBS reconnect requested"
+      end
+
+      if should_block
+        select
+        when publication_blocked.send(nil)
+        else
+        end
+        release_publication.receive
+      end
+    })
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state)
+    reconnect_result = Channel(Bool).new(1)
+    stop_finished = Channel(Nil).new(1)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    block_lock.synchronize { block_reconnect_publication = true }
+    spawn(name: "obs-supervisor-blocked-reconnect-publication-spec") do
+      reconnect_result.send(supervisor.reconnect)
+    end
+
+    select
+    when publication_blocked.receive
+    when timeout(2.seconds)
+      raise "reconnect publication did not reach blocking state callback"
+    end
+
+    spawn(name: "obs-supervisor-stop-during-blocked-publication-spec") do
+      supervisor.stop
+      stop_finished.send(nil)
+    end
+
+    select
+    when stop_finished.receive
+    when timeout(250.milliseconds)
+      raise "supervisor stop was blocked by reconnect publication fanout"
+    end
+
+    supervisor.alive?.should be_false
+    select
+    when reconnect_result.receive
+      raise "reconnect finished before blocked publication was released"
+    when timeout(50.milliseconds)
+    end
+
+    release_publication.send(nil)
+    result = select
+    when accepted = reconnect_result.receive
+      accepted
+    when timeout(2.seconds)
+      raise "reconnect did not finish after publication was released"
+    end
+    result.should be_true
+  ensure
+    if release = release_publication
+      select
+      when release.send(nil)
+      else
+      end
+    end
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
   it "rejects reconnect after stop before publishing reconnect state" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     state = Obsctl::Server::StateStore.new

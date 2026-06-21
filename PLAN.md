@@ -1,10 +1,10 @@
 # obsctl Improvement Plan
 
-This plan reflects a fresh senior review of the 2026-06-21 reconnect-vs-stop
-truthfulness slice. The implementation closes the targeted stale-publication
-race and adds a deterministic interleaving spec. The next highest-risk item is
-to keep that linearizability guarantee while removing synchronous IPC/log
-callbacks from the supervisor lifecycle lock.
+This plan reflects a fresh senior review of the 2026-06-21 accept-then-emit
+reconnect publication slice. The implementation removes subscriber/log fanout
+from `ObsSupervisor`'s lifecycle lock while preserving the generation-safe
+reconnect-vs-stop proof. The next highest-risk item is resource cleanup ordering:
+a blocked publication callback can still delay closing the detached OBS client.
 
 ## Current Assessment
 
@@ -22,17 +22,20 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
 
 Completed or correct in the reviewed slice:
 
-- `ObsSupervisor#reconnect` now captures the live generation, pauses only through
-  a test hook, and re-checks lifecycle state, generation, and reconnect-signal
-  identity before accepting the reconnect request.
-- When `stop` wins after reconnect observed a live generation, `reconnect`
-  returns `false`, does not request reconnect, does not detach/close another
-  client, does not mutate state/telemetry, and does not publish the
-  `obs_reconnect_requested` log.
-- The deterministic supervisor spec now covers the exact interleaving:
-  reconnect observes a live supervisor, the spec pauses it, `stop` completes,
-  reconnect resumes, and stale public reconnect state remains unobservable.
-- The earlier sequential post-stop spec remains useful and separate.
+- `ObsSupervisor#reconnect` now uses a small `ReconnectPublication` packet:
+  lifecycle/generation acceptance, reconnect request registration, active-client
+  detachment, and state mutation are decided under `@lifecycle_lock`; state/log
+  fanout runs after that lock is released.
+- The deterministic reconnect-vs-stop spec still proves the exact interleaving:
+  reconnect observes a live supervisor, the test hook pauses it, `stop`
+  completes, reconnect resumes, and stale public reconnect state remains
+  unobservable.
+- `StateStore` now exposes a payload-producing reconnect mutation so callers can
+  mutate authoritative state under their own lock and defer subscriber fanout.
+- A new liveness spec proves `stop` reaches stopped lifecycle state while
+  reconnect state publication is blocked.
+- `TODO.md` now distinguishes the sequential post-stop reconnect proof from the
+  concurrent paused-live-then-stop proof.
 - `ReconnectSignal#on_waiter_registered` documents its lock contract:
   callbacks run while `@lock` is held, must not block, and must not send on an
   unbuffered channel.
@@ -44,53 +47,52 @@ Completed or correct in the reviewed slice:
 
 Reviewer findings from the latest pass:
 
-- No implementation regression was found in the targeted reconnect-vs-stop
-  behavior. The core race from the previous review is closed in the reviewed
-  code path.
-- The new deterministic spec is materially stronger than the previous witness:
-  it uses `test_reconnect_before_publication` as a real barrier and makes the
-  stop-wins outcome mandatory, not conditional.
-- `TODO.md` was corrected before the race spec landed and now underclaims the
-  current proof by still saying the exact concurrent spec is missing. It should
-  be aligned with the final state of this slice.
-- `ObsSupervisor#reconnect` now calls `StateStore#mark_reconnect_requested` and
-  `publish_log` while holding `@lifecycle_lock`. Those callbacks can fan out to
-  `ClientRegistry#broadcast`, which synchronously writes to IPC client sockets.
-  This preserves the publication invariant but expands a lifecycle critical
-  section around potentially blocking IO.
-- The public `test_reconnect_before_publication` hook is acceptable as a narrow
-  internal test seam, but it should remain documented as test-only and should
-  not become part of the production control surface.
+- No regression was found in the targeted stale-publication race: stop-wins
+  reconnect remains generation-safe.
+- The lifecycle-lock liveness direction is correct: synchronous IPC/log fanout
+  no longer runs inside `@lifecycle_lock`.
+- The new liveness spec proves lifecycle progress, but not full shutdown
+  cleanup. `publish_reconnect` currently publishes state/log callbacks before
+  closing the detached OBS client; if state/log fanout blocks forever, `stop`
+  can return while the old OBS WebSocket remains open.
+- Detached-client cleanup is not protected by `ensure`; an unexpected exception
+  from a publication callback could skip closing the detached client.
+- `StateStore#mark_reconnect_requested_payload` is useful but potentially
+  misleadingly named: it mutates authoritative state and returns a payload. The
+  API should make that mutation explicit and have focused specs.
 - Remaining reconnect flake sources are unchanged: some reconnect specs still
   depend on unavailable-then-bind port windows and `wait_for_disconnect` still
   polls.
 
-## P0: Keep Reconnect Publication Linearizable Without Blocking Lifecycle
+## P0: Finish Reconnect Publication Cleanup Semantics
 
-1. Split reconnect acceptance from synchronous publication side effects.
-   - Keep the generation/lifecycle decision, reconnect request registration,
-     active-client detachment, and state mutation linearized under
+1. Close detached OBS clients before blockable publication fanout.
+   - Keep the lifecycle acceptance and detachment decision under
      `@lifecycle_lock`.
-   - Do not run subscriber fanout, socket writes, or file logging while holding
-     `@lifecycle_lock`.
-   - Preferred shape: refactor state/log publication into a small accepted
-     reconnect result containing the detached client and payloads to broadcast
-     after the lifecycle lock is released, or make broadcast dispatch
-     non-blocking behind an event queue.
+   - After releasing the lifecycle lock, close the detached client before state
+     or log callbacks that can block on IPC sockets or file IO.
+   - Do not reintroduce client close, subscriber fanout, socket writes, or file
+     logging inside `@lifecycle_lock`.
 
-2. Add a regression spec for lifecycle-lock callback safety.
-   - Simulate a subscribed client or test callback that blocks on state/log
-     publication.
-   - Prove `stop` is not prevented from reaching stopped state by a blocked
-     subscriber write or log fanout.
-   - Preserve the existing stop-wins reconnect-vs-stop spec while adding this
-     liveness check.
+2. Guarantee detached-client cleanup when publication fails.
+   - Wrap reconnect publication in an `ensure` or equivalent so the detached OBS
+     client is closed even if a state/log callback raises unexpectedly.
+   - Keep public error behavior safe and secret-free if publication exceptions
+     are surfaced or logged.
 
-3. Align project trackers after the completed race proof.
-   - Update `TODO.md` so it credits the exact deterministic concurrent
-     reconnect-vs-stop spec now present.
-   - Keep the distinction between the sequential post-stop proof and the
-     concurrent paused-live-then-stop proof.
+3. Strengthen the liveness regression spec.
+   - In the blocked-publication test, assert the old OBS WebSocket close is
+     observed before or independently of publication release.
+   - Add a variant where log fanout blocks, not only state fanout.
+   - Add a publication-raises case proving detached-client cleanup still
+     happens.
+
+4. Clarify the state-store deferred-payload API.
+   - Rename or document the method so callers understand it mutates state and
+     returns a precomputed IPC payload.
+   - Add focused `StateStore` specs proving the returned payload matches
+     `snapshot_json`, telemetry changes are applied once, and callbacks are not
+     invoked until `publish_snapshot_payload`.
 
 ## P0: Finish Strict Compatibility Fixture Ownership
 
@@ -222,13 +224,14 @@ Add breadth only after the daemon/IPC/reconnect contract remains stable.
 
 ## Suggested Next Pull Requests
 
-1. Decouple reconnect lifecycle publication from synchronous IPC/log callbacks
-   while preserving the stop-wins invariant.
-2. Correct `TODO.md` to reflect that the exact concurrent reconnect-vs-stop spec
-   now exists and passes.
-3. Replace remaining reconnect unavailable-then-bind and polling surfaces with
+1. Close detached OBS clients before blockable reconnect publication fanout, and
+   guarantee cleanup if publication callbacks raise.
+2. Strengthen blocked-publication specs to assert OBS client closure and cover
+   both state and log fanout blockers.
+3. Add focused `StateStore` specs for deferred reconnect payload semantics.
+4. Replace remaining reconnect unavailable-then-bind and polling surfaces with
    deterministic fake-server probes.
-4. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
+5. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
    `make contract-rs-compat` in a prepared dual-repo workspace.
 
 ## Build Gates
