@@ -38,6 +38,7 @@
 [learning] Silent best-effort diagnostic drops preserve liveness but need aggregate observability if operators must diagnose slow log subscribers.
 [learning] Public telemetry defaults must distinguish unknown/missing fields from real zero values, especially for mixed-version CLI/server status output.
 [pattern] Public counters serialized through JSON should use an explicit non-negative signed contract or documented saturation instead of exposing raw `UInt64` values.
+[pattern] For public status telemetry, cover both human formatter compatibility and JSON envelope pass-through; golden fixtures alone are not enough to localize regressions.
 [pattern] Returning a typed result enum from a synchronization primitive eliminates inference at call sites; callers should match on `Requested`/`Interrupted`/`TimedOut`/`Cancelled` rather than comparing epoch values.
 [pattern] OBS established-disconnect detection should wait on client close/error notifications first and keep only a short defensive fallback timeout.
 [learning] A single buffered close notification is adequate for one supervisor owner, but concurrent waiters need per-waiter or condition-style notification semantics.

@@ -379,6 +379,42 @@ describe Obsctl::CLI::Main do
     end
   end
 
+  it "keeps JSON daemon status envelopes faithful when older daemons omit drop telemetry" do
+    with_cli_json_runtime do
+      result = JSON.parse(<<-JSON)
+      {
+        "pid": 123,
+        "uptime_seconds": 5,
+        "socket_path": "/tmp/obsctl.sock",
+        "client_count": 1,
+        "obs_connected": false,
+        "reconnecting": true,
+        "last_connected_at": "2026-06-20T12:00:00Z",
+        "last_disconnected_at": "2026-06-20T12:05:00Z",
+        "last_reconnect_attempt_at": "2026-06-20T12:06:00Z",
+        "last_error": "connection failed"
+      }
+      JSON
+      response = Obsctl::IPC::Response.new("req-000001", true, result)
+
+      with_fake_ipc_response(response) do |received|
+        exit_code, stdout, stderr = run_cli_json(["--json", "server-status"])
+        request = received.receive
+
+        request.command.try(&.name).should eq("get_server_status")
+        exit_code.should eq(0)
+        stderr.should eq("")
+
+        envelope = parse_single_json(stdout)
+        envelope["ok"].as_bool.should be_true
+        envelope["result"].as_h.has_key?("dropped_reconnect_diagnostic_logs").should be_false
+        envelope["result"]["obs_connected"].as_bool.should be_false
+        envelope["error"].raw.should be_nil
+        envelope["exit_code"].as_i.should eq(0)
+      end
+    end
+  end
+
   it "emits a JSON envelope without startup hints when the server is unavailable" do
     with_cli_json_runtime do
       exit_code, stdout, stderr = run_cli_json(["status", "--json"])
