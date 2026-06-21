@@ -53,7 +53,7 @@ describe Obsctl::CLI::ClientCommands do
         "uptime_seconds": 9,
         "socket_path": "/tmp/obsctl.sock",
         "client_count": 2,
-        "dropped_reconnect_diagnostic_logs": 3,
+        "dropped_reconnect_diagnostic_logs": 0,
         "obs_connected": true,
         "reconnecting": false,
         "last_connected_at": "2026-06-20T12:00:00Z",
@@ -78,7 +78,7 @@ describe Obsctl::CLI::ClientCommands do
 
     output.should contain("server:\n  pid: 123")
     output.should contain("  socket_path: /tmp/obsctl.sock")
-    output.should contain("  dropped_reconnect_diagnostic_logs: 3")
+    output.should contain("  dropped_reconnect_diagnostic_logs: 0")
     output.should contain("  last_connected_at: 2026-06-20T12:00:00Z")
     output.should contain("  last_disconnected_at: 2026-06-20T11:55:00Z")
     output.should contain("  last_reconnect_attempt_at: 2026-06-20T11:59:59Z")
@@ -94,7 +94,7 @@ describe Obsctl::CLI::ClientCommands do
       "uptime_seconds": 9,
       "socket_path": "/tmp/obsctl.sock",
       "client_count": 2,
-      "dropped_reconnect_diagnostic_logs": 5,
+      "dropped_reconnect_diagnostic_logs": 0,
       "obs_connected": false,
       "reconnecting": true,
       "last_connected_at": "2026-06-20T12:00:00Z",
@@ -111,13 +111,13 @@ describe Obsctl::CLI::ClientCommands do
       .message
 
     output.should contain("last_connected_at: 2026-06-20T12:00:00Z")
-    output.should contain("dropped_reconnect_diagnostic_logs: 5")
+    output.should contain("dropped_reconnect_diagnostic_logs: 0")
     output.should contain("last_disconnected_at: 2026-06-20T12:05:00Z")
     output.should contain("last_reconnect_attempt_at: 2026-06-20T12:06:00Z")
     output.should contain("last_connection_failed_at: 2026-06-20T12:07:00Z")
   end
 
-  it "keeps formatting older daemon status payloads without last connection failure time" do
+  it "renders missing drop telemetry as unknown for older daemon status payloads" do
     result = JSON.parse(<<-JSON)
     {
       "pid": 123,
@@ -138,8 +138,42 @@ describe Obsctl::CLI::ClientCommands do
       .execute(Obsctl::Domain::ServerStatusCommand.new)
       .message
 
-    output.should contain("dropped_reconnect_diagnostic_logs: 0")
+    output.should contain("dropped_reconnect_diagnostic_logs: -")
     output.should contain("last_connection_failed_at: -")
+  end
+
+  it "renders missing drop telemetry as unknown for older combined status payloads" do
+    result = JSON.parse(<<-JSON)
+    {
+      "server": {
+        "pid": 123,
+        "uptime_seconds": 9,
+        "socket_path": "/tmp/obsctl.sock",
+        "client_count": 2,
+        "obs_connected": true,
+        "reconnecting": false,
+        "last_connected_at": "2026-06-20T12:00:00Z",
+        "last_disconnected_at": null,
+        "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+        "last_error": null
+      },
+      "obs": {
+        "connected": true,
+        "current_scene": "Main Camera",
+        "scenes": [],
+        "audio_inputs": []
+      }
+    }
+    JSON
+    response = Obsctl::IPC::Response.new("req-000001", true, result)
+
+    output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
+      .execute(Obsctl::Domain::StatusCommand.new)
+      .message
+
+    output.should contain("server:\n  pid: 123")
+    output.should contain("  dropped_reconnect_diagnostic_logs: -")
+    output.should contain("obs:\n  connected: true")
   end
 
   it "maps every canonical IPC error to an audited process exit code" do

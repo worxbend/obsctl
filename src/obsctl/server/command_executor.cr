@@ -14,6 +14,8 @@ module Obsctl
   module Server
     # Executes validated IPC commands against server-owned config, state, and OBS client.
     class CommandExecutor
+      JSON_SAFE_COUNTER_MAX = Int64::MAX.to_u64
+
       # Creates a command executor for one server runtime.
       def initialize(
         @config : Config::Config,
@@ -136,7 +138,7 @@ module Obsctl
           "uptime_seconds"                    => (Time.utc - @started_at).total_seconds.to_i64,
           "socket_path"                       => @socket_path,
           "client_count"                      => @client_count.try(&.call) || 0,
-          "dropped_reconnect_diagnostic_logs" => @dropped_reconnect_diagnostic_logs.try(&.call) || 0_u64,
+          "dropped_reconnect_diagnostic_logs" => dropped_reconnect_diagnostic_logs,
           "obs_connected"                     => snapshot.connected,
           "reconnecting"                      => telemetry.reconnecting,
           "last_connected_at"                 => timestamp(telemetry.last_connected_at),
@@ -145,6 +147,13 @@ module Obsctl
           "last_connection_failed_at"         => timestamp(telemetry.last_connection_failed_at),
           "last_error"                        => snapshot.last_error,
         })
+      end
+
+      private def dropped_reconnect_diagnostic_logs : Int64
+        value = @dropped_reconnect_diagnostic_logs.try(&.call) || 0_u64
+        return Int64::MAX if value > JSON_SAFE_COUNTER_MAX
+
+        value.to_i64
       end
 
       private def timestamp(value : Time?) : String?

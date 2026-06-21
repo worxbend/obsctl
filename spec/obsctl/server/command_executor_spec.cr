@@ -157,6 +157,37 @@ describe Obsctl::Server::CommandExecutor do
     result["last_connection_failed_at"].raw.should be_nil
   end
 
+  it "serializes a positive dropped reconnect diagnostic log count as a signed JSON integer" do
+    response = default_executor(dropped_reconnect_diagnostic_logs: -> { 42_u64 }).execute(
+      command_request(Obsctl::IPC::CommandPayload.new("get_server_status"))
+    )
+
+    response.ok.should be_true
+    value = response.result.not_nil!["dropped_reconnect_diagnostic_logs"]
+    value.as_i64.should eq(42)
+    value.raw.should be_a(Int64)
+  end
+
+  it "defaults dropped reconnect diagnostic log count to signed zero without a callback" do
+    response = default_executor.execute(command_request(Obsctl::IPC::CommandPayload.new("get_server_status")))
+
+    response.ok.should be_true
+    value = response.result.not_nil!["dropped_reconnect_diagnostic_logs"]
+    value.as_i64.should eq(0)
+    value.raw.should be_a(Int64)
+  end
+
+  it "saturates very large dropped reconnect diagnostic log counts at Int64::MAX" do
+    response = default_executor(dropped_reconnect_diagnostic_logs: -> { UInt64::MAX }).execute(
+      command_request(Obsctl::IPC::CommandPayload.new("get_server_status"))
+    )
+
+    response.ok.should be_true
+    value = response.result.not_nil!["dropped_reconnect_diagnostic_logs"]
+    value.as_i64.should eq(Int64::MAX)
+    value.raw.should be_a(Int64)
+  end
+
   it "returns IPC_PROTOCOL_ERROR for malformed command requests" do
     response = default_executor.execute(command_request(nil))
 

@@ -148,7 +148,7 @@ module Obsctl
         lines << "uptime_seconds: #{result["uptime_seconds"]?.try(&.as_i?) || "-"}"
         lines << "socket_path: #{result["socket_path"]?.try(&.as_s?) || "-"}"
         lines << "client_count: #{result["client_count"]?.try(&.as_i?) || 0}"
-        lines << "dropped_reconnect_diagnostic_logs: #{integer_text(result["dropped_reconnect_diagnostic_logs"]?)}"
+        lines << "dropped_reconnect_diagnostic_logs: #{optional_integer_text(result["dropped_reconnect_diagnostic_logs"]?)}"
         lines << "obs_connected: #{result["obs_connected"]?.try(&.as_bool?) || false}"
         lines << "reconnecting: #{result["reconnecting"]?.try(&.as_bool?) || false}"
         lines << "last_connected_at: #{timestamp_text(result["last_connected_at"]?)}"
@@ -163,8 +163,8 @@ module Obsctl
         value.try(&.as_s?) || "-"
       end
 
-      private def integer_text(value : JSON::Any?) : String
-        value.try(&.as_i64?).try(&.to_s) || "0"
+      private def optional_integer_text(value : JSON::Any?) : String
+        value.try(&.as_i64?).try(&.to_s) || "-"
       end
 
       private def raise_remote_error(error : IPC::ErrorPayload) : NoReturn

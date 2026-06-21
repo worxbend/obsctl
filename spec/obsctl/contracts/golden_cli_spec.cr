@@ -38,6 +38,18 @@ private def golden_cli_json(path : String) : String
   golden_cli_fixture(path).strip
 end
 
+private def golden_cli_envelope(path : String) : JSON::Any
+  JSON.parse(golden_cli_json(path))
+end
+
+private def assert_golden_drop_telemetry(status : JSON::Any, expected : Int64) : Nil
+  status.as_h.has_key?("dropped_reconnect_diagnostic_logs").should be_true
+  value = status["dropped_reconnect_diagnostic_logs"]
+  value.raw.should be_a(Int64)
+  value.as_i64.should eq(expected)
+  value.as_i64.should be >= 0_i64
+end
+
 private def golden_cli_response_from_envelope(envelope_json : String) : Obsctl::IPC::Response
   envelope = JSON.parse(envelope_json)
   error = envelope["error"].raw.nil? ? nil : Obsctl::IPC::ErrorPayload.new(
@@ -192,6 +204,16 @@ describe "golden CLI proxy contracts" do
       stdout.should eq("#{golden_cli_json("cli/json/server_unavailable_error.json")}\n")
       stderr.should eq("")
     end
+  end
+
+  it "freezes current-daemon reconnect diagnostic drop telemetry in status fixtures" do
+    server_status = golden_cli_envelope("cli/json/server_status_success.json")
+    combined_status = golden_cli_envelope("cli/json/status_success.json")
+
+    assert_golden_drop_telemetry(server_status["result"], 4_i64)
+    assert_golden_drop_telemetry(combined_status["result"]["server"], 4_i64)
+    golden_cli_fixture("cli/human/server_status_success.txt").should contain("dropped_reconnect_diagnostic_logs: 4\n")
+    golden_cli_fixture("cli/human/status_success.txt").should contain("  dropped_reconnect_diagnostic_logs: 4\n")
   end
 
   it "optionally matches obsctl-rs CLI golden fixtures in strict compatibility mode" do
