@@ -73,8 +73,11 @@ already has a prompt OBS connection attempt in progress; it does not mean OBS is
 already connected. Accepted explicit requests are durable across the next retry
 boundary, so a request made after a failed connection attempt but before retry
 sleep starts is still acted on promptly. The public `last_error` remains
-`OBS reconnect requested` until the next connection succeeds or fails. If the
-supervisor has already exited, for example after startup failure with
+`OBS reconnect requested` until the next connection succeeds or fails. Once an
+accepted request has updated supervisor state and any detached OBS client has
+been closed, subscriber state/log delivery failures are best-effort diagnostics:
+the server logs them with secret redaction, and the command still succeeds. If
+the supervisor has already exited, for example after startup failure with
 `reconnect.enabled: false`, `obsctl reconnect` returns `OBS_UNAVAILABLE` with a
 message telling the operator to restart the server or enable reconnect.
 

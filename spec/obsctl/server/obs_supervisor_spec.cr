@@ -515,31 +515,55 @@ describe Obsctl::Server::ObsSupervisor do
     wait_for_supervisor { !supervisor.alive? } if supervisor
   end
 
-  it "closes detached OBS client when reconnect state publication raises" do
+  it "returns success and records a sanitized diagnostic when reconnect state publication raises" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    log_updates = [] of JSON::Any
+    log_update_lock = Mutex.new
     state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
       if payload["last_error"]?.try(&.as_s?) == "OBS reconnect requested"
-        raise "state publication failed"
+        raise "state publication failed password=supersecret token: abc123"
       end
     })
-    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state)
+    supervisor = Obsctl::Server::ObsSupervisor.new(
+      obs.config,
+      state,
+      nil,
+      ->(payload : JSON::Any) { log_update_lock.synchronize { log_updates << payload } }
+    )
 
     supervisor.start
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
+    log_update_lock.synchronize { log_updates.clear }
 
-    expect_raises(Exception, "state publication failed") do
-      supervisor.reconnect
-    end
+    supervisor.reconnect.should be_true
     obs.next_close_observed(2.seconds).should be_true
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+
+    logs_after_reconnect = log_update_lock.synchronize { log_updates.dup }
+    diagnostic = logs_after_reconnect.find do |payload|
+      payload["code"].as_s == "obs_reconnect_state_publication_failed"
+    end
+    diagnostic.should_not be_nil
+    message = diagnostic.not_nil!["message"].as_s
+    message.should contain("OBS reconnect state publication failed")
+    message.should contain("[redacted]")
+    message.should_not contain("supersecret")
+    message.should_not contain("abc123")
+    logs_after_reconnect.each do |payload|
+      payload["message"].as_s.should_not contain("supersecret")
+      payload["message"].as_s.should_not contain("abc123")
+    end
   ensure
     supervisor.try(&.stop)
     obs.try(&.stop)
     wait_for_supervisor { !supervisor.alive? } if supervisor
   end
 
-  it "closes detached OBS client when reconnect log publication raises" do
+  it "returns success and records a sanitized diagnostic when reconnect log publication raises" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    log_updates = [] of JSON::Any
+    log_update_lock = Mutex.new
     state = Obsctl::Server::StateStore.new
     supervisor = Obsctl::Server::ObsSupervisor.new(
       obs.config,
@@ -547,19 +571,35 @@ describe Obsctl::Server::ObsSupervisor do
       nil,
       ->(payload : JSON::Any) {
         if payload["code"]?.try(&.as_s?) == "obs_reconnect_requested"
-          raise "log publication failed"
+          raise "log publication failed authentication string is generated-token secret: abc123"
         end
+        log_update_lock.synchronize { log_updates << payload }
       }
     )
 
     supervisor.start
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
+    log_update_lock.synchronize { log_updates.clear }
 
-    expect_raises(Exception, "log publication failed") do
-      supervisor.reconnect
-    end
+    supervisor.reconnect.should be_true
     obs.next_close_observed(2.seconds).should be_true
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+
+    logs_after_reconnect = log_update_lock.synchronize { log_updates.dup }
+    diagnostic = logs_after_reconnect.find do |payload|
+      payload["code"].as_s == "obs_reconnect_log_publication_failed"
+    end
+    diagnostic.should_not be_nil
+    message = diagnostic.not_nil!["message"].as_s
+    message.should contain("OBS reconnect log publication failed")
+    message.should contain("[redacted]")
+    message.should_not contain("generated-token")
+    message.should_not contain("abc123")
+    logs_after_reconnect.each do |payload|
+      payload["message"].as_s.should_not contain("generated-token")
+      payload["message"].as_s.should_not contain("abc123")
+    end
   ensure
     supervisor.try(&.stop)
     obs.try(&.stop)

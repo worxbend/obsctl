@@ -31,6 +31,8 @@
 [learning] Lifecycle locks should guard reconnect acceptance and state transitions, but synchronous IPC/log fanout under those locks can turn a correctness fix into a shutdown-liveness risk.
 [pattern] After a reconnect detaches an OBS client from lifecycle ownership, close that client before blockable state/log fanout and protect cleanup with `ensure`.
 [learning] Reconnect liveness specs should prove resource cleanup before blocked publication release, not only that lifecycle state reaches stopped.
+[pattern] Accepted reconnect publication failures are diagnostic-only after lifecycle acceptance and detached-client cleanup; public `reconnect_obs` should still succeed.
+[learning] Best-effort diagnostics should not synchronously depend on the same blockable broadcast path whose failure they are reporting.
 [pattern] Returning a typed result enum from a synchronization primitive eliminates inference at call sites; callers should match on `Requested`/`Interrupted`/`TimedOut`/`Cancelled` rather than comparing epoch values.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
 [security] Never log or expose OBS passwords, generated authentication strings, tokens, or secret-like values in IPC errors, JSON envelopes, logs, specs, or TUI output.

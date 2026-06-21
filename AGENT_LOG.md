@@ -2154,3 +2154,121 @@ M  spec/obsctl/server/obs_supervisor_spec.cr
 M  spec/obsctl/server/state_store_spec.cr
 M  src/obsctl/server/obs_supervisor.cr
 M  src/obsctl/server/state_store.cr
+2026-06-21T08:16:06Z iteration 3 started remaining=16780s
+2026-06-21T08:16:06Z iteration 3 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-21T08:16:06Z iteration 3 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-x7m86x2x/repo copied_entries=181
+2026-06-21T08:16:06Z iteration 3 ideator phase started count=3
+2026-06-21T08:16:06Z iteration 3 ideator phase concurrency workers=3
+2026-06-21T08:16:06Z iteration 3 ideator 1 role="the pragmatist" started
+2026-06-21T08:16:06Z iteration 3 ideator 2 role="the architect" started
+2026-06-21T08:16:06Z iteration 3 ideator 3 role="the contrarian" started
+2026-06-21T08:16:15Z iteration 3 ideator 1 role="the pragmatist" completed status=0
+2026-06-21T08:16:15Z iteration 3 ideator 2 role="the architect" completed status=0
+2026-06-21T08:16:16Z iteration 3 ideator 3 role="the contrarian" completed status=0
+2026-06-21T08:16:16Z iteration 3 ideator phase completed approaches=3
+2026-06-21T08:16:16Z iteration 3 selector started approaches=3
+2026-06-21T08:16:26Z iteration 3 selector completed status=0
+2026-06-21T08:16:26Z iteration 3 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-x7m86x2x/repo
+2026-06-21T08:16:26Z iteration 3 selector rejected alternative role="the pragmatist" approach="Semantics-First Reconnect Hardening: treat reconnect publication behavior as a product contract before touching more flakes, then use narrowly scoped deterministic test infrastr..." reason="Strongly aligned, but framed publication determinism slightly too much as support infrastructure. The planner needs an explicit public contract anchor before test infrastructure choices."
+2026-06-21T08:16:26Z iteration 3 selector rejected alternative role="the architect" approach="Contract-First Reconnect Stabilization: treat reconnect acceptance, cleanup, publication, and public command reporting as one explicit contract before doing broader flake cleanup." reason="Also strongly aligned, but selected only as part of the synthesis because it needs the pragmatist's caution against broadening production interfaces for test convenience."
+2026-06-21T08:16:26Z iteration 3 selector rejected alternative role="the contrarian" approach="Semantics-First Stabilization: pause flake cleanup and force a public reconnect contract decision before touching more synchronization code, treating publication failure behavio..." reason="Correctly challenges the backlog order, but selected only in hybrid form because planning should not merely pause synchronization work; it should define how the semantic decision feeds coverage, diagnostics, and later flake cleanup."
+2026-06-21T08:16:26Z iteration 3 selector alternatives persisted count=3
+2026-06-21T08:16:26Z iteration 3 selector structured alternatives persisted count=3
+2026-06-21T08:16:26Z iteration 3 planner started
+2026-06-21T08:16:56Z iteration 3 plan: 6 task(s) in 4 phase(s). This iteration chooses the best-effort reconnect publication contract because the plan’s highest unresolved risk is semantic: accepted reconnects should not become public command failures due to delivery callbacks. Implementation comes first, then supervisor and command-level coverage can proceed in parallel, followed by independent docs/tracker updates and a final validation gate.
+2026-06-21T08:16:56Z iteration 3 phase 1 started parallel=False tasks=1
+2026-06-21T08:20:20Z iteration 3 task t1 ('Make reconnect publication best-effort') status=0
+2026-06-21T08:20:20Z iteration 3 phase 2 started parallel=True tasks=2
+2026-06-21T08:21:48Z iteration 3 task t2 ('Add supervisor specs for best-effort publication') status=0
+2026-06-21T08:22:29Z iteration 3 task t3 ('Add command-level reconnect failure coverage') status=0
+2026-06-21T08:22:29Z iteration 3 phase 3 started parallel=True tasks=2
+2026-06-21T08:23:11Z iteration 3 task t4 ('Document reconnect publication semantics') status=0
+2026-06-21T08:23:15Z iteration 3 task t5 tracker update:
+- `TODO.md` now records accepted reconnect publication as best-effort after
+  lifecycle acceptance and detached-client cleanup.
+- The previous reconnect publication semantics P0 decision is no longer listed
+  as planned/remaining work; Planned Next stays focused on reconnect flake
+  cleanup and Rust contract fixture ownership.
+- Command-level coverage for raising state/log publication callbacks is tracked
+  as implemented, including successful public `reconnect_obs` responses,
+  detached-client cleanup, and sanitized diagnostics.
+- Validation: no Crystal gate run for this tracker-only update; phase 4 remains
+  responsible for `make format`, test, build, and lint validation.
+2026-06-21T08:24:00Z iteration 3 task t5 ('Update project tracker for this slice') status=0
+2026-06-21T08:24:00Z iteration 3 phase 4 started parallel=False tasks=1
+2026-06-21T08:25:11Z iteration 3 task t6 validation:
+- `make format` passed.
+- `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` passed: 264 examples,
+  0 failures, 0 errors, 0 pending.
+- `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build` passed.
+- `make lint` completed through the Makefile skip path: `ameba not installed; run shards install`.
+2026-06-21T08:25:36Z iteration 3 task t6 ('Run Crystal validation gates') status=0
+2026-06-21T08:25:36Z iteration 3 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 3 reconnect publication semantics
+
+- Iteration reviewed:
+  - `ObsSupervisor#publish_reconnect` detached-client close guard, state
+    publication, log publication, diagnostic emission, and runtime logger
+    fallback wiring.
+  - `Server` construction of `ObsSupervisor` with the optional runtime logger.
+  - Supervisor and command-executor specs for raising state/log publication
+    callbacks.
+  - README, command docs, protocol docs, `TODO.md`, `AGENT_LOG.md`, and
+    planner alternatives changed in this slice.
+- What was done correctly:
+  - Accepted reconnect publication exceptions are now contained inside
+    `publish_reconnect`; `supervisor.reconnect` and command-level
+    `reconnect_obs` return success after lifecycle acceptance and detached OBS
+    client cleanup.
+  - Diagnostics redact secret-like exception content before delivery.
+  - The detached-client close guard is set after `client.close`, and the
+    existing `ensure` still protects cleanup if later publication work raises.
+  - Supervisor-level and command-level specs cover raising state publication and
+    raising log publication paths.
+  - Public docs now describe accepted reconnect publication as best-effort after
+    acceptance and cleanup.
+- What was found:
+  - No blocking regression was found in the targeted exception-containment
+    behavior.
+  - `publish_reconnect_diagnostic` still synchronously reuses `@log_broadcast`
+    after a publication failure. If the diagnostic log-topic broadcast blocks
+    instead of raising, an accepted reconnect command can still hang.
+  - There is no spec proving runtime logger fallback when diagnostic log-topic
+    delivery always fails, and no spec proving reconnect completion when the
+    diagnostic broadcast itself is blocked.
+  - Close-observed specs still do not identify the specific OBS connection that
+    closed, which limits future overlapping reconnect assertions.
+  - Remaining reconnect flake cleanup is unchanged: unavailable-then-bind port
+    windows and 250 ms `wait_for_disconnect` polling remain.
+- Review validation:
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/command_executor_spec.cr spec/obsctl/server/obs_supervisor_spec.cr`
+    passed with 31 examples.
+- Top improvement proposals:
+  - Make reconnect publication diagnostics non-blocking by writing to the
+    runtime logger first and treating log-topic diagnostic fanout as secondary
+    best-effort delivery.
+  - Add focused specs for blocked diagnostic fanout and always-failing
+    diagnostic log-topic delivery with logger fallback.
+  - Add connection-specific fake OBS close probes before adding overlapping
+    reconnect coverage.
+  - Continue replacing remaining reconnect port-window and polling assertions
+    with deterministic probes.
+2026-06-21T08:28:44Z iteration 3 reviewer completed status=0
+2026-06-21T08:28:44Z iteration 3 memory updated
+2026-06-21T08:28:44Z iteration 3 completed validation_status=0
+2026-06-21T08:28:44Z iteration 3 checkpoint started
+2026-06-21T08:28:44Z iteration 3 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  README.md
+M  SCORES.jsonl
+M  TODO.md
+M  docs/commands.md
+M  docs/protocol.md
+M  spec/obsctl/server/command_executor_spec.cr
+M  spec/obsctl/server/obs_supervisor_spec.cr
+M  src/obsctl/server/obs_supervisor.cr
+M  src/obsctl/server/server.cr

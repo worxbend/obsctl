@@ -1,5 +1,6 @@
 require "../../spec_helper"
 require "../../../src/obsctl/server/command_executor"
+require "../../support/fake_obs_server"
 
 private class FailingSupervisor < Obsctl::Server::ObsSupervisor
   def initialize(@failure : Exception)
@@ -58,6 +59,15 @@ end
 
 private def parse_rfc3339(value : JSON::Any) : Time
   Time.parse_rfc3339(value.as_s)
+end
+
+private def wait_for_command_executor_supervisor(timeout : Time::Span = 3.seconds, &block : -> Bool) : Nil
+  deadline = Time.instant + timeout
+
+  until block.call
+    raise "timed out waiting for supervisor condition" if Time.instant >= deadline
+    Fiber.yield
+  end
 end
 
 describe Obsctl::Server::CommandExecutor do
@@ -220,6 +230,88 @@ describe Obsctl::Server::CommandExecutor do
     response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
     supervisor.reconnect_calls.should eq(1)
     state.snapshot.last_error.should eq("OBS reconnect requested")
+  end
+
+  it "returns reconnect success when accepted state publication raises and records a sanitized diagnostic" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    logs = [] of JSON::Any
+    logs_lock = Mutex.new
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
+      if payload["last_error"]?.try(&.as_s?) == "OBS reconnect requested"
+        raise "state publication failed password=supersecret token: abc123"
+      end
+    })
+    log_broadcast = ->(payload : JSON::Any) {
+      logs_lock.synchronize { logs << payload }
+    }
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state, nil, log_broadcast)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_command_executor_supervisor { state.snapshot.connected }
+
+    response = default_executor(obs.config, supervisor: supervisor, state: state).execute(
+      command_request(Obsctl::IPC::CommandPayload.new("reconnect_obs"))
+    )
+
+    response.ok.should be_true
+    response.error.should be_nil
+    response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
+    obs.next_close_observed(2.seconds).should be_true
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+
+    messages = logs_lock.synchronize { logs.map { |entry| entry["message"].as_s }.join("\n") }
+    messages.should contain("OBS reconnect state publication failed")
+    messages.should_not contain("supersecret")
+    messages.should_not contain("abc123")
+    messages.should contain("[redacted]")
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_command_executor_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "returns reconnect success when accepted log publication raises and records a sanitized diagnostic" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    logs = [] of JSON::Any
+    logs_lock = Mutex.new
+    state = Obsctl::Server::StateStore.new
+    log_broadcast = ->(payload : JSON::Any) {
+      if payload["code"]?.try(&.as_s?) == "obs_reconnect_requested"
+        raise "log publication failed password=supersecret token: abc123"
+      end
+
+      logs_lock.synchronize { logs << payload }
+    }
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state, nil, log_broadcast)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_command_executor_supervisor { state.snapshot.connected }
+
+    response = default_executor(obs.config, supervisor: supervisor, state: state).execute(
+      command_request(Obsctl::IPC::CommandPayload.new("reconnect_obs"))
+    )
+
+    response.ok.should be_true
+    response.error.should be_nil
+    response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
+    obs.next_close_observed(2.seconds).should be_true
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+
+    diagnostics = logs_lock.synchronize do
+      logs.select { |entry| entry["code"]?.try(&.as_s?) == "obs_reconnect_log_publication_failed" }
+    end
+    diagnostics.size.should eq(1)
+    diagnostic_message = diagnostics.first["message"].as_s
+    diagnostic_message.should contain("OBS reconnect log publication failed")
+    diagnostic_message.should_not contain("supersecret")
+    diagnostic_message.should_not contain("abc123")
+    diagnostic_message.should contain("[redacted]")
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_command_executor_supervisor { !supervisor.alive? } if supervisor
   end
 
   it "returns a public error for reconnect when the supervisor has exited" do
