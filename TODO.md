@@ -690,6 +690,10 @@ Implemented:
     once a live supervisor accepts the request and detached-client cleanup has
     happened, subscriber publication failures are logged as sanitized
     diagnostics and do not change the command result
+  - reconnect publication diagnostics write sanitized messages to the runtime
+    logger first when configured; log-topic diagnostic fanout is secondary,
+    opportunistic, and detached so blocked diagnostic delivery cannot delay an
+    accepted reconnect command
   - stopped reconnect attempts expose a test-only, lifecycle-lock-guarded bit so
     specs can prove the simple sequential post-stop path returns `false`
     without publishing public reconnect state
@@ -764,6 +768,10 @@ Implemented:
   - blocked reconnect-publication specs prove detached OBS client closure before
     or independently of releasing blocked state fanout, blocked log fanout, and
     unexpected state/log publication exceptions
+  - reconnect diagnostic liveness specs prove accepted reconnects still
+    complete after detached-client cleanup while diagnostic log-topic fanout is
+    blocked, and command-level fallback coverage proves sanitized diagnostics
+    reach the runtime logger when diagnostic log-topic delivery raises
   - command-level reconnect specs prove raising state/log publication callbacks
     do not turn an accepted `reconnect_obs` command into `SERVER_ERROR`, while
     detached-client cleanup still happens and diagnostics remain sanitized
@@ -944,7 +952,9 @@ Partial:
   publication raises unexpectedly
 - accepted reconnect publication is best-effort after lifecycle acceptance and
   detached-client cleanup; sanitized diagnostics are logged for subscriber
-  delivery failures, but public `reconnect_obs` responses remain successful
+  delivery failures through the runtime logger first, log-topic diagnostic
+  fanout is opportunistic and non-blocking, and public `reconnect_obs`
+  responses remain successful
 - the sequential post-stop reconnect rejection path is proven with a
   lifecycle-lock-guarded test hook plus state immutability assertions
 - the concurrent reconnect-vs-stop interleaving is also proven: reconnect
@@ -953,6 +963,9 @@ Partial:
 - reconnect liveness specs cover blocked state fanout, blocked log fanout, and
   unexpected state/log publication exceptions while asserting the detached OBS
   client is still closed
+- reconnect diagnostic liveness specs cover blocked diagnostic log-topic fanout
+  for state and log publication failures, and logger-fallback coverage proves
+  sanitized diagnostics are persisted when diagnostic log-topic delivery raises
 - command-level reconnect coverage proves raising state/log publication
   callbacks stay diagnostic-only after acceptance and never surface as
   `SERVER_ERROR`
@@ -1048,9 +1061,9 @@ Remaining:
 ## Planned Next
 
 With reconnect lifecycle publication decoupled, detached-client cleanup ordered
-before blockable fanout, and accepted reconnect publication settled as
-best-effort with supervisor and command-level coverage, the highest reconnect
-follow-up is flake cleanup.
+before blockable fanout, and publication-failure diagnostics now runtime-logger
+primary with opportunistic non-blocking log-topic fanout, the highest reconnect
+follow-up is the next remaining flake cleanup item.
 
 1. Add a deterministic unavailable-then-bind helper to retire the remaining
    reconnect `unused_tcp_port` windows, then clean up `wait_for_disconnect`

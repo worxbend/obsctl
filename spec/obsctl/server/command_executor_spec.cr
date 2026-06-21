@@ -314,6 +314,63 @@ describe Obsctl::Server::CommandExecutor do
     wait_for_command_executor_supervisor { !supervisor.alive? } if supervisor
   end
 
+  it "returns reconnect success and writes sanitized diagnostics to the runtime logger when diagnostic log publication raises" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    log_path = File.join(Dir.tempdir, "obsctl-command-reconnect-diagnostic-#{Random.rand(1_000_000)}.log")
+    diagnostic_attempted = Channel(Nil).new(1)
+    state = Obsctl::Server::StateStore.new
+    logger = Obsctl::Runtime::Logger.new(Obsctl::Runtime::LogLevel::Warn, log_path)
+    log_broadcast = ->(payload : JSON::Any) {
+      case payload["code"]?.try(&.as_s?)
+      when "obs_reconnect_requested"
+        raise "log publication failed password=supersecret token: abc123 authentication string is generated-auth"
+      when "obs_reconnect_log_publication_failed"
+        diagnostic_attempted.send(nil)
+        raise "diagnostic log publication failed token: fallback-token secret=sesame"
+      end
+    }
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state, nil, log_broadcast, logger)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_command_executor_supervisor { state.snapshot.connected }
+
+    response = default_executor(obs.config, supervisor: supervisor, state: state).execute(
+      command_request(Obsctl::IPC::CommandPayload.new("reconnect_obs"))
+    )
+
+    response.ok.should be_true
+    response.error.should be_nil
+    response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
+    obs.next_close_observed(2.seconds).should be_true
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+
+    select
+    when diagnostic_attempted.receive
+    when timeout(2.seconds)
+      raise "diagnostic log publication was not attempted"
+    end
+    wait_for_command_executor_supervisor do
+      File.exists?(log_path) && File.read(log_path).includes?("diagnostic log publication failed")
+    end
+
+    log = File.read(log_path)
+    log.should contain("level=warn")
+    log.should contain("obs_reconnect_log_publication_failed")
+    log.should contain("OBS reconnect log publication failed")
+    log.should contain("[redacted]")
+    log.should_not contain("supersecret")
+    log.should_not contain("abc123")
+    log.should_not contain("generated-auth")
+    log.should_not contain("fallback-token")
+    log.should_not contain("sesame")
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_command_executor_supervisor { !supervisor.alive? } if supervisor
+    File.delete(log_path) if log_path && File.exists?(log_path)
+  end
+
   it "returns a public error for reconnect when the supervisor has exited" do
     state = Obsctl::Server::StateStore.new
     state.mark_disconnected("startup connection failed")

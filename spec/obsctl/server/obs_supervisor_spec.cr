@@ -560,6 +560,74 @@ describe Obsctl::Server::ObsSupervisor do
     wait_for_supervisor { !supervisor.alive? } if supervisor
   end
 
+  it "returns success while reconnect state publication diagnostic log fanout is blocked" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    block_diagnostic = false
+    block_lock = Mutex.new
+    diagnostic_blocked = Channel(Nil).new(1)
+    release_diagnostic = Channel(Nil).new(1)
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
+      if payload["last_error"]?.try(&.as_s?) == "OBS reconnect requested"
+        raise "state publication failed password=supersecret token: abc123"
+      end
+    })
+    supervisor = Obsctl::Server::ObsSupervisor.new(
+      obs.config,
+      state,
+      nil,
+      ->(payload : JSON::Any) {
+        should_block = block_lock.synchronize do
+          block_diagnostic && payload["code"]?.try(&.as_s?) == "obs_reconnect_state_publication_failed"
+        end
+
+        if should_block
+          select
+          when diagnostic_blocked.send(nil)
+          else
+          end
+          release_diagnostic.receive
+        end
+      }
+    )
+    reconnect_result = Channel(Bool).new(1)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    block_lock.synchronize { block_diagnostic = true }
+    spawn(name: "obs-supervisor-blocked-state-diagnostic-publication-spec") do
+      reconnect_result.send(supervisor.reconnect)
+    end
+
+    obs.next_close_observed(2.seconds).should be_true
+
+    select
+    when diagnostic_blocked.receive
+    when timeout(2.seconds)
+      raise "state publication diagnostic did not reach blocking log callback"
+    end
+
+    result = select
+    when accepted = reconnect_result.receive
+      accepted
+    when timeout(2.seconds)
+      raise "reconnect did not finish while diagnostic log fanout was blocked"
+    end
+    result.should be_true
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+  ensure
+    if release = release_diagnostic
+      select
+      when release.send(nil)
+      else
+      end
+    end
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
   it "returns success and records a sanitized diagnostic when reconnect log publication raises" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     log_updates = [] of JSON::Any
@@ -601,6 +669,73 @@ describe Obsctl::Server::ObsSupervisor do
       payload["message"].as_s.should_not contain("abc123")
     end
   ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "returns success while reconnect log publication diagnostic log fanout is blocked" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    block_reconnect_log = false
+    block_lock = Mutex.new
+    diagnostic_blocked = Channel(Nil).new(1)
+    release_diagnostic = Channel(Nil).new(1)
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(
+      obs.config,
+      state,
+      nil,
+      ->(payload : JSON::Any) {
+        code = payload["code"]?.try(&.as_s?)
+        should_block = block_lock.synchronize do
+          block_reconnect_log && code == "obs_reconnect_log_publication_failed"
+        end
+
+        if should_block
+          select
+          when diagnostic_blocked.send(nil)
+          else
+          end
+          release_diagnostic.receive
+        elsif block_lock.synchronize { block_reconnect_log } && code == "obs_reconnect_requested"
+          raise "log publication failed authentication string is generated-token secret: abc123"
+        end
+      }
+    )
+    reconnect_result = Channel(Bool).new(1)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    block_lock.synchronize { block_reconnect_log = true }
+    spawn(name: "obs-supervisor-blocked-log-diagnostic-publication-spec") do
+      reconnect_result.send(supervisor.reconnect)
+    end
+
+    obs.next_close_observed(2.seconds).should be_true
+
+    select
+    when diagnostic_blocked.receive
+    when timeout(2.seconds)
+      raise "log publication diagnostic did not reach blocking log callback"
+    end
+
+    result = select
+    when accepted = reconnect_result.receive
+      accepted
+    when timeout(2.seconds)
+      raise "reconnect did not finish while diagnostic log fanout was blocked"
+    end
+    result.should be_true
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+  ensure
+    if release = release_diagnostic
+      select
+      when release.send(nil)
+      else
+      end
+    end
     supervisor.try(&.stop)
     obs.try(&.stop)
     wait_for_supervisor { !supervisor.alive? } if supervisor

@@ -338,15 +338,19 @@ module Obsctl
 
       private def publish_reconnect_diagnostic(code : String, message : String, cause : Exception) : Nil
         diagnostic = "#{message}: #{exception_summary(cause)}"
-        delivered = false
-        @log_broadcast.try do |broadcast|
-          broadcast.call(log_payload("warn", code, diagnostic))
-          delivered = true
+        write_reconnect_diagnostic(code, diagnostic)
+
+        broadcast = @log_broadcast
+        return unless broadcast
+
+        spawn(name: "obsctl-reconnect-diagnostic-log") do
+          begin
+            broadcast.call(log_payload("warn", code, diagnostic))
+          rescue ex
+            fallback = "#{diagnostic}; diagnostic log publication failed: #{exception_summary(ex)}"
+            write_reconnect_diagnostic(code, fallback)
+          end
         end
-        write_reconnect_diagnostic(code, diagnostic) unless delivered
-      rescue ex
-        fallback = "#{diagnostic}; diagnostic log publication failed: #{exception_summary(ex)}"
-        write_reconnect_diagnostic(code, fallback)
       end
 
       private def write_reconnect_diagnostic(code : String, message : String) : Nil
