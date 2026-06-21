@@ -260,7 +260,7 @@ describe Obsctl::Server::ObsSupervisor do
     wait_for_supervisor { !supervisor.alive? } if supervisor
   end
 
-  it "observes stopped state before a new connection attempt when stop wins the reconnect race" do
+  it "rejects reconnect after stop before publishing reconnect state" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     state = Obsctl::Server::StateStore.new
     supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state)
@@ -269,23 +269,17 @@ describe Obsctl::Server::ObsSupervisor do
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
 
-    # Spawn the reconnect call so stop can win the race without a yield between them.
-    reconnect_done = Channel(Bool).new(1)
-    spawn { reconnect_done.send(supervisor.reconnect) }
-
-    # In Crystal's cooperative scheduler, stop runs fully before the spawned
-    # fiber is scheduled. stop sets lifecycle_state = Stopped synchronously,
-    # so reconnect returns false and no stale state is published.
     supervisor.stop
+    snapshot_before_reconnect = state.snapshot
+    telemetry_before_reconnect = state.telemetry
 
-    reconnect_done.receive # wait for spawned reconnect fiber to complete
-    # Wait for the run fiber to observe stopped state and set the observable bit.
-    # alive? is already false (set synchronously by stop), so we poll the flag
-    # directly to ensure the run fiber has processed the client-detach path.
-    wait_for_supervisor { supervisor.stopped_reconnect_attempted? }
+    supervisor.reconnect.should be_false
 
     supervisor.alive?.should be_false
     supervisor.stopped_reconnect_attempted?.should be_true
+    state.snapshot.should eq(snapshot_before_reconnect)
+    state.telemetry.should eq(telemetry_before_reconnect)
+    state.snapshot.last_error.should_not eq("OBS reconnect requested")
   ensure
     supervisor.try(&.stop)
     obs.try(&.stop)

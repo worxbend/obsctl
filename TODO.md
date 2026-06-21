@@ -674,6 +674,12 @@ Implemented:
     whose waiter registration is atomic with the request-epoch check so an
     explicit reconnect request cannot be lost between checking the epoch and
     sleeping
+  - `Server::ReconnectSignal` documents that the test-only waiter-registration
+    probe is invoked while its internal lock is held; probe callbacks must not
+    block or send on an unbuffered channel
+  - stopped reconnect attempts expose a test-only, lifecycle-lock-guarded bit so
+    specs can prove reconnect-after-stop returns `false` before publishing stale
+    public reconnect state
   - `last_disconnected_at` is updated only after an established OBS session
     disconnects; `last_connection_failed_at` records the most recent failed OBS
     connection attempt and is not cleared by later successful connections
@@ -735,6 +741,8 @@ Implemented:
   - fake OBS server support exposes deterministic probes for Identify frames,
     OBS request types, close events, and no-attempt windows
   - server reconnect specs cover initial OBS unavailable startup, reconnect-disabled supervisor exit, established-session disconnects, protocol-error disconnects, explicit reconnect requests, wakeable retry backoff, durable pre-delay reconnect requests, generation-safe stop/start ownership, stale reconnect wake invalidation, transient active-client-close wake behavior, and successful reconnects
+  - server reconnect specs deterministically prove reconnect-after-stop rejection
+    before stale public state such as `OBS reconnect requested` can be published
   - signal-level reconnect specs cover explicit request-before-wait,
     request-during-wait, handled-request stale wake behavior, transient internal
     wakes, cancel wakes, and repeated durable request epochs without needing a
@@ -904,6 +912,8 @@ Partial:
   waiter registration
 - supervisor stop/start ownership and reconnect request/wake state are
   generation-scoped
+- reconnect-after-stop behavior is proven deterministically with a
+  lifecycle-lock-guarded test hook and state immutability assertions
 - supervisor reconnect proof after protocol-error client closes while IPC remains available
 
 ### Milestone 8: Polish
@@ -924,6 +934,8 @@ Partial:
 - incremental ANSI TUI renderer backend
 - public documentation comments for IPC, server, runtime, and systemd service public boundary types
 - public documentation comments for config, OBS, domain, and TUI public boundary types
+- test-only waiter-registration probe lock contract documented on
+  `Server::ReconnectSignal`
 - Makefile
 
 Remaining:
@@ -993,9 +1005,9 @@ Remaining:
 
 ## Planned Next
 
-1. Replace the remaining reconnect `unused_tcp_port` unavailable-then-bind
-   windows and `wait_for_disconnect` polling with deterministic hooks where
-   practical.
+1. Add a deterministic unavailable-then-bind helper to retire the remaining
+   reconnect `unused_tcp_port` windows, then clean up `wait_for_disconnect`
+   polling where practical.
 2. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
    when `../obsctl-rs` is available with compatible contract fixtures.
 3. Add or coordinate the Rust-side shared contract fixture root so the manual

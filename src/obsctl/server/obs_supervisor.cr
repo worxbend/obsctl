@@ -31,13 +31,12 @@ module Obsctl
         @lifecycle_state = LifecycleState::Stopped
         @lifecycle_generation = 0_u64
         @reconnect_signal = nil.as(ReconnectSignal?)
-        @stopped_reconnect_attempted = Atomic(Bool).new(false)
+        @stopped_reconnect_attempted = false
       end
 
-      # Returns true if the run fiber observed stopped state before performing a
-      # connection attempt (e.g. when stop wins the reconnect-vs-stop race).
+      # Test-only observability for reconnect attempts rejected by stopped lifecycle state.
       def stopped_reconnect_attempted? : Bool
-        @stopped_reconnect_attempted.get
+        @lifecycle_lock.synchronize { @stopped_reconnect_attempted }
       end
 
       # Returns true while the supervisor loop is starting or can still act.
@@ -53,7 +52,7 @@ module Obsctl
           @lifecycle_generation += 1
           @lifecycle_state = LifecycleState::Starting
           @reconnect_signal = ReconnectSignal.new
-          @stopped_reconnect_attempted.set(false)
+          @stopped_reconnect_attempted = false
           {@lifecycle_generation, @reconnect_signal.not_nil!}
         end
         spawn(name: "obsctl-obs-supervisor") { run(generation, reconnect_signal) }
@@ -87,7 +86,10 @@ module Obsctl
       # Drops the active client so the supervisor reconnect loop starts over.
       def reconnect : Bool
         reconnect_signal = @lifecycle_lock.synchronize do
-          return false if @lifecycle_state == LifecycleState::Stopped
+          if @lifecycle_state == LifecycleState::Stopped
+            @stopped_reconnect_attempted = true
+            return false
+          end
 
           @reconnect_signal
         end
@@ -126,10 +128,7 @@ module Obsctl
             attempt = 0
 
             disconnect_error = wait_for_disconnect(generation, client)
-            if client_detached?(client)
-              @stopped_reconnect_attempted.set(true) if stopped?(generation)
-              next
-            end
+            next if client_detached?(client)
             raise disconnect_error || Domain::ConnectionFailed.new("OBS WebSocket disconnected") unless stopped?(generation)
           rescue ex : Domain::ObsctlError
             break if stopped?(generation)
