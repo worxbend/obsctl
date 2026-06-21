@@ -677,9 +677,14 @@ Implemented:
   - `Server::ReconnectSignal` documents that the test-only waiter-registration
     probe is invoked while its internal lock is held; probe callbacks must not
     block or send on an unbuffered channel
+  - explicit reconnect publication is lifecycle-gated: request registration,
+    active-client detachment, `mark_reconnect_requested`, and the public
+    `OBS reconnect requested` log/state mutation run while holding
+    `@lifecycle_lock`, preserving the lifecycle-before-client lock order used
+    by `stop` and `claim_client`
   - stopped reconnect attempts expose a test-only, lifecycle-lock-guarded bit so
-    specs can prove reconnect-after-stop returns `false` before publishing stale
-    public reconnect state
+    specs can prove the simple sequential post-stop path returns `false`
+    without publishing public reconnect state
   - `last_disconnected_at` is updated only after an established OBS session
     disconnects; `last_connection_failed_at` records the most recent failed OBS
     connection attempt and is not cleared by later successful connections
@@ -741,8 +746,11 @@ Implemented:
   - fake OBS server support exposes deterministic probes for Identify frames,
     OBS request types, close events, and no-attempt windows
   - server reconnect specs cover initial OBS unavailable startup, reconnect-disabled supervisor exit, established-session disconnects, protocol-error disconnects, explicit reconnect requests, wakeable retry backoff, durable pre-delay reconnect requests, generation-safe stop/start ownership, stale reconnect wake invalidation, transient active-client-close wake behavior, and successful reconnects
-  - server reconnect specs deterministically prove reconnect-after-stop rejection
-    before stale public state such as `OBS reconnect requested` can be published
+  - server reconnect specs deterministically prove sequential reconnect-after-stop
+    rejection without publishing stale public state such as
+    `OBS reconnect requested`; the concurrent reconnect-observes-live,
+    stop-wins, reconnect-resumes interleaving must be covered by its own exact
+    deterministic spec before being claimed as proven
   - signal-level reconnect specs cover explicit request-before-wait,
     request-during-wait, handled-request stale wake behavior, transient internal
     wakes, cancel wakes, and repeated durable request epochs without needing a
@@ -912,8 +920,11 @@ Partial:
   waiter registration
 - supervisor stop/start ownership and reconnect request/wake state are
   generation-scoped
-- reconnect-after-stop behavior is proven deterministically with a
-  lifecycle-lock-guarded test hook and state immutability assertions
+- reconnect publication is generation-safe under the supervisor lifecycle lock,
+  and the sequential post-stop rejection path is proven with a
+  lifecycle-lock-guarded test hook plus state immutability assertions; the exact
+  concurrent reconnect-vs-stop interleaving still needs deterministic spec
+  coverage before it is listed as proven
 - supervisor reconnect proof after protocol-error client closes while IPC remains available
 
 ### Milestone 8: Polish

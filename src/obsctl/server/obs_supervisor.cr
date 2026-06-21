@@ -32,12 +32,19 @@ module Obsctl
         @lifecycle_generation = 0_u64
         @reconnect_signal = nil.as(ReconnectSignal?)
         @stopped_reconnect_attempted = false
+        @test_reconnect_before_publication = nil.as(Proc(Nil)?)
       end
 
       # Test-only observability for reconnect attempts rejected by stopped lifecycle state.
       def stopped_reconnect_attempted? : Bool
         @lifecycle_lock.synchronize { @stopped_reconnect_attempted }
       end
+
+      # Test-only synchronization hook invoked after `reconnect` captures a
+      # live generation and before it re-checks that generation for public
+      # reconnect publication. The hook runs without supervisor locks held and
+      # may block to coordinate deterministic race specs.
+      property test_reconnect_before_publication : Proc(Nil)?
 
       # Returns true while the supervisor loop is starting or can still act.
       def alive? : Bool
@@ -85,24 +92,42 @@ module Obsctl
 
       # Drops the active client so the supervisor reconnect loop starts over.
       def reconnect : Bool
-        reconnect_signal = @lifecycle_lock.synchronize do
+        generation, reconnect_signal = @lifecycle_lock.synchronize do
           if @lifecycle_state == LifecycleState::Stopped
             @stopped_reconnect_attempted = true
             return false
           end
 
-          @reconnect_signal
-        end
-        return false unless reconnect_signal
+          signal = @reconnect_signal
+          return false unless signal
 
-        reconnect_signal.request
-        client = @client_lock.synchronize do
-          existing = @client
-          @client = nil
-          existing
+          {@lifecycle_generation, signal}
         end
-        @state.mark_reconnect_requested
-        publish_log("info", "obs_reconnect_requested", "OBS reconnect requested")
+
+        @test_reconnect_before_publication.try(&.call)
+
+        client = nil.as(OBS::Client?)
+        accepted = @lifecycle_lock.synchronize do
+          if @lifecycle_state == LifecycleState::Stopped ||
+             @lifecycle_generation != generation ||
+             @reconnect_signal != reconnect_signal
+            @stopped_reconnect_attempted = true if @lifecycle_state == LifecycleState::Stopped
+            false
+          else
+            reconnect_signal.request
+            client = @client_lock.synchronize do
+              existing = @client
+              @client = nil
+              existing
+            end
+            @state.mark_reconnect_requested
+            publish_log("info", "obs_reconnect_requested", "OBS reconnect requested")
+            true
+          end
+        end
+
+        return false unless accepted
+
         client.try(&.close)
         true
       end

@@ -1849,3 +1849,99 @@ M  TODO.md
 M  spec/obsctl/server/obs_supervisor_spec.cr
 M  src/obsctl/server/obs_supervisor.cr
 M  src/obsctl/server/reconnect_signal.cr
+2026-06-21T07:33:55Z iteration 2 started remaining=17298s
+2026-06-21T07:33:55Z iteration 2 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-21T07:33:55Z iteration 2 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-b2dh8jeq/repo copied_entries=181
+2026-06-21T07:33:55Z iteration 2 ideator phase started count=3
+2026-06-21T07:33:55Z iteration 2 ideator phase concurrency workers=3
+2026-06-21T07:33:55Z iteration 2 ideator 1 role="the pragmatist" started
+2026-06-21T07:33:55Z iteration 2 ideator 2 role="the architect" started
+2026-06-21T07:33:55Z iteration 2 ideator 3 role="the contrarian" started
+2026-06-21T07:34:17Z iteration 2 ideator 3 role="the contrarian" completed status=0
+2026-06-21T07:34:20Z iteration 2 ideator 1 role="the pragmatist" completed status=0
+2026-06-21T07:34:23Z iteration 2 ideator 2 role="the architect" completed status=0
+2026-06-21T07:34:23Z iteration 2 ideator phase completed approaches=3
+2026-06-21T07:34:23Z iteration 2 selector started approaches=3
+2026-06-21T07:34:34Z iteration 2 selector completed status=0
+2026-06-21T07:34:34Z iteration 2 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-b2dh8jeq/repo
+2026-06-21T07:34:34Z iteration 2 selector rejected alternative role="the contrarian" approach="Collapse Reconnect Into A Supervisor-Owned Intent Model: treat explicit reconnect as an intent submitted to the live supervisor generation, with public state published only by t..." reason="Moving all reconnect publication into the supervisor-owned intent model is conceptually clean, but it is broader than needed for the next slice and risks disturbing already-green reconnect semantics."
+2026-06-21T07:34:34Z iteration 2 selector rejected alternative role="the pragmatist" approach="Proof-First Synchronization Hardening: treat reconnect cleanup as a correctness proof exercise before more feature work, using the smallest deterministic synchronization surface..." reason="The proof-first framing is strong and should be included, but as-is it is less explicit about the core design invariant: generation-safe public-state publication."
+2026-06-21T07:34:34Z iteration 2 selector rejected alternative role="the architect" approach="Truth-First Race Closure: treat the reconnect-vs-stop bug as a public-state linearizability problem, not as another reconnect feature slice. The next planner should first establ..." reason="The linearizability framing is the strongest foundation, but it benefits from the pragmatist's emphasis on deterministic observability and avoiding overbroad lock or hook changes."
+2026-06-21T07:34:34Z iteration 2 selector alternatives persisted count=3
+2026-06-21T07:34:34Z iteration 2 selector structured alternatives persisted count=3
+2026-06-21T07:34:34Z iteration 2 planner started
+2026-06-21T07:35:03Z iteration 2 plan: 4 task(s) in 3 phase(s). This iteration is scoped to the P0 reconnect-vs-stop truthfulness gap. The implementation must establish the linearizability invariant first; the deterministic race proof and tracker corrections can proceed in parallel afterward because they touch separate files and both depend only on the fixed behavior. Broader reconnect flake cleanup and Rust fixture ownership are intentionally deferred.
+2026-06-21T07:35:03Z iteration 2 phase 1 started parallel=False tasks=1
+2026-06-21T07:36:24Z iteration 2 task t1 ('Make reconnect publication generation-safe') status=0
+2026-06-21T07:36:24Z iteration 2 phase 2 started parallel=True tasks=2
+2026-06-21T07:37:10Z iteration 2 task t3 ('Correct reconnect tracker claims') status=0
+2026-06-21T07:37:10Z iteration 2 t3 changes: updated TODO, PLAN, and MEMORY so they credit generation-safe reconnect publication under the lifecycle lock without treating the sequential post-stop spec as proof of the concurrent reconnect-vs-stop interleaving; preserved the ReconnectSignal waiter-registration lock-contract claim; kept remaining reconnect flake cleanup scoped to unavailable-then-bind port windows and wait_for_disconnect polling.
+2026-06-21T07:38:39Z iteration 2 task t3 ('Correct reconnect tracker claims') status=0
+2026-06-21T07:41:16Z iteration 2 task t2 ('Add deterministic reconnect-vs-stop race spec') status=0
+2026-06-21T07:41:16Z iteration 2 phase 3 started parallel=False tasks=1
+2026-06-21T07:42:39Z iteration 2 task t4 ('Run focused validation') status=0
+2026-06-21T07:42:39Z iteration 2 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 2 reconnect-vs-stop truthfulness
+
+- Iteration reviewed:
+  - `ObsSupervisor#reconnect` generation capture, generation re-check, reconnect
+    request registration, active-client detachment, state mutation, and log
+    publication.
+  - Deterministic supervisor spec for the stop-wins interleaving after reconnect
+    observes a live generation.
+  - `PLAN.md`, `TODO.md`, `MEMORY.md`, `AGENT_LOG.md`, and
+    `ALTERNATIVES.jsonl` changes from the iteration.
+- What was done correctly:
+  - The stale reconnect-publication race is fixed in the reviewed path:
+    reconnect captures generation and signal, the test hook pauses it, `stop`
+    completes, reconnect resumes, re-checks lifecycle state/generation/signal,
+    and returns `false` without publishing `OBS reconnect requested`.
+  - The new spec is a real deterministic proof of the exact concurrent
+    reconnect-observes-live, stop-wins, reconnect-resumes interleaving; it is no
+    longer a conditional witness.
+  - Lock ordering remains lifecycle-before-client, matching `stop` and
+    `claim_client`.
+  - The simpler sequential post-stop rejection spec remains separate.
+- What was found:
+  - No blocking correctness regression was found in the targeted
+    reconnect-vs-stop behavior.
+  - The new implementation performs `StateStore#mark_reconnect_requested` and
+    `publish_log` while holding `@lifecycle_lock`; those callbacks can
+    synchronously broadcast to IPC sessions and perform log IO, so a blocked
+    subscriber can now hold up lifecycle operations such as `stop`.
+  - `TODO.md` still says the exact concurrent spec must be added even though
+    the spec now exists; tracker text needs one more alignment pass.
+  - Remaining reconnect flake sources are unchanged: unavailable-then-bind port
+    windows and `wait_for_disconnect` polling.
+- Top improvement proposals:
+  - Preserve the generation-safe reconnect acceptance invariant while moving
+    subscriber fanout and log IO out of the lifecycle critical section, or make
+    broadcasts asynchronous/non-blocking.
+  - Add a liveness regression spec proving a blocked state/log subscriber cannot
+    prevent `stop` from reaching stopped state.
+  - Correct `TODO.md` to credit the exact deterministic concurrent
+    reconnect-vs-stop proof now present.
+  - Continue reconnect flake cleanup with deterministic port reservation and
+    event-driven disconnect observation.
+- Review validation:
+  - `git diff --check` passed.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/reconnect_signal_spec.cr spec/obsctl/server/obs_supervisor_spec.cr`
+    passed with 17 examples.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` passed with 256
+    examples.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build` passed.
+  - `make lint` exited 0 through the existing `ameba not installed` skip path.
+2026-06-21T07:47:09Z iteration 2 reviewer completed status=0
+2026-06-21T07:47:09Z iteration 2 memory updated
+2026-06-21T07:47:10Z iteration 2 completed validation_status=0
+2026-06-21T07:47:10Z iteration 2 checkpoint started
+2026-06-21T07:47:10Z iteration 2 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
+M  TODO.md
+M  spec/obsctl/server/obs_supervisor_spec.cr
+M  src/obsctl/server/obs_supervisor.cr

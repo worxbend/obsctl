@@ -260,6 +260,100 @@ describe Obsctl::Server::ObsSupervisor do
     wait_for_supervisor { !supervisor.alive? } if supervisor
   end
 
+  it "rejects reconnect when stop wins after reconnect observes a live generation" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    state_updates = [] of JSON::Any
+    state_update_lock = Mutex.new
+    event_updates = [] of JSON::Any
+    event_update_lock = Mutex.new
+    log_updates = [] of JSON::Any
+    log_update_lock = Mutex.new
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
+      state_update_lock.synchronize { state_updates << payload }
+    })
+    supervisor = Obsctl::Server::ObsSupervisor.new(
+      obs.config,
+      state,
+      ->(payload : JSON::Any) { event_update_lock.synchronize { event_updates << payload } },
+      ->(payload : JSON::Any) { log_update_lock.synchronize { log_updates << payload } }
+    )
+    reconnect_paused = Channel(Nil).new(1)
+    release_reconnect = Channel(Nil).new(1)
+    reconnect_result = Channel(Bool).new(1)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor do
+      state.snapshot.connected &&
+        log_update_lock.synchronize do
+          log_updates.any? { |payload| payload["code"].as_s == "obs_connected" }
+        end
+    end
+
+    state_update_lock.synchronize { state_updates.clear }
+    event_update_lock.synchronize { event_updates.clear }
+    log_update_lock.synchronize { log_updates.clear }
+
+    supervisor.test_reconnect_before_publication = -> {
+      select
+      when reconnect_paused.send(nil)
+      else
+      end
+      release_reconnect.receive
+    }
+
+    spawn(name: "obs-supervisor-reconnect-vs-stop-spec") do
+      reconnect_result.send(supervisor.reconnect)
+    end
+
+    select
+    when reconnect_paused.receive
+    when timeout(2.seconds)
+      raise "reconnect did not pause after observing a live generation"
+    end
+
+    supervisor.stop
+    supervisor.alive?.should be_false
+    obs.next_close_observed(2.seconds).should be_true
+    close_count_after_stop = obs.close_count
+    snapshot_after_stop = state.snapshot
+    telemetry_after_stop = state.telemetry
+
+    release_reconnect.send(nil)
+    result = select
+    when accepted = reconnect_result.receive
+      accepted
+    when timeout(2.seconds)
+      raise "reconnect did not finish after stop completed"
+    end
+
+    result.should be_false
+    supervisor.stopped_reconnect_attempted?.should be_true
+    obs.close_count.should eq(close_count_after_stop)
+    state.snapshot.should eq(snapshot_after_stop)
+    state.telemetry.should eq(telemetry_after_stop)
+    state.snapshot.last_error.should_not eq("OBS reconnect requested")
+    state_update_lock.synchronize { state_updates.dup }.should be_empty
+    event_update_lock.synchronize { event_updates.dup }.should be_empty
+    logs_after_reconnect = log_update_lock.synchronize { log_updates.dup }
+    logs_after_reconnect.should be_empty
+    logs_after_reconnect.any? do |payload|
+      payload["code"].as_s == "obs_reconnect_requested" ||
+        payload["message"].as_s == "OBS reconnect requested"
+    end.should be_false
+  ensure
+    supervisor.try { |instance| instance.test_reconnect_before_publication = nil }
+    if release = release_reconnect
+      select
+      when release.send(nil)
+      else
+      end
+    end
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
   it "rejects reconnect after stop before publishing reconnect state" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     state = Obsctl::Server::StateStore.new
