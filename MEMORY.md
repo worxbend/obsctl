@@ -23,7 +23,7 @@
 [learning] A spawned-test `started` signal sent before the code under test reaches its blocking point can accidentally test request-before-wait instead of request-during-wait behavior.
 [pattern] Synchronization primitives are easier to evolve when wait results distinguish durable requests, transient interrupts, cancellation, and timeout instead of overloading a scalar epoch.
 [pattern] Deterministic fake-server probes are better than fixed sleeps for reconnect specs, but probe names must match what they observe, such as accepted WebSocket connections versus failed TCP attempts.
-[learning] Remaining reconnect flake cleanup still includes replacing `unused_tcp_port` unavailable-then-bind windows and reducing `wait_for_disconnect` polling.
+[pattern] Use `SpecSupport::TcpGate` for OBS-unavailable-then-bind reconnect specs; it preserves port ownership until fake OBS is opened.
 [learning] A test-only probe called under a mutex must use only non-blocking callbacks (e.g. buffered channel sends); blocking or unbuffered calls deadlock. Document this constraint on the property.
 [pattern] A race-witness spec that makes an assertion conditional on which side wins is useful documentation but not a closed proof; add a synchronization barrier or observable bit for strict proof.
 [anti-pattern] A post-stop reconnect test does not prove the reconnect-vs-stop race; if reconnect can pass liveness before stop, re-check generation before publishing public state.
@@ -37,5 +37,7 @@
 [pattern] Reconnect diagnostic log-topic fanout should stay bounded, lossy, and separate from runtime logging; runtime logs are the durable sink, log-topic delivery is secondary telemetry.
 [learning] Silent best-effort diagnostic drops preserve liveness but need aggregate observability if operators must diagnose slow log subscribers.
 [pattern] Returning a typed result enum from a synchronization primitive eliminates inference at call sites; callers should match on `Requested`/`Interrupted`/`TimedOut`/`Cancelled` rather than comparing epoch values.
+[pattern] OBS established-disconnect detection should wait on client close/error notifications first and keep only a short defensive fallback timeout.
+[learning] A single buffered close notification is adequate for one supervisor owner, but concurrent waiters need per-waiter or condition-style notification semantics.
 [validation] Current full gates are `make format`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test`, `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build`, and `make lint`.
 [security] Never log or expose OBS passwords, generated authentication strings, tokens, or secret-like values in IPC errors, JSON envelopes, logs, specs, or TUI output.

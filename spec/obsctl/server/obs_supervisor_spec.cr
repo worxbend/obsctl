@@ -13,6 +13,13 @@ private def wait_for_supervisor(timeout : Time::Span = 3.seconds, &block : -> Bo
   end
 end
 
+private def next_websocket_connection_id(
+  obs : Obsctl::SpecSupport::FakeObsServer,
+  timeout : Time::Span = 2.seconds,
+) : Int64
+  obs.next_accepted_websocket_connection_id(timeout) || raise "fake OBS did not accept WebSocket connection"
+end
+
 private def obs_supervisor_diagnostic_log_broadcast_for(log_broadcast : Proc(JSON::Any, Nil)) : Proc(JSON::Any, Bool)
   helper = Obsctl::Server::BestEffortLogBroadcast.new(log_broadcast)
   ->(payload : JSON::Any) { helper.broadcast(payload) }
@@ -158,6 +165,7 @@ describe Obsctl::Server::ObsSupervisor do
     supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state)
 
     supervisor.start
+    first_connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
     obs.identify_count.should eq(1)
@@ -165,7 +173,7 @@ describe Obsctl::Server::ObsSupervisor do
     supervisor.stop
     supervisor.start
 
-    obs.next_close(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(first_connection_id, 2.seconds)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor do
       begin
@@ -288,6 +296,7 @@ describe Obsctl::Server::ObsSupervisor do
     reconnect_result = Channel(Bool).new(1)
 
     supervisor.start
+    connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor do
       state.snapshot.connected &&
@@ -320,7 +329,7 @@ describe Obsctl::Server::ObsSupervisor do
 
     supervisor.stop
     supervisor.alive?.should be_false
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
     close_count_after_stop = obs.close_count
     snapshot_after_stop = state.snapshot
     telemetry_after_stop = state.telemetry
@@ -384,6 +393,7 @@ describe Obsctl::Server::ObsSupervisor do
     stop_finished = Channel(Nil).new(1)
 
     supervisor.start
+    connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
 
@@ -398,7 +408,7 @@ describe Obsctl::Server::ObsSupervisor do
       raise "reconnect publication did not reach blocking state callback"
     end
 
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
 
     spawn(name: "obs-supervisor-stop-during-blocked-publication-spec") do
       supervisor.stop
@@ -467,6 +477,7 @@ describe Obsctl::Server::ObsSupervisor do
     stop_finished = Channel(Nil).new(1)
 
     supervisor.start
+    connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
 
@@ -481,7 +492,7 @@ describe Obsctl::Server::ObsSupervisor do
       raise "reconnect publication did not reach blocking log callback"
     end
 
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
 
     spawn(name: "obs-supervisor-stop-during-blocked-log-publication-spec") do
       supervisor.stop
@@ -541,12 +552,13 @@ describe Obsctl::Server::ObsSupervisor do
     )
 
     supervisor.start
+    connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
     log_update_lock.synchronize { log_updates.clear }
 
     supervisor.reconnect.should be_true
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
     state.snapshot.last_error.should eq("OBS reconnect requested")
     wait_for_supervisor do
       log_update_lock.synchronize do
@@ -609,6 +621,7 @@ describe Obsctl::Server::ObsSupervisor do
     reconnect_result = Channel(Bool).new(1)
 
     supervisor.start
+    connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
 
@@ -617,7 +630,7 @@ describe Obsctl::Server::ObsSupervisor do
       reconnect_result.send(supervisor.reconnect)
     end
 
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
 
     select
     when diagnostic_blocked.receive
@@ -675,11 +688,12 @@ describe Obsctl::Server::ObsSupervisor do
     )
 
     supervisor.start
+    connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
 
     supervisor.reconnect.should be_true
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
 
     (diagnostic_capacity - 1).times do
       supervisor.reconnect.should be_true
@@ -736,12 +750,13 @@ describe Obsctl::Server::ObsSupervisor do
     )
 
     supervisor.start
+    connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
     log_update_lock.synchronize { log_updates.clear }
 
     supervisor.reconnect.should be_true
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
     state.snapshot.last_error.should eq("OBS reconnect requested")
     wait_for_supervisor do
       log_update_lock.synchronize do
@@ -803,6 +818,7 @@ describe Obsctl::Server::ObsSupervisor do
     reconnect_result = Channel(Bool).new(1)
 
     supervisor.start
+    connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
 
@@ -811,7 +827,7 @@ describe Obsctl::Server::ObsSupervisor do
       reconnect_result.send(supervisor.reconnect)
     end
 
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
 
     select
     when diagnostic_blocked.receive
@@ -885,11 +901,13 @@ describe Obsctl::Server::ObsSupervisor do
     supervisor = Obsctl::Server::ObsSupervisor.new(config, state)
 
     supervisor.start
+    first_connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
 
     supervisor.reconnect.should be_true
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(first_connection_id, 2.seconds)
+    second_connection_id = next_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor { state.snapshot.connected }
 
@@ -897,7 +915,7 @@ describe Obsctl::Server::ObsSupervisor do
     identifies_after_explicit_reconnect = obs.identify_count
 
     obs.close_connections
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(second_connection_id, 2.seconds)
     wait_for_supervisor { !state.snapshot.connected && state.telemetry.reconnecting }
 
     obs.assert_no_identify_or_connection_attempt(150.milliseconds)

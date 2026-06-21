@@ -71,6 +71,13 @@ private def wait_for_command_executor_supervisor(timeout : Time::Span = 3.second
   end
 end
 
+private def next_command_executor_websocket_connection_id(
+  obs : Obsctl::SpecSupport::FakeObsServer,
+  timeout : Time::Span = 2.seconds,
+) : Int64
+  obs.next_accepted_websocket_connection_id(timeout) || raise "fake OBS did not accept WebSocket connection"
+end
+
 private def command_executor_diagnostic_log_broadcast_for(log_broadcast : Proc(JSON::Any, Nil)) : Proc(JSON::Any, Bool)
   helper = Obsctl::Server::BestEffortLogBroadcast.new(log_broadcast)
   ->(payload : JSON::Any) { helper.broadcast(payload) }
@@ -260,6 +267,7 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     supervisor.start
+    connection_id = next_command_executor_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_command_executor_supervisor { state.snapshot.connected }
 
@@ -270,7 +278,7 @@ describe Obsctl::Server::CommandExecutor do
     response.ok.should be_true
     response.error.should be_nil
     response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
     state.snapshot.last_error.should eq("OBS reconnect requested")
     wait_for_command_executor_supervisor do
       logs_lock.synchronize do
@@ -311,6 +319,7 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     supervisor.start
+    connection_id = next_command_executor_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_command_executor_supervisor { state.snapshot.connected }
 
@@ -321,7 +330,7 @@ describe Obsctl::Server::CommandExecutor do
     response.ok.should be_true
     response.error.should be_nil
     response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
     state.snapshot.last_error.should eq("OBS reconnect requested")
     wait_for_command_executor_supervisor do
       logs_lock.synchronize do
@@ -375,6 +384,7 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     supervisor.start
+    connection_id = next_command_executor_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_command_executor_supervisor { state.snapshot.connected }
 
@@ -385,7 +395,7 @@ describe Obsctl::Server::CommandExecutor do
     response.ok.should be_true
     response.error.should be_nil
     response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
     wait_for_command_executor_supervisor do
       logs_lock.synchronize do
         logs.any? { |entry| entry["code"]?.try(&.as_s?) == "obs_reconnect_state_publication_failed" }
@@ -439,6 +449,7 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     supervisor.start
+    connection_id = next_command_executor_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_command_executor_supervisor { state.snapshot.connected }
 
@@ -449,7 +460,7 @@ describe Obsctl::Server::CommandExecutor do
     response.ok.should be_true
     response.error.should be_nil
     response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
     state.snapshot.last_error.should eq("OBS reconnect requested")
 
     select
@@ -509,6 +520,7 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     supervisor.start
+    connection_id = next_command_executor_websocket_connection_id(obs)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_command_executor_supervisor { state.snapshot.connected }
 
@@ -519,7 +531,7 @@ describe Obsctl::Server::CommandExecutor do
     response.ok.should be_true
     response.error.should be_nil
     response.result.not_nil!["message"].as_s.should eq("OBS reconnect requested")
-    obs.next_close_observed(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
 
     select
     when diagnostic_blocked.receive

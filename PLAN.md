@@ -1,17 +1,18 @@
 # obsctl Improvement Plan
 
-This plan reflects a fresh senior review of the 2026-06-21 bounded reconnect
-diagnostic fanout slice. Accepted reconnects now complete after lifecycle
-acceptance and detached-client cleanup even when state/log publication fails,
-diagnostic log-topic subscribers block, or secondary diagnostic delivery is at
-capacity. Runtime logging remains the durable primary diagnostic sink.
+This plan reflects a fresh senior review of the 2026-06-21 reconnect
+determinism slice. The server reconnect specs now reserve OBS ports with
+`SpecSupport::TcpGate` instead of unavailable-then-bind `unused_tcp_port`
+windows, fake OBS exposes connection-specific accepted/closed WebSocket probes,
+and the supervisor uses `OBS::Client#wait_for_close` as its primary established
+disconnect signal with a short defensive fallback.
 
 ## Current Assessment
 
 `obsctl` has a mature local daemon architecture: one server owns the OBS
 WebSocket session, thin CLI/TUI clients use Unix socket IPC, public CLI/IPC
 contracts are fixture-backed, reconnect behavior has focused primitive specs,
-and the default Crystal gate is green at 271 examples.
+and the reviewed default Crystal gate is green at 273 examples.
 
 The intended process model remains:
 
@@ -20,7 +21,7 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
                                                                <---- Unix socket IPC ----> obsctl TUI
 ```
 
-Completed or correct in the reviewed slice:
+Completed or correct in the reviewed reconnect work:
 
 - `ObsSupervisor#reconnect` still preserves the generation-safe
   accept-then-emit boundary: lifecycle acceptance, reconnect request
@@ -49,35 +50,53 @@ Completed or correct in the reviewed slice:
   interleaving where reconnect observes a live generation, pauses, `stop`
   completes, reconnect resumes, and stale public reconnect state remains
   unobservable.
+- Server reconnect specs that previously depended on an unused-port reservation
+  window now use `SpecSupport::TcpGate`, which keeps deterministic ownership of
+  the selected port until fake OBS is opened on that exact port.
+- Fake OBS now exposes accepted and closed WebSocket connection identifiers,
+  letting reconnect specs assert the exact detached OBS connection was closed
+  instead of only observing that some close happened.
+- `OBS::Client#wait_for_close` records the sanitized terminal close/error and
+  lets the supervisor wait on reader close, reader failure, malformed-frame
+  close, or response-parser close without relying on the old 250 ms polling
+  loop as the primary signal.
+- `ObsSupervisor#wait_for_disconnect` still drains OBS events and keeps a
+  short fallback timeout, so stop/cancel paths and unexpected missed
+  notifications can still make progress.
 - Strict Rust compatibility remains manual/scheduled until `obsctl-rs` owns a
   matching contract fixture root.
 
 Reviewer findings from the latest pass:
 
-- No blocking correctness regression was found in the targeted bounded
-  diagnostic fanout behavior.
-- The previous unbounded detached diagnostic-fiber risk is addressed in the
-  server path. Permanently blocked log-topic subscribers can consume only the
-  helper's fixed capacity.
-- The helper intentionally drops secondary diagnostics silently after capacity
-  is exhausted. That preserves reconnect liveness, but operators currently have
-  no aggregated visibility that log-topic diagnostics are being dropped.
-- `BestEffortLogBroadcast` is covered through supervisor/server behavior, but
-  it does not yet have a focused unit spec for capacity validation, exception
-  containment, outstanding-count cleanup after failures, and recovery after
-  blocked work is released.
-- The bounded helper protects reconnect publication diagnostics only. Ordinary
-  state/log/event broadcasts still use synchronous `ClientRegistry#broadcast`;
-  slow IPC subscribers can still block non-diagnostic fanout paths.
-- Runtime logger delivery is synchronous and file-backed. That is acceptable as
-  the durable local sink today because the logger rescues internally, but a
-  future high-volume diagnostic path should avoid repeated per-event file opens
-  on hot paths.
-- Close-observed specs still do not identify the specific OBS connection that
-  closed, which limits future overlapping reconnect assertions.
-- Remaining reconnect flake sources are unchanged: some reconnect specs still
-  depend on unavailable-then-bind port windows and `wait_for_disconnect` still
-  polls every 250 ms.
+- No blocking correctness regression was found in the targeted reconnect
+  determinism behavior.
+- The port-window race called out in the previous plan is addressed in the
+  server reconnect specs reviewed here.
+- Connection-specific fake OBS close probes are now present and already used by
+  reconnect, command-executor, and server specs that need to prove detached
+  client cleanup.
+- Disconnect observation is materially improved, but it is not a general
+  multi-subscriber close event bus: `OBS::Client#wait_for_close` uses a single
+  buffered notification plus terminal-error fallback. That is sufficient for
+  the current supervisor owner, but future concurrent waiters would need a
+  condition-style primitive or per-waiter notification.
+- The supervisor fallback interval is now 100 ms instead of a fixed 250 ms poll.
+  This keeps liveness defensive but means event processing can still wait up to
+  the fallback interval when no close/error notification arrives.
+- `TcpGate` is a good local test primitive for OBS-unavailable scenarios, but
+  its docs and users should keep the distinction clear: fake OBS
+  `connection_attempt_count` counts accepted WebSocket connections, not failed
+  TCP connection attempts while the gate is closed.
+- The newly added close-notification specs cover remote close, protocol-error
+  close, parser-error close, explicit close, pending-request cleanup, and
+  secret-free close messages.
+- `BestEffortLogBroadcast` remains only indirectly tested through reconnect
+  behavior and still needs focused unit coverage.
+- Secondary reconnect diagnostic drops remain silent; this preserves liveness
+  but leaves operators without aggregate visibility into slow log subscribers.
+- Ordinary state/log/event broadcasts still use synchronous
+  `ClientRegistry#broadcast`, so broader slow-subscriber isolation is still
+  future work.
 
 ## Completed P0: Reconnect Diagnostic Liveness
 
@@ -108,6 +127,27 @@ Reviewer findings from the latest pass:
    - Secondary log-topic delivery avoids the runtime logger path to prevent
      duplicate persisted diagnostics.
 
+## Completed P1: Reconnect Determinism Slice
+
+1. Retire server reconnect unavailable-then-bind port races.
+   - `SpecSupport::TcpGate` reserves a port without listening, causing
+     connection attempts to fail immediately while preserving ownership.
+   - Server reconnect specs open fake OBS through the gate instead of using
+     `unused_tcp_port` windows.
+
+2. Add connection-specific fake OBS close probes.
+   - Fake OBS assigns accepted WebSocket ids.
+   - Specs can assert that the specific detached connection closed, not merely
+     that some close event happened.
+
+3. Make established disconnect waiting event-driven first.
+   - `OBS::Client#wait_for_close` exposes sanitized terminal close/error
+     notification.
+   - `ObsSupervisor#wait_for_disconnect` waits on that notification before the
+     fallback timeout and keeps event draining.
+   - Close-notification specs cover disconnect, explicit close, malformed
+     frames, response parser failures, pending requests, and secret redaction.
+
 ## P0: Finish Strict Compatibility Fixture Ownership
 
 1. Add or coordinate the Rust-side shared fixture root.
@@ -126,26 +166,31 @@ Reviewer findings from the latest pass:
    - Once the Rust fixtures exist and pass, decide whether scheduled/manual is
      enough or whether the workflow should become a required PR signal.
 
-## P1: Reconnect Flake Cleanup
+## P1: Remaining Reconnect Test Polish
 
-1. Retire unavailable-then-bind port races.
-   - Replace remaining `unused_tcp_port` windows in reconnect specs with the
-     deterministic reservation helper already introduced for this area.
-   - Ensure helper and probe names distinguish accepted WebSocket connections
-     from failed TCP attempts.
+1. Tighten close-notification semantics if more consumers appear.
+   - Today one supervisor waiter is the only production consumer, so a single
+     buffered close notification plus terminal-error fallback is adequate.
+   - If command paths, diagnostics, or tests start waiting concurrently, replace
+     the single notification channel with a condition-style primitive or
+     per-waiter channels.
+   - Add a focused spec documenting the intended single-owner or multi-waiter
+     semantics before broadening use.
 
 2. Continue replacing polling/sleep-based reconnect specs.
-   - Add connection identifiers to fake OBS close probes so specs can assert the
-     exact detached client closed when reconnect and retry attempts overlap.
-   - Convert reconnect assertions to fake OBS probes for Identify received,
-     close observed, request received, and no-attempt windows.
+   - Convert remaining elapsed-time/no-event assertions to fake OBS probes where
+     practical.
    - Replace the ad hoc `StateStore` subclass used as a pre-delay barrier with a
      narrower supervisor test hook if it remains useful.
+   - Keep fallback sleeps only where the behavior under test is explicitly
+     "nothing happened during this interval".
 
-3. Make disconnect detection more event-driven.
-   - Replace or supplement the 250 ms `wait_for_disconnect` polling loop with
-     an OBS client close/error notification.
-   - Keep a defensive timeout or polling fallback for cleanup.
+3. Clarify fake OBS probe naming and usage.
+   - Keep `connection_attempt_count` documented as accepted WebSocket
+     connections.
+   - Use names like `accepted_websocket_connection_id` for accepted sockets and
+     avoid implying failed TCP attempts are counted.
+   - Prefer connection-id assertions for any future overlapping reconnect specs.
 
 ## P1: Diagnostic Fanout Polish
 
@@ -262,14 +307,14 @@ Add breadth only after the daemon/IPC/reconnect contract remains stable.
 
 ## Suggested Next Pull Requests
 
-1. Replace remaining reconnect unavailable-then-bind port windows with the
-   deterministic reservation helper and keep the full Crystal gate green.
-2. Add connection-specific fake OBS close probes and remove the next batch of
-   sleep/poll-based reconnect assertions.
-3. Add focused `BestEffortLogBroadcast` unit specs and an aggregate drop
+1. Add focused `BestEffortLogBroadcast` unit specs and an aggregate drop
    observability policy.
-4. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
+2. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
    `make contract-rs-compat` in a prepared dual-repo workspace.
+3. Continue reconnect spec polish by replacing remaining sleep/no-event
+   assertions with deterministic probes where practical.
+4. Decide whether `OBS::Client#wait_for_close` should remain a single-owner
+   supervisor primitive or become a multi-waiter close notification primitive.
 5. Add main Crystal CI and decide whether Ameba should become an installed dev
    dependency.
 

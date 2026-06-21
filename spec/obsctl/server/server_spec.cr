@@ -1,21 +1,20 @@
 require "../../spec_helper"
-require "socket"
 require "../../../src/obsctl/server/server"
 require "../../../src/obsctl/ipc/protocol"
 require "../../../src/obsctl/obs/protocol/event_subscription"
 require "../../../src/obsctl/runtime/logger"
 require "../../support/fake_obs_server"
+require "../../support/tcp_gate"
 
 private def temp_socket_path : String
   File.join(Dir.tempdir, "obsctl-server-spec-#{Random.rand(1_000_000)}.sock")
 end
 
-private def unused_tcp_port : Int32
-  server = nil.as(TCPServer?)
-  server = TCPServer.new("127.0.0.1", 0)
-  server.local_address.port
-ensure
-  server.try(&.close)
+private def next_server_spec_websocket_connection_id(
+  obs : Obsctl::SpecSupport::FakeObsServer,
+  timeout : Time::Span = 2.seconds,
+) : Int64
+  obs.next_accepted_websocket_connection_id(timeout) || raise "fake OBS did not accept WebSocket connection"
 end
 
 describe Obsctl::Server::Server do
@@ -69,12 +68,13 @@ describe Obsctl::Server::Server do
 
   it "rejects explicit reconnect when reconnect is disabled and the startup supervisor exited" do
     obs = nil.as(Obsctl::SpecSupport::FakeObsServer?)
+    gate = nil.as(Obsctl::SpecSupport::TcpGate?)
     path = temp_socket_path
-    obs_port = unused_tcp_port
+    gate = Obsctl::SpecSupport::TcpGate.new
     config = Obsctl::Config::Config.new(
       connection: Obsctl::Config::ConnectionConfig.new(
         host: "127.0.0.1",
-        port: obs_port,
+        port: gate.port,
         password_env: "",
         connect_timeout_ms: 100,
         request_timeout_ms: 100
@@ -99,7 +99,7 @@ describe Obsctl::Server::Server do
     failed_status["obs_connected"].as_bool.should be_false
     failed_status["last_error"].as_s.should_not contain("OBS reconnect requested")
 
-    obs = Obsctl::SpecSupport::FakeObsServer.new(port: obs_port).start
+    obs = gate.open_fake_obs
 
     reconnect = client.request(
       Obsctl::IPC::Request.new(
@@ -128,18 +128,20 @@ describe Obsctl::Server::Server do
     status.result.not_nil!["obs"]["last_error"].as_s.should_not contain("OBS reconnect requested")
   ensure
     obs.try(&.stop)
+    gate.try(&.release)
     server.try(&.stop)
     File.delete(path) if path && File.exists?(path)
   end
 
   it "wakes retry backoff when explicit reconnect is requested over IPC" do
     obs = nil.as(Obsctl::SpecSupport::FakeObsServer?)
+    gate = nil.as(Obsctl::SpecSupport::TcpGate?)
     path = temp_socket_path
-    obs_port = unused_tcp_port
+    gate = Obsctl::SpecSupport::TcpGate.new
     config = Obsctl::Config::Config.new(
       connection: Obsctl::Config::ConnectionConfig.new(
         host: "127.0.0.1",
-        port: obs_port,
+        port: gate.port,
         password_env: "",
         connect_timeout_ms: 100,
         request_timeout_ms: 100
@@ -175,7 +177,7 @@ describe Obsctl::Server::Server do
     parse_rfc3339(reconnecting["last_connection_failed_at"])
     reconnecting["last_error"].as_s.should_not contain("OBS reconnect requested")
 
-    obs = Obsctl::SpecSupport::FakeObsServer.new(port: obs_port).start
+    obs = gate.open_fake_obs
     obs.assert_no_identify_or_connection_attempt(150.milliseconds)
 
     reconnect = client.request(
@@ -213,6 +215,7 @@ describe Obsctl::Server::Server do
     status.result.not_nil!["obs"]["last_error"].raw.should be_nil
   ensure
     obs.try(&.stop)
+    gate.try(&.release)
     server.try(&.stop)
     File.delete(path) if path && File.exists?(path)
   end
@@ -583,6 +586,7 @@ describe Obsctl::Server::Server do
 
     ready.receive
     wait_for_socket(path)
+    connection_id = next_server_spec_websocket_connection_id(obs)
 
     state = subscribe(path, ["state", "logs"], "req-clean-close-state")
     connected = read_state_until(state, connected: true)
@@ -596,7 +600,7 @@ describe Obsctl::Server::Server do
       )
     )
     response.ok.should be_true
-    obs.next_close(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
 
     disconnected = read_state_error_until(state, "OBS reconnect requested")
     disconnected["connected"].as_bool.should be_false
@@ -652,13 +656,14 @@ describe Obsctl::Server::Server do
 
     ready.receive
     wait_for_socket(path)
+    connection_id = next_server_spec_websocket_connection_id(obs)
 
     state = subscribe(path, ["state", "logs"], "req-malformed-frame-state")
     connected = read_state_until(state, connected: true)
     connected["connected"].as_bool.should be_true
 
     obs.emit_raw_frame("{not-json")
-    obs.next_close(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(connection_id, 2.seconds)
 
     disconnected = read_state_until(state, connected: false)
     disconnected["connected"].as_bool.should be_false
@@ -718,6 +723,7 @@ describe Obsctl::Server::Server do
     ready.receive
     wait_for_socket(path)
 
+    first_connection_id = next_server_spec_websocket_connection_id(obs)
     first_identify = obs.next_identify(2.seconds) || raise "fake OBS did not receive initial Identify"
     first_identify["eventSubscriptions"].as_i.should eq(Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT)
 
@@ -726,7 +732,7 @@ describe Obsctl::Server::Server do
     connected["connected"].as_bool.should be_true
 
     obs.emit_raw_frame(%({"op":7,"d":{"requestType":"GetVersion"}}))
-    obs.next_close(2.seconds).should be_true
+    obs.assert_websocket_connection_closed(first_connection_id, 2.seconds)
 
     disconnected = read_state_until(state, connected: false)
     disconnected["connected"].as_bool.should be_false

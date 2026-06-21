@@ -716,6 +716,9 @@ Implemented:
     connection attempt runs promptly; if the supervisor has exited with
     reconnect disabled, the command returns `OBS_UNAVAILABLE` with the public message
     `OBS supervisor is not running; restart the server or enable reconnect.`
+  - disconnect detection is event-driven through OBS client close/error
+    notifications, with a defensive fallback timeout so cleanup and stop/cancel
+    paths still make progress
   - protocol-error client closes are observed by the supervisor; stale OBS clients are dropped, OBS is marked disconnected, IPC stays available, and reconnect resumes when enabled
   - subscription handling maintains a client registry and broadcasts state, OBS event, and log topic updates
 - CLI:
@@ -738,6 +741,10 @@ Implemented:
   - explicitly closes the WebSocket and clears all pending requests after malformed OBS frames or response parser errors
   - pending-request specs cover late responses after timeout, concurrent requests, disconnects during in-flight requests, malformed frames, parser errors, and timeout cleanup
   - exposes connection state so the server supervisor can detect established WebSocket disconnects
+  - exposes a bounded close/error notification primitive so the supervisor can
+    wait for reader close, reader failure, malformed-frame close, or
+    response-parser close without depending on fixed polling as the primary
+    signal
   - event parsing exists and events are routed to a client channel
   - direct embedded-style TUI sessions can consume the event channel, and normal TUI mode consumes server-pushed IPC state, OBS event topics, and log topics
   - reconnect policy is still wired into the TUI session for server reconnects, but not into the low-level OBS client itself
@@ -764,8 +771,12 @@ Implemented:
   - optional `../obsctl-rs` compatibility checks skip cleanly in default mode when the sibling repository is absent or has no recognized fixture root
   - strict `obsctl-rs` compatibility mode fails clearly for missing sibling repositories, missing fixture roots, missing counterparts, and content differences
   - fake OBS server support exposes deterministic probes for Identify frames,
-    OBS request types, close events, and no-attempt windows
+    OBS request types, close events, no-attempt windows, and
+    connection-specific accepted/closed WebSocket ids
   - server reconnect specs cover initial OBS unavailable startup, reconnect-disabled supervisor exit, established-session disconnects, protocol-error disconnects, explicit reconnect requests, wakeable retry backoff, durable pre-delay reconnect requests, generation-safe stop/start ownership, stale reconnect wake invalidation, transient active-client-close wake behavior, and successful reconnects
+  - server IPC/reconnect specs use `SpecSupport::TcpGate` instead of
+    unavailable-then-bind `unused_tcp_port` windows, so default single-repo
+    reconnect tests keep deterministic port ownership until fake OBS opens
   - server reconnect specs deterministically prove sequential reconnect-after-stop
     rejection without publishing stale public state such as
     `OBS reconnect requested`
@@ -801,9 +812,6 @@ Implemented:
 - Stream/record controls and status.
 - Scene item visibility controls.
 - Volume meter events.
-- Remaining reconnect flake cleanup: replace `unused_tcp_port`
-  unavailable-then-bind windows and `wait_for_disconnect` polling with
-  deterministic hooks where practical.
 - `ameba` lint execution in this environment.
 - Release packaging beyond `make release`.
 - Unknown config field preservation.
@@ -1075,16 +1083,15 @@ Remaining:
 ## Planned Next
 
 With reconnect lifecycle publication decoupled, detached-client cleanup ordered
-before blockable fanout, and publication-failure diagnostics now runtime-logger
-primary with bounded, lossy, non-blocking secondary log-topic fanout, the
-highest reconnect follow-up is the next remaining flake cleanup item.
+before blockable fanout, publication-failure diagnostics now runtime-logger
+primary with bounded, lossy, non-blocking secondary log-topic fanout, and the
+reconnect flake cleanup slice removing port-window races plus polling-primary
+disconnect detection, the next highest-value work moves back to contract and
+polish items.
 
-1. Add a deterministic unavailable-then-bind helper to retire the remaining
-   reconnect `unused_tcp_port` windows, then clean up `wait_for_disconnect`
-   polling where practical.
-2. Add or coordinate the Rust-side shared contract fixture root so the manual
+1. Add or coordinate the Rust-side shared contract fixture root so the manual
    or scheduled strict compatibility workflow can become a required signal.
-3. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
+2. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
    when `../obsctl-rs` is available with compatible contract fixtures.
-4. Return to demo config, packaging polish, and optional `termisu` backend
+3. Return to demo config, packaging polish, and optional `termisu` backend
    evaluation once the stabilized contract gates stay green.

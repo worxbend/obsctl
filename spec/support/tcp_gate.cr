@@ -1,4 +1,5 @@
 require "socket"
+require "./fake_obs_server"
 
 module Obsctl
   module SpecSupport
