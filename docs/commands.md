@@ -131,11 +131,16 @@ most recent failed OBS connection attempt. It can describe a previous failure
 even while OBS is currently connected, and successful connections do not clear
 it; only a newer failed attempt replaces it. `last_reconnect_attempt_at` records
 when the supervisor last started an OBS connection attempt.
-`dropped_reconnect_diagnostic_logs` is an aggregate counter for secondary
-reconnect diagnostic `logs` topic messages that were dropped because bounded
-best-effort fanout was full. Runtime logging is still the durable primary
-diagnostic sink; the counter gives operators visibility into lossy subscriber
-delivery without emitting one log entry per drop.
+`dropped_reconnect_diagnostic_logs` is process-local runtime telemetry and
+resets when the daemon process restarts. It counts only dropped secondary
+reconnect diagnostic `logs` topic deliveries from the bounded best-effort
+fanout. Primary runtime logging is still the durable diagnostic sink, and
+ordinary state, event, and log subscriber drops are not counted by this field.
+The public value is a JSON-safe non-negative integer; values above
+`Int64::MAX` are saturated to `Int64::MAX`. Human output renders the integer
+reported by the daemon, including `0`, and renders `-` when an older daemon
+omits the field. JSON output preserves the daemon payload and does not
+synthesize the missing field.
 
 `obsctl reconnect` asks the running server supervisor to reconnect OBS. Success
 means the running supervisor accepted a generation-scoped reconnect request, or
@@ -173,6 +178,12 @@ and the normal TUI client path must not require or instantiate the OBS
 WebSocket client implementation. Server-side `command_executor` is the
 IPC-command-to-OBS-action boundary, and OBS WebSocket client construction stays
 inside the server supervisor.
+
+Cross-implementation status fixtures for `obsctl-rs` should live under one
+recognized root such as `spec/fixtures/contracts/`, `tests/fixtures/contracts/`,
+or `fixtures/contracts/`, with matching `cli/human/`, `cli/json/`, and `ipc/`
+subdirectories. Current daemon status fixtures should include
+`dropped_reconnect_diagnostic_logs`.
 
 TUI keyboard input:
 

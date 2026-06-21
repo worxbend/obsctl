@@ -701,6 +701,13 @@ Implemented:
   - aggregate dropped secondary reconnect diagnostic log-topic deliveries are
     exposed as `dropped_reconnect_diagnostic_logs` in daemon status and the
     combined status server object without changing reconnect command liveness
+  - `dropped_reconnect_diagnostic_logs` is process-local runtime telemetry that
+    resets on daemon restart; it counts only dropped secondary reconnect
+    diagnostic `logs` topic deliveries from the bounded best-effort fanout, not
+    ordinary state/event/log subscriber drops and not the primary runtime logger
+  - public status serialization reports `dropped_reconnect_diagnostic_logs` as
+    a JSON-safe non-negative signed integer, saturating internal `UInt64`
+    counters larger than `Int64::MAX` to `Int64::MAX`
   - reconnect diagnostic log-topic fanout bypasses `Server#broadcast_log`, so
     primary runtime-log diagnostics are not duplicated when secondary delivery
     succeeds, while ordinary server log events still use the normal logs-topic
@@ -728,9 +735,12 @@ Implemented:
   - non-interactive OBS control commands are thin IPC clients
   - `status` is the combined daemon-and-OBS status command
   - `server-status` exists with PID, uptime, socket path, connected state, explicit reconnecting state, reconnect timestamps including `last_connection_failed_at`, last error, and subscribed client count
-  - `status` and `server-status` human and JSON output include
-    `dropped_reconnect_diagnostic_logs` as aggregate lossy secondary diagnostic
-    fanout telemetry
+  - `status` and `server-status` human output renders a present
+    `dropped_reconnect_diagnostic_logs` value as the actual integer, including
+    `0`, while older daemon payloads that omit the field render it as `-`
+  - `status` and `server-status` JSON output remains faithful to the daemon
+    payload and does not synthesize `dropped_reconnect_diagnostic_logs` for
+    older daemon responses that omit it
   - `obs-status`, `reconnect`, and guarded `shutdown-server` are thin IPC client commands
 - TUI:
   - currently a simple ANSI dashboard with raw key input and a command palette state machine
@@ -805,7 +815,10 @@ Implemented:
     outstanding-count accounting, exception containment, drop accounting while
     full, and acceptance recovery after blocked workers are released
   - command executor, CLI, server, and golden contract specs cover
-    `dropped_reconnect_diagnostic_logs` in daemon status and combined status
+    `dropped_reconnect_diagnostic_logs` in daemon status and combined status,
+    including present-zero human output, missing-field human `-` compatibility,
+    JSON payload fidelity, default-zero command-executor behavior, and
+    `Int64::MAX` saturation for very large internal counters
   - command-level reconnect specs prove raising state/log publication callbacks
     do not turn an accepted `reconnect_obs` command into `SERVER_ERROR`, while
     detached-client cleanup still happens and diagnostics remain sanitized
@@ -1005,6 +1018,12 @@ Partial:
 - aggregate dropped secondary reconnect diagnostic log-topic deliveries are
   observable through `dropped_reconnect_diagnostic_logs` in `server-status` and
   the combined `status` server object, with docs and golden fixtures updated
+- the status telemetry contract is finalized: human output distinguishes
+  missing older-daemon telemetry from a real zero, JSON output preserves the
+  daemon payload, the counter is process-local and resets on daemon restart, it
+  counts only dropped secondary reconnect diagnostic `logs` topic fanout
+  deliveries, and public JSON values are non-negative signed integers saturated
+  at `Int64::MAX`
 - command-level reconnect coverage proves raising state/log publication
   callbacks stay diagnostic-only after acceptance and never surface as
   `SERVER_ERROR`
@@ -1073,6 +1092,11 @@ Done:
 - strict `obsctl-rs` GitHub Actions compatibility runs only by manual dispatch
   or scheduled cadence until the Rust-side fixture root exists, with repository
   owner/name/ref configurable by inputs or repository variables
+- Rust-side contract fixture ownership remains external to this Crystal repo:
+  the sibling implementation should provide one recognized fixture root such as
+  `spec/fixtures/contracts/`, `tests/fixtures/contracts/`, or
+  `fixtures/contracts/`, with matching `cli/human/`, `cli/json/`, and `ipc/`
+  fixtures that include the finalized status telemetry field
 
 Remaining:
 
@@ -1102,17 +1126,18 @@ Remaining:
 With reconnect lifecycle publication decoupled, detached-client cleanup ordered
 before blockable fanout, publication-failure diagnostics now runtime-logger
 primary with bounded, lossy, non-blocking secondary log-topic fanout, and the
-reconnect flake cleanup slice removing port-window races plus polling-primary
-disconnect detection, focused `BestEffortLogBroadcast` unit coverage and
-aggregate reconnect diagnostic drop observability are now in place. The next
-highest-value work moves back to contract ownership and contract-adjacent
-polish.
+status telemetry contract now finalized for missing-versus-zero human output,
+process-local reset/scope semantics, JSON-safe saturation, and Crystal golden
+fixtures, the next highest-value work is cross-implementation fixture
+ownership.
 
 1. Add or coordinate the Rust-side shared contract fixture root so the manual
    or scheduled strict compatibility workflow can become a required signal.
+   The root should be one of `spec/fixtures/contracts/`,
+   `tests/fixtures/contracts/`, or `fixtures/contracts/`, with matching
+   `cli/human/`, `cli/json/`, and `ipc/` fixtures that include the finalized
+   status telemetry field.
 2. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
    when `../obsctl-rs` is available with compatible contract fixtures.
-3. Keep contract-adjacent polish next: review fixture wording and status
-   examples for the new reconnect diagnostic drop field, then return to demo
-   config, packaging polish, and optional `termisu` backend evaluation once the
-   stabilized contract gates stay green.
+3. Return to demo config, packaging polish, and optional `termisu` backend
+   evaluation once the stabilized contract gates stay green.

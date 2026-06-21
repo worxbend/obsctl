@@ -81,11 +81,16 @@ the server logs them with secret redaction, and the command still succeeds. If
 the supervisor has already exited, for example after startup failure with
 `reconnect.enabled: false`, `obsctl reconnect` returns `OBS_UNAVAILABLE` with a
 message telling the operator to restart the server or enable reconnect.
-`dropped_reconnect_diagnostic_logs` counts secondary reconnect diagnostic
-`logs` topic messages dropped because bounded best-effort fanout was at
-capacity. Runtime logging remains the durable primary diagnostic sink, so this
-is aggregate telemetry for slow or blocked subscribers rather than per-drop log
-spam.
+`dropped_reconnect_diagnostic_logs` is process-local runtime telemetry and
+resets when the daemon process restarts. It counts only dropped secondary
+reconnect diagnostic `logs` topic deliveries from the bounded best-effort
+fanout. Primary runtime logging remains the durable diagnostic sink, and
+ordinary state, event, and log subscriber drops are not counted by this field.
+The public value is a JSON-safe non-negative integer; values above
+`Int64::MAX` are saturated to `Int64::MAX`. Human status output shows the
+integer reported by the daemon, including `0`, and shows `-` when talking to an
+older daemon that omits the field. JSON output preserves the daemon payload and
+does not synthesize the missing field.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 
@@ -137,3 +142,9 @@ push/pull-request gate while `obsctl-rs` lacks compatible fixtures. It runs by
 manual `workflow_dispatch` and on the scheduled cadence, with the Rust
 repository owner, name, and ref supplied by workflow inputs or repository
 variables.
+
+Rust-side contract fixtures should live under one recognized root:
+`spec/fixtures/contracts/`, `tests/fixtures/contracts/`, or
+`fixtures/contracts/`. The selected root should mirror `cli/human/`,
+`cli/json/`, and `ipc/`; current status fixtures should include
+`dropped_reconnect_diagnostic_logs` wherever daemon status is present.

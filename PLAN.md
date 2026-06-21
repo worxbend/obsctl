@@ -1,17 +1,19 @@
 # obsctl Improvement Plan
 
-This plan reflects a fresh senior review of the 2026-06-21 iteration 7
-diagnostic-observability slice. The iteration added focused
-`Server::BestEffortLogBroadcast` unit coverage and exposed aggregate dropped
-secondary reconnect diagnostic log-topic deliveries as
-`dropped_reconnect_diagnostic_logs` in daemon status and combined status.
+This plan reflects a fresh senior review of the 2026-06-21 iteration 8
+status-telemetry contract slice. The iteration finalized the public contract
+for `dropped_reconnect_diagnostic_logs`: human status output distinguishes
+missing older-daemon telemetry from a real zero, JSON output preserves daemon
+payloads, and current-daemon serialization clamps the internal `UInt64` counter
+to a JSON-safe signed integer.
 
 ## Current Assessment
 
-`obsctl` has a mature local daemon architecture: one server owns the OBS
-WebSocket session, thin CLI/TUI clients use Unix socket IPC, public CLI/IPC
-contracts are fixture-backed, reconnect behavior has focused primitive and
-integration specs, and reconnect diagnostic fanout is bounded and lossy.
+`obsctl` now has a mature local daemon/control-plane shape: one server owns the
+OBS WebSocket session, thin CLI/TUI clients communicate over Unix socket IPC,
+status and command contracts are fixture-backed, reconnect behavior has focused
+concurrency coverage, and reconnect diagnostic log-topic fanout is bounded,
+lossy, and observable.
 
 The intended process model remains:
 
@@ -22,11 +24,10 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
 
 Completed or correct in the reviewed reconnect and diagnostic work:
 
-- `ObsSupervisor#reconnect` preserves the generation-safe accept-then-emit
+- `ObsSupervisor#reconnect` preserves a generation-safe accept-then-emit
   boundary: lifecycle acceptance, reconnect request registration, active-client
   detachment, and authoritative reconnect state mutation are decided under
-  `@lifecycle_lock`, while publication side effects happen after the lock is
-  released.
+  `@lifecycle_lock`; publication side effects happen after the lock is released.
 - Detached OBS clients are closed before state/log fanout can block, and cleanup
   is protected with `ensure`.
 - Accepted reconnect state/log publication exceptions are diagnostic-only after
@@ -38,12 +39,24 @@ Completed or correct in the reviewed reconnect and diagnostic work:
 - Secondary reconnect diagnostics bypass `Server#broadcast_log`, avoiding
   duplicate runtime-log entries when the primary runtime diagnostic has already
   been written.
-- Focused `BestEffortLogBroadcast` unit specs now cover capacity validation,
+- Focused `BestEffortLogBroadcast` unit specs cover capacity validation,
   outstanding-count cleanup, exception containment, drop accounting while full,
   and recovery after blocked workers drain.
 - Aggregate secondary reconnect diagnostic drops are exposed as
   `dropped_reconnect_diagnostic_logs` in `server-status` and in the `server`
-  object of combined `status`, with CLI docs and golden fixtures updated.
+  object of combined `status`.
+- Human `status` and `server-status` output renders present counter values as
+  the actual integer, including `0`, and renders omitted older-daemon telemetry
+  as `-`.
+- JSON output remains faithful to daemon payloads; it does not synthesize
+  `dropped_reconnect_diagnostic_logs` for older responses that omit the field.
+- Current-daemon status serialization returns a non-negative signed JSON
+  integer and saturates internal values larger than `Int64::MAX` to
+  `Int64::MAX`.
+- Docs now state that the drop counter is process-local runtime telemetry,
+  resets on daemon restart, and counts only dropped secondary reconnect
+  diagnostic `logs` topic fanout, not ordinary state/event/log subscriber drops
+  and not primary runtime logger writes.
 - Server reconnect specs use `SpecSupport::TcpGate` instead of
   unavailable-then-bind `unused_tcp_port` windows.
 - Fake OBS exposes accepted/closed WebSocket connection identifiers, letting
@@ -55,25 +68,26 @@ Completed or correct in the reviewed reconnect and diagnostic work:
 
 Reviewer findings from the latest pass:
 
-- No blocking correctness regression was found in the new diagnostic drop-count
-  behavior.
-- The new helper unit specs directly cover the previously indirect
-  `BestEffortLogBroadcast` behavior.
-- The public drop counter is useful operator telemetry for slow or blocked
-  reconnect diagnostic subscribers, and it does not change reconnect command
-  liveness.
-- The CLI human formatter currently renders a missing
-  `dropped_reconnect_diagnostic_logs` field as `0`. That preserves older-payload
-  formatting, but it conflates "daemon did not report this field" with "zero
-  drops". This should be resolved before treating mixed-version status output as
-  a polished contract.
-- The drop counter is process-local runtime telemetry and resets on daemon
-  restart; docs should say this explicitly.
-- The counter is stored as `UInt64` and serialized through JSON. Practically it
-  will not overflow, but the public JSON contract would be cleaner with an
-  explicitly JSON-safe non-negative integer policy or saturation behavior.
+- No blocking correctness regression was found in the status/drop-telemetry
+  contract changes.
+- The implementation correctly separates human compatibility behavior from JSON
+  fidelity: human output shows `-` for omitted telemetry, while JSON envelopes
+  pass daemon payloads through unchanged.
+- The server-side counter is now explicitly JSON-safe and covered for positive,
+  default-zero, and saturation cases.
+- The current golden CLI fixtures freeze present non-zero telemetry for both
+  combined status and daemon-only status.
+- A small coverage gap remains: JSON fidelity for an older daemon-only
+  `server-status` payload without the drop field is implied by pass-through
+  behavior but not directly asserted.
+- Direct unit specs for present human status currently use `0`; non-zero human
+  rendering is covered by golden fixtures, but adding a direct non-zero formatter
+  assertion would make failures easier to localize.
+- Cross-implementation fixture ownership remains the highest-value next step:
+  `obsctl-rs` still needs a recognized contract fixture root before strict
+  compatibility can become a stronger signal.
 - Ordinary state/log/event broadcasts still use synchronous
-  `ClientRegistry#broadcast`, so broader slow-subscriber isolation is still
+  `ClientRegistry#broadcast`, so broader slow-subscriber isolation remains
   future work.
 
 ## Completed P0: Reconnect Diagnostic Liveness
@@ -111,6 +125,29 @@ Reviewer findings from the latest pass:
    - Command-executor, CLI, server, and golden contract specs cover the field.
    - Focused helper specs cover the bounded fanout accounting that feeds it.
 
+## Completed P0: Status Telemetry Contract Polish
+
+1. Clarify missing versus zero drop-count semantics.
+   - Older daemon payloads missing `dropped_reconnect_diagnostic_logs` render as
+     `-` in human output.
+   - Present values render as the daemon-reported integer, including `0`.
+   - JSON output remains faithful to the daemon payload and does not synthesize
+     missing fields.
+
+2. Document counter lifecycle and scope.
+   - The counter is process-local runtime telemetry.
+   - It resets on daemon restart.
+   - It counts only dropped secondary reconnect diagnostic `logs` topic fanout
+     deliveries from the bounded helper.
+   - It does not count ordinary state/event/log subscriber drops or primary
+     runtime logger writes.
+
+3. Make the numeric contract explicit.
+   - Public status serialization reports a non-negative signed JSON integer.
+   - Internal `UInt64` values larger than `Int64::MAX` saturate to
+     `Int64::MAX`.
+   - Specs cover positive, default-zero, and saturation behavior.
+
 ## Completed P1: Reconnect Determinism Slice
 
 1. Retire server reconnect unavailable-then-bind port races.
@@ -139,9 +176,11 @@ Reviewer findings from the latest pass:
      `spec/fixtures/contracts/`, `tests/fixtures/contracts/`, or
      `fixtures/contracts/`.
    - Populate matching `cli/human/`, `cli/json/`, and `ipc/` fixtures.
-   - Include `dropped_reconnect_diagnostic_logs` in the status fixtures or make
-     a deliberate public-contract decision if Rust should expose a different
-     observability shape.
+   - Include `dropped_reconnect_diagnostic_logs` in daemon status and combined
+     status fixtures.
+   - Preserve the finalized telemetry semantics: human missing field as
+     unknown, JSON payload fidelity, process-local reset semantics, and
+     JSON-safe signed/saturating numeric policy.
    - Run `make contract-rs-compat` in a prepared dual-repo workspace and treat
      content differences as public-contract decisions.
 
@@ -153,33 +192,23 @@ Reviewer findings from the latest pass:
    - Once the Rust fixtures exist and pass, decide whether scheduled/manual is
      enough or whether the workflow should become a required PR signal.
 
-## P1: Status And Diagnostic Contract Polish
+## P1: Status Contract Coverage Hardening
 
-1. Clarify missing versus zero drop-count semantics.
-   - Decide whether older daemon payloads missing
-     `dropped_reconnect_diagnostic_logs` should render as `-`/unknown instead of
-     `0` in human output.
-   - Add a compatibility spec for the chosen behavior.
-   - Keep JSON output faithful to the daemon payload unless a versioned default
-     policy is explicitly chosen.
+1. Add a daemon-only JSON compatibility spec.
+   - Cover `obsctl --json server-status` when an older daemon omits
+     `dropped_reconnect_diagnostic_logs`.
+   - Assert the JSON envelope does not synthesize the field.
 
-2. Document counter lifecycle precisely.
-   - State that `dropped_reconnect_diagnostic_logs` is process-local runtime
-     telemetry.
-   - State that it resets on daemon restart.
-   - State that it counts only secondary reconnect diagnostic log-topic drops,
-     not ordinary log/state/event subscriber drops.
+2. Restore direct non-zero human formatter assertions.
+   - Keep existing present-zero and missing-field tests.
+   - Add or adjust a focused human status test so non-zero present values are
+     checked outside the golden fixture harness as well.
 
-3. Make the counter's numeric contract explicit.
-   - Prefer an `Int64`/JSON-safe non-negative counter or documented saturation
-     behavior over exposing an unbounded `UInt64` through `JSON::Any`.
-   - Add a small unit spec for the serialized field type.
-
-4. Consider exposing current diagnostic pressure.
-   - `outstanding` is useful internally but not currently public.
-   - If operators need more signal, add a separate status field such as
-     `reconnect_diagnostic_logs_in_flight`; avoid expanding status unless it
-     answers a real operational question.
+3. Consider adding older-daemon compatibility fixtures.
+   - If mixed-version CLI/server behavior is important as a frozen contract,
+     add explicit fixture cases for omitted telemetry.
+   - Keep them separate from current-daemon fixtures so the main success
+     fixtures continue to represent the current contract.
 
 ## P1: Remaining Reconnect Test Polish
 
@@ -220,6 +249,11 @@ Reviewer findings from the latest pass:
    - Do not route best-effort secondary diagnostics back through
      `Server#broadcast_log` if the primary logger has already written them.
    - Keep secret redaction before every public or persisted diagnostic surface.
+
+3. Consider exposing current diagnostic pressure only if operators need it.
+   - `BestEffortLogBroadcast#outstanding` is useful internally but not public.
+   - Add a field such as `reconnect_diagnostic_logs_in_flight` only if it answers
+     a real operational question; avoid expanding status for curiosity alone.
 
 ## P1: Main CI And Validation Polish
 
@@ -316,8 +350,8 @@ Add breadth only after the daemon/IPC/reconnect contract remains stable.
 
 1. Coordinate the Rust-side `obsctl-rs` contract fixture root and run
    `make contract-rs-compat` in a prepared dual-repo workspace.
-2. Polish the new status telemetry contract: missing-versus-zero human output,
-   counter reset/scope docs, and JSON-safe numeric semantics.
+2. Add the small remaining status contract coverage hardening: daemon-only
+   older-payload JSON fidelity and direct non-zero human formatter assertions.
 3. Continue reconnect spec polish by replacing remaining sleep/no-event
    assertions with deterministic probes where practical.
 4. Decide whether `OBS::Client#wait_for_close` should remain a single-owner

@@ -70,11 +70,16 @@ recent failed OBS connection attempt, not necessarily the current disconnected
 episode, and a later successful connection does not clear it. Only a newer
 failed connection attempt replaces it. `last_reconnect_attempt_at` records when
 the supervisor last started an OBS connection attempt.
-`dropped_reconnect_diagnostic_logs` is an aggregate count of secondary
-reconnect diagnostic `logs` topic messages dropped because the bounded
-best-effort fanout was already at capacity. Runtime logging remains the durable
-primary diagnostic sink; this field is telemetry for lossy subscriber fanout,
-not per-drop log spam.
+`dropped_reconnect_diagnostic_logs` is process-local runtime telemetry and
+resets when the daemon process restarts. It counts only dropped secondary
+reconnect diagnostic `logs` topic deliveries from the bounded best-effort
+fanout. Primary runtime logging remains the durable diagnostic sink, and
+ordinary state, event, and log subscriber drops are not counted by this field.
+The public value is a JSON-safe non-negative integer; values above
+`Int64::MAX` are saturated to `Int64::MAX`. Human CLI status output renders the
+integer reported by the daemon, including `0`, and renders `-` when an older
+daemon omits the field. JSON output and IPC responses preserve the daemon
+payload and do not synthesize the missing field.
 
 Explicit `reconnect_obs` requests return success only when the supervisor loop
 is alive. Success means the running supervisor accepted a generation-scoped
@@ -194,9 +199,12 @@ The selected root must contain contract files in these subdirectories:
 
 `cli/` stores frozen CLI output contracts, including human-readable output and
 JSON envelopes. `ipc/` stores frozen newline-delimited JSON request payloads for
-typed IPC commands. Strict compatibility compares matching fixture paths between
-the two repositories, reports fixtures missing from either side, and reports
-content differences after trimming surrounding whitespace.
+typed IPC commands. Rust-side fixtures should use one recognized root above with
+matching `cli/human/`, `cli/json/`, and `ipc/` subdirectories; current daemon
+status fixtures should include `dropped_reconnect_diagnostic_logs` wherever
+daemon status appears. Strict compatibility compares matching fixture paths
+between the two repositories, reports fixtures missing from either side, and
+reports content differences after trimming surrounding whitespace.
 
 Run the strict comparison from a prepared dual-repo workspace:
 
