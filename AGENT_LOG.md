@@ -1945,3 +1945,7 @@ M  SCORES.jsonl
 M  TODO.md
 M  spec/obsctl/server/obs_supervisor_spec.cr
 M  src/obsctl/server/obs_supervisor.cr
+2026-06-21T07:47:10Z final checkpoint policy behavior=source_and_telemetry terminal_reason=iterations_complete
+2026-06-21T07:47:10Z iteration final-2 checkpoint started
+2026-06-21T07:47:10Z iteration final-2 checkpoint status before commit:
+M  AGENT_LOG.md
