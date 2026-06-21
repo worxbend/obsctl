@@ -1,0 +1,72 @@
+#!/usr/bin/env sh
+set -eu
+
+usage() {
+  cat >&2 <<'USAGE'
+Usage: scripts/bootstrap_obsctl_rs_contract_fixtures DESTINATION_REPO
+
+Copies the Crystal contract fixtures into DESTINATION_REPO/spec/fixtures/contracts/.
+DESTINATION_REPO must be an existing obsctl-rs checkout root.
+USAGE
+}
+
+fail() {
+  printf 'error: %s\n' "$1" >&2
+  exit 1
+}
+
+if [ "$#" -ne 1 ]; then
+  usage
+  exit 64
+fi
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SOURCE_REPO=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SOURCE_ROOT="$SOURCE_REPO/spec/fixtures/contracts"
+DESTINATION_ARG=$1
+
+[ -d "$DESTINATION_ARG" ] || fail "destination does not exist or is not a directory: $DESTINATION_ARG"
+DESTINATION_REPO=$(CDPATH= cd -- "$DESTINATION_ARG" && pwd)
+
+if [ ! -e "$DESTINATION_REPO/.git" ] && [ ! -f "$DESTINATION_REPO/Cargo.toml" ]; then
+  fail "destination does not look like a repository root: $DESTINATION_REPO (expected .git or Cargo.toml)"
+fi
+
+[ -d "$SOURCE_ROOT" ] || fail "Crystal contract fixture root is missing: $SOURCE_ROOT"
+
+for required_path in \
+  "$SOURCE_ROOT/README.md" \
+  "$SOURCE_ROOT/contract_manifest.yml" \
+  "$SOURCE_ROOT/cli/human" \
+  "$SOURCE_ROOT/cli/json" \
+  "$SOURCE_ROOT/ipc"
+do
+  [ -e "$required_path" ] || fail "required Crystal contract fixture path is missing: $required_path"
+done
+
+DESTINATION_ROOT="$DESTINATION_REPO/spec/fixtures/contracts"
+
+copy_file() {
+  source_file=$1
+  destination_file=$2
+
+  mkdir -p -- "$(dirname -- "$destination_file")"
+  cp -- "$source_file" "$destination_file"
+}
+
+copy_dir_contents() {
+  source_dir=$1
+  destination_dir=$2
+
+  mkdir -p -- "$destination_dir"
+  cp -R -- "$source_dir/." "$destination_dir/"
+}
+
+copy_file "$SOURCE_ROOT/README.md" "$DESTINATION_ROOT/README.md"
+copy_file "$SOURCE_ROOT/contract_manifest.yml" "$DESTINATION_ROOT/contract_manifest.yml"
+copy_dir_contents "$SOURCE_ROOT/cli/human" "$DESTINATION_ROOT/cli/human"
+copy_dir_contents "$SOURCE_ROOT/cli/json" "$DESTINATION_ROOT/cli/json"
+copy_dir_contents "$SOURCE_ROOT/ipc" "$DESTINATION_ROOT/ipc"
+
+printf 'Copied Crystal contract fixtures to %s\n' "$DESTINATION_ROOT"
+printf 'Next command:\n  CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make contract-rs-compat\n'

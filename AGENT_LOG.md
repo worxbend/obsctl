@@ -2893,3 +2893,104 @@ M  SCORES.jsonl
 M  TODO.md
 M  spec/obsctl/cli/client_commands_spec.cr
 M  spec/obsctl/cli/main_spec.cr
+2026-06-21T09:54:02Z iteration 10 started remaining=10904s
+2026-06-21T09:54:02Z iteration 10 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-21T09:54:02Z iteration 10 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-v4mow0sk/repo copied_entries=184
+2026-06-21T09:54:02Z iteration 10 ideator phase started count=3
+2026-06-21T09:54:02Z iteration 10 ideator phase concurrency workers=3
+2026-06-21T09:54:02Z iteration 10 ideator 1 role="the pragmatist" started
+2026-06-21T09:54:02Z iteration 10 ideator 2 role="the architect" started
+2026-06-21T09:54:02Z iteration 10 ideator 3 role="the contrarian" started
+2026-06-21T09:54:13Z iteration 10 ideator 3 role="the contrarian" completed status=0
+2026-06-21T09:54:15Z iteration 10 ideator 1 role="the pragmatist" completed status=0
+2026-06-21T09:54:19Z iteration 10 ideator 2 role="the architect" completed status=0
+2026-06-21T09:54:19Z iteration 10 ideator phase completed approaches=3
+2026-06-21T09:54:19Z iteration 10 selector started approaches=3
+2026-06-21T09:54:42Z iteration 10 selector completed status=0
+2026-06-21T09:54:42Z iteration 10 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-v4mow0sk/repo
+2026-06-21T09:54:42Z iteration 10 selector rejected alternative role="the contrarian" approach="Contract Sovereignty First: treat the Crystal repo as the canonical public-protocol authority, and make the next planning cycle focus on freezing, exporting, and defending that..." reason="Strong framing, but too absolute as stated. Treating Crystal as sovereign is useful temporarily, yet the Planner should avoid over-freezing incidental behavior and should leave room for negotiated contract decisions with obsctl-rs."
+2026-06-21T09:54:42Z iteration 10 selector rejected alternative role="the pragmatist" approach="Contract-First Compatibility Gate: treat the Rust fixture root as the next public API boundary, not as a Crystal-side feature. The next planner should prioritize establishing sh..." reason="Directionally correct, but narrower than needed. The next planning lens should include not only establishing the Rust fixture root, but also distinguishing public compatibility semantics from local fixture accidents before promotion."
+2026-06-21T09:54:42Z iteration 10 selector rejected alternative role="the architect" approach="Contract-First Externalization: treat the next slice as making the finalized status and IPC contract portable across implementations before adding more product surface. The plan..." reason="Closest to the selected strategy, but selected as part of a hybrid because the Planner also needs the pragmatist's warning about opt-in gates and the contrarian's emphasis on contract authority."
+2026-06-21T09:54:42Z iteration 10 selector alternatives persisted count=3
+2026-06-21T09:54:42Z iteration 10 selector structured alternatives persisted count=3
+2026-06-21T09:54:42Z iteration 10 planner started
+2026-06-21T09:55:20Z iteration 10 plan: 5 task(s) in 4 phase(s). This iteration keeps focus on contract-first externalization. Phase 1 establishes the human contract boundary. Phase 2 can run in parallel because the manifest and bootstrap helper touch separate files and do not require each other. Phase 3 depends on the manifest existing. Phase 4 records the result without claiming external Rust ownership prematurely.
+2026-06-21T09:55:20Z iteration 10 phase 1 started parallel=False tasks=1
+2026-06-21T09:56:38Z iteration 10 task t1 ('Document portable contract fixture ownership') status=0
+2026-06-21T09:56:38Z iteration 10 phase 2 started parallel=True tasks=2
+2026-06-21T09:59:18Z iteration 10 task t3 ('Add Rust fixture bootstrap helper') status=0
+2026-06-21T09:59:19Z iteration 10 task t2 ('Add contract fixture manifest') status=0
+2026-06-21T09:59:19Z iteration 10 phase 3 started parallel=False tasks=1
+2026-06-21T10:06:43Z iteration 10 task t4 ('Validate strict compatibility against the manifest') status=0
+2026-06-21T10:06:43Z iteration 10 phase 4 started parallel=False tasks=1
+2026-06-21T10:07:31Z iteration 10 task t5 ('Update trackers for contract externalization') started
+2026-06-21T10:07:31Z iteration 10 task t5 updated trackers: TODO.md now records the portable Crystal contract fixture README, machine-readable manifest, Rust bootstrap helper, and manifest-aware strict compatibility validation; Rust-side fixture ownership remains external until copied or maintained in obsctl-rs and strict compatibility passes
+2026-06-21T10:07:31Z iteration 10 task t5 validation passed: git diff --check -- TODO.md AGENT_LOG.md; CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/contracts (68 examples)
+2026-06-21T10:07:31Z iteration 10 task t5 ('Update trackers for contract externalization') status=0
+2026-06-21T10:08:52Z iteration 10 task t5 ('Update trackers for contract externalization') status=0
+2026-06-21T10:08:52Z iteration 10 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 10 contract externalization
+
+- Iteration reviewed:
+  - portable contract fixture README and manifest
+  - Rust fixture bootstrap helper and Makefile target
+  - manifest-aware optional `obsctl-rs` strict compatibility helper and specs
+  - protocol docs, TODO tracker, planner telemetry, and iteration log changes
+- What was done correctly:
+  - The Crystal repo now documents `spec/fixtures/contracts/` as the canonical
+    fixture root with required `cli/human/`, `cli/json/`, and `ipc/`
+    directories.
+  - `contract_manifest.yml` lists the portable CLI/IPC fixture set and flags the
+    status fixtures that contain `dropped_reconnect_diagnostic_logs`.
+  - Strict compatibility now validates the manifest, required directories,
+    manifest-listed fixture presence, manifest equality, and manifest-listed
+    content before accepting a Rust fixture root.
+  - The bootstrap helper copies the documented portable fixture tree into a
+    sibling checkout and the Makefile exposes it through
+    `make bootstrap-obsctl-rs-contract-fixtures`.
+  - Targeted validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/contracts`
+    with 68 examples.
+- What was found:
+  - High-priority gap: active root-level fixtures
+    `cli_status_success.json`, `cli_scene_error.json`, and
+    `ipc_set_scene_request.json` are still used by contract specs but are not
+    listed in the manifest and are not copied by the bootstrap helper. Strict
+    compatibility now ignores those active public contract fixtures.
+  - The bootstrap helper always creates `spec/fixtures/contracts/` in
+    `obsctl-rs`. If Rust already owns `tests/fixtures/contracts/` or
+    `fixtures/contracts/`, this can shadow the Rust-owned root because strict
+    compatibility selects `spec/fixtures/contracts/` first.
+  - Manifest validation does not yet check duplicate paths, path traversal,
+    category/path consistency, behavior names, telemetry flags, or whether every
+    spec-used fixture is manifest-listed.
+  - Exact manifest equality is stricter than the README implies if Rust uses a
+    different recognized root and wants root-local metadata to differ.
+- Top improvement proposals:
+  - First repair the manifest/export gap: migrate or delete the root-level
+    legacy fixtures, then add a manifest completeness spec.
+  - Make bootstrap root selection explicit and refuse to shadow an existing
+    recognized Rust fixture root without an explicit target choice.
+  - Add manifest self-validation for path safety, duplicates, category
+    consistency, known behaviors, and telemetry flag correctness.
+  - Only after those fixes, coordinate the Rust-side fixture root and run
+    `make contract-rs-compat` in a prepared dual-repo workspace.
+2026-06-21T10:13:39Z iteration 10 reviewer completed status=0
+2026-06-21T10:13:39Z iteration 10 memory updated
+2026-06-21T10:13:39Z iteration 10 completed validation_status=0
+2026-06-21T10:13:39Z iteration 10 checkpoint started
+2026-06-21T10:13:39Z iteration 10 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  Makefile
+M  PLAN.md
+M  SCORES.jsonl
+M  TODO.md
+M  docs/protocol.md
+A  scripts/bootstrap_obsctl_rs_contract_fixtures
+A  spec/fixtures/contracts/README.md
+A  spec/fixtures/contracts/contract_manifest.yml
+M  spec/obsctl/contracts/optional_obsctl_rs_compat_spec.cr
+M  spec/support/optional_obsctl_rs_compat.cr

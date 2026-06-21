@@ -165,10 +165,16 @@ OBS request is made.
 
 ## Shared Contract Fixtures
 
+This Crystal repository is the current authority for public `obsctl` contract
+fixtures. Its canonical fixture root is `spec/fixtures/contracts/`, with
+portable fixtures organized under the required `cli/human/`, `cli/json/`, and
+`ipc/` subdirectories.
+
 `obsctl` and `obsctl-rs` compare public contract fixtures only when the strict
 dual-repo compatibility check is explicitly enabled. The default `make test`
 gate does not require a sibling checkout and skips optional cross-repo
-compatibility unless `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1` is set.
+compatibility unless `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1` is set. Strict
+compatibility remains opt-in until `obsctl-rs` owns a matching fixture root.
 
 The GitHub Actions strict compatibility workflow follows the same boundary: it
 is a manual or scheduled signal, not an always-on push/pull-request gate while
@@ -197,14 +203,21 @@ The selected root must contain contract files in these subdirectories:
   ipc/
 ```
 
-`cli/` stores frozen CLI output contracts, including human-readable output and
-JSON envelopes. `ipc/` stores frozen newline-delimited JSON request payloads for
-typed IPC commands. Rust-side fixtures should use one recognized root above with
-matching `cli/human/`, `cli/json/`, and `ipc/` subdirectories; current daemon
-status fixtures should include `dropped_reconnect_diagnostic_logs` wherever
-daemon status appears. Strict compatibility compares matching fixture paths
-between the two repositories, reports fixtures missing from either side, and
-reports content differences after trimming surrounding whitespace.
+`cli/human/` stores frozen human CLI output contracts, `cli/json/` stores
+frozen CLI JSON envelopes, and `ipc/` stores frozen newline-delimited JSON
+request payloads for typed IPC commands. Rust-side fixtures should use one
+recognized root above with matching `cli/human/`, `cli/json/`, and `ipc/`
+subdirectories. Current-daemon daemon status fixtures and combined status
+fixtures include `dropped_reconnect_diagnostic_logs` wherever daemon status
+appears. Older-daemon JSON payloads that omit the field are preserved as
+received, without synthesized replacement values, and human status output
+renders missing values as unknown (`-`). The field is process-local
+reset-on-restart telemetry for dropped secondary reconnect diagnostic `logs`
+topic fanout. Public JSON values are non-negative signed integers, saturating
+internal values above `Int64::MAX` to `Int64::MAX`. Strict compatibility
+compares matching fixture paths between the two repositories, reports fixtures
+missing from either side, and reports content differences after trimming
+surrounding whitespace.
 
 Run the strict comparison from a prepared dual-repo workspace:
 

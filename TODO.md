@@ -785,7 +785,10 @@ Implemented:
   - TUI session, IPC client, and command palette input specs exist
   - contract-freeze specs cover public IPC errors, JSON CLI envelopes, daemon-first boundaries, embedded TUI adapter require behavior, and golden CLI/IPC fixtures
   - optional `../obsctl-rs` compatibility checks skip cleanly in default mode when the sibling repository is absent or has no recognized fixture root
-  - strict `obsctl-rs` compatibility mode fails clearly for missing sibling repositories, missing fixture roots, missing counterparts, and content differences
+  - strict `obsctl-rs` compatibility mode validates the contract manifest and
+    fails clearly for missing sibling repositories, missing fixture roots,
+    missing required directories, missing manifest-listed counterparts,
+    manifest differences, and content differences
   - fake OBS server support exposes deterministic probes for Identify frames,
     OBS request types, close events, no-attempt windows, and
     connection-specific accepted/closed WebSocket ids
@@ -1092,16 +1095,29 @@ Done:
 - canonical public IPC error-code taxonomy and boundary canonicalization
 - golden CLI/IPC contract fixtures for proxy command output, JSON envelopes,
   error envelopes, and IPC command payloads
+- portable Crystal contract fixture ownership README under
+  `spec/fixtures/contracts/`, documenting the canonical fixture root, required
+  `cli/human/`, `cli/json/`, and `ipc/` directories, recognized Rust-side
+  roots, opt-in strict compatibility promotion rule, and finalized
+  `dropped_reconnect_diagnostic_logs` semantics
+- machine-readable Crystal contract fixture manifest that lists the public
+  `cli/human/`, `cli/json/`, and `ipc/` fixtures expected to have Rust
+  counterparts and flags the status/server-status fixtures containing
+  `dropped_reconnect_diagnostic_logs`
+- Rust fixture bootstrap helper and Makefile target for copying the Crystal
+  contract fixture README, manifest, and fixture directories into a sibling
+  `obsctl-rs` checkout without overwriting unrelated files
 - optional `../obsctl-rs` compatibility checks that skip by default when absent
   or when no recognized sibling fixture root exists
 - strict `obsctl-rs` compatibility checks through `make contract-rs-compat`
-  and `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1`
+  and `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1`, including manifest-aware validation
+  before fixture content comparison
 - strict `obsctl-rs` GitHub Actions compatibility runs only by manual dispatch
   or scheduled cadence until the Rust-side fixture root exists, with repository
   owner/name/ref configurable by inputs or repository variables
 - Rust-side contract fixture ownership remains external to this Crystal repo:
-  the sibling implementation should provide one recognized fixture root such as
-  `spec/fixtures/contracts/`, `tests/fixtures/contracts/`, or
+  the sibling implementation still must copy or maintain one recognized fixture
+  root such as `spec/fixtures/contracts/`, `tests/fixtures/contracts/`, or
   `fixtures/contracts/`, with matching `cli/human/`, `cli/json/`, and `ipc/`
   fixtures that include the finalized status telemetry field
 
@@ -1135,16 +1151,18 @@ before blockable fanout, publication-failure diagnostics now runtime-logger
 primary with bounded, lossy, non-blocking secondary log-topic fanout, and the
 status telemetry contract now finalized for missing-versus-zero human output,
 process-local reset/scope semantics, JSON-safe saturation, Crystal golden
-fixtures, daemon-only older-payload JSON fidelity, and direct non-zero human
-formatter coverage, the next highest-value work is cross-implementation
-fixture ownership.
+fixtures, daemon-only older-payload JSON fidelity, direct non-zero human
+formatter coverage, a portable contract fixture README, a machine-readable
+manifest, a Rust fixture bootstrap helper, and manifest-aware strict
+compatibility validation, the next highest-value work is Rust-side adoption of
+the portable fixture root.
 
-1. Add or coordinate the Rust-side shared contract fixture root so the manual
-   or scheduled strict compatibility workflow can become a required signal.
-   The root should be one of `spec/fixtures/contracts/`,
-   `tests/fixtures/contracts/`, or `fixtures/contracts/`, with matching
-   `cli/human/`, `cli/json/`, and `ipc/` fixtures that include the finalized
-   status telemetry field.
+1. Copy or maintain the shared contract fixture root in `obsctl-rs` so the
+   manual or scheduled strict compatibility workflow can become a required
+   signal. The root should be one of `spec/fixtures/contracts/`,
+   `tests/fixtures/contracts/`, or `fixtures/contracts/`, with the manifest,
+   README, and matching `cli/human/`, `cli/json/`, and `ipc/` fixtures that
+   include the finalized status telemetry field.
 2. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
    when `../obsctl-rs` is available with compatible contract fixtures.
 3. Return to demo config, packaging polish, and optional `termisu` backend
