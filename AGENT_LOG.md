@@ -2057,3 +2057,100 @@ M  TODO.md
 M  spec/obsctl/server/obs_supervisor_spec.cr
 M  src/obsctl/server/obs_supervisor.cr
 M  src/obsctl/server/state_store.cr
+2026-06-21T08:06:10Z iteration 2 started remaining=17375s
+2026-06-21T08:06:10Z iteration 2 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-21T08:06:11Z iteration 2 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-4x07bbbn/repo copied_entries=181
+2026-06-21T08:06:11Z iteration 2 ideator phase started count=3
+2026-06-21T08:06:11Z iteration 2 ideator phase concurrency workers=3
+2026-06-21T08:06:11Z iteration 2 ideator 1 role="the pragmatist" started
+2026-06-21T08:06:11Z iteration 2 ideator 2 role="the architect" started
+2026-06-21T08:06:11Z iteration 2 ideator 3 role="the contrarian" started
+2026-06-21T08:06:21Z iteration 2 ideator 1 role="the pragmatist" completed status=0
+2026-06-21T08:06:22Z iteration 2 ideator 2 role="the architect" completed status=0
+2026-06-21T08:06:26Z iteration 2 ideator 3 role="the contrarian" completed status=0
+2026-06-21T08:06:26Z iteration 2 ideator phase completed approaches=3
+2026-06-21T08:06:26Z iteration 2 selector started approaches=3
+2026-06-21T08:06:36Z iteration 2 selector completed status=0
+2026-06-21T08:06:36Z iteration 2 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-4x07bbbn/repo
+2026-06-21T08:06:36Z iteration 2 selector rejected alternative role="the pragmatist" approach="Cleanup-First Reconnect Hardening: treat detached OBS client closure as the next correctness boundary before pursuing broader flake reduction or compatibility work." reason="Strongly aligned, but too implementation-shaped for the selector role. Its cleanup-first direction is correct, while the planner should receive the broader invariant rather than a narrow edit sequence."
+2026-06-21T08:06:36Z iteration 2 selector rejected alternative role="the architect" approach="Resource-Lifetime-First Reconnect Hardening: treat detached OBS client closure as the next architectural invariant, ahead of broader reconnect flake cleanup or product polish. S..." reason="Selected as the base strategy. It best frames the issue as non-overlapping lifecycle, ownership, cleanup, and publication boundaries."
+2026-06-21T08:06:36Z iteration 2 selector rejected alternative role="the contrarian" approach="Cleanup-First Gatekeeping: pause broader reconnect flake work and treat detached-client cleanup semantics as the next architectural gate, requiring every future reconnect change..." reason="Correctly challenges the stale Planned Next order, but its framing is more gatekeeping than guidance. The useful part is incorporated without expanding into speculative adjacent shutdown risks."
+2026-06-21T08:06:36Z iteration 2 selector alternatives persisted count=3
+2026-06-21T08:06:36Z iteration 2 selector structured alternatives persisted count=3
+2026-06-21T08:06:36Z iteration 2 planner started
+2026-06-21T08:07:07Z iteration 2 plan: 4 task(s) in 3 phase(s). This iteration is ordered around the resource-lifetime invariant first: fix detached client ownership and cleanup before expanding tests and tracker updates. The two phase-2 tasks can run concurrently after the core behavior exists because one focuses on supervisor reconnect liveness specs while the other focuses on StateStore API semantics, with only a small call-site coordination point in obs_supervisor.cr.
+2026-06-21T08:07:07Z iteration 2 phase 1 started parallel=False tasks=1
+2026-06-21T08:08:03Z iteration 2 task t1 ('Harden reconnect detached-client cleanup') status=0
+2026-06-21T08:08:03Z iteration 2 phase 2 started parallel=True tasks=2
+2026-06-21T08:09:48Z iteration 2 task t3 ('Clarify deferred reconnect payload API') status=0
+2026-06-21T08:10:05Z iteration 2 task t2 ('Strengthen reconnect cleanup liveness specs') status=0
+2026-06-21T08:10:05Z iteration 2 phase 3 started parallel=False tasks=1
+2026-06-21T08:11:31Z iteration 2 task t4 tracker update: TODO.md now records detached reconnect client closure before blockable state/log fanout, ensure-protected cleanup, and liveness coverage for blocked state fanout, blocked log fanout, and raising publication callbacks.
+2026-06-21T08:11:31Z iteration 2 task t4 validation: make format passed; CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test passed (262 examples, 0 failures); CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build passed; make lint skipped because Ameba is not installed ("ameba not installed; run shards install").
+2026-06-21T08:12:02Z iteration 2 task t4 ('Update trackers and validate reconnect slice') status=0
+2026-06-21T08:12:02Z iteration 2 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 2 reconnect detached-client cleanup
+
+- Iteration reviewed:
+  - `ObsSupervisor#publish_reconnect` detached-client close ordering and
+    ensure-protected cleanup.
+  - `StateStore#mark_reconnect_requested_and_build_payload` naming, mutation
+    behavior, payload generation, and deferred publication specs.
+  - Blocked state fanout, blocked log fanout, and raising publication callback
+    supervisor specs.
+  - `TODO.md`, `PLAN.md`, `AGENT_LOG.md`, `ALTERNATIVES.jsonl`, and
+    `MEMORY.md` consistency.
+- What was done correctly:
+  - Detached reconnect OBS clients are now closed before state or log fanout can
+    block.
+  - Cleanup is protected with `ensure`, so state/log publication exceptions do
+    not skip the detached client close.
+  - The blocked-publication specs now assert OBS close observation before
+    releasing blocked state or log callbacks.
+  - Raising-publication specs cover both state and log callback failures.
+  - The deferred `StateStore` API name now states that it mutates reconnect
+    state and builds a payload; focused specs prove no callback occurs until
+    `publish_snapshot_payload`.
+  - Focused reviewer validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr spec/obsctl/server/state_store_spec.cr`
+    with 22 examples.
+- What was found:
+  - No blocking regression was found in the targeted resource-lifetime behavior.
+  - Publication callback exceptions still propagate out of `reconnect`; the
+    reconnect has already been accepted and cleanup has already happened, so the
+    public command can report a generic server failure for a best-effort fanout
+    problem.
+  - `publish_reconnect` sets its local close guard before calling
+    `client.close`. `OBS::Client#close` currently rescues internally, so this is
+    harmless today, but setting the guard after close would be mechanically
+    stronger if close behavior changes later.
+  - Close-observed specs use one close notification; future fake-server close
+    probes should identify the specific connection when reconnect attempts can
+    overlap.
+  - Remaining reconnect flake sources are unchanged: unavailable-then-bind port
+    windows and 250 ms `wait_for_disconnect` polling.
+- Top improvement proposals:
+  - Decide whether reconnect state/log publication is best-effort after
+    lifecycle acceptance; either contain/log sanitized publication exceptions
+    and return success, or document and test the current `SERVER_ERROR` policy.
+  - Move the detached-client close guard assignment after `client.close`.
+  - Add command-level reconnect publication failure coverage through
+    `CommandExecutor` or server IPC.
+  - Add connection-specific fake OBS close probes, then continue replacing
+    reconnect port-window and polling assertions with deterministic probes.
+2026-06-21T08:16:06Z iteration 2 reviewer completed status=0
+2026-06-21T08:16:06Z iteration 2 memory updated
+2026-06-21T08:16:06Z iteration 2 completed validation_status=0
+2026-06-21T08:16:06Z iteration 2 checkpoint started
+2026-06-21T08:16:06Z iteration 2 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
+M  TODO.md
+M  spec/obsctl/server/obs_supervisor_spec.cr
+M  spec/obsctl/server/state_store_spec.cr
+M  src/obsctl/server/obs_supervisor.cr
+M  src/obsctl/server/state_store.cr

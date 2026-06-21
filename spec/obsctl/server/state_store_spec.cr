@@ -166,4 +166,57 @@ describe Obsctl::Server::StateStore do
     state.snapshot.connected.should be_true
     state.snapshot.last_error.should be_nil
   end
+
+  it "returns the reconnect-requested snapshot payload without publishing it" do
+    updates = [] of JSON::Any
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })
+    connected_at = Time.utc(2026, 6, 20, 12, 0, 0)
+    requested_at = Time.utc(2026, 6, 20, 12, 1, 0)
+
+    state.mark_connected(obs_snapshot(updated_at: connected_at), at: connected_at)
+    updates.clear
+
+    payload = state.mark_reconnect_requested_and_build_payload(requested_at)
+
+    updates.should be_empty
+    payload.should eq(state.snapshot_json)
+
+    snapshot = state.snapshot
+    snapshot.connected.should be_false
+    snapshot.last_error.should eq("OBS reconnect requested")
+    snapshot.updated_at.should eq(requested_at)
+
+    telemetry = state.telemetry
+    telemetry.reconnecting.should be_true
+    telemetry.last_connected_at.should eq(connected_at)
+    telemetry.last_disconnected_at.should eq(requested_at)
+    telemetry.last_reconnect_attempt_at.should be_nil
+    telemetry.last_connection_failed_at.should be_nil
+  end
+
+  it "publishes a deferred reconnect-requested payload without mutating telemetry again" do
+    updates = [] of JSON::Any
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })
+    connected_at = Time.utc(2026, 6, 20, 12, 0, 0)
+    attempt_at = Time.utc(2026, 6, 20, 12, 0, 30)
+    requested_at = Time.utc(2026, 6, 20, 12, 1, 0)
+
+    state.mark_connected(obs_snapshot(updated_at: connected_at), at: connected_at)
+    state.mark_reconnect_attempt(attempt_at)
+    updates.clear
+
+    payload = state.mark_reconnect_requested_and_build_payload(requested_at)
+    telemetry_after_mutation = state.telemetry
+    snapshot_after_mutation = state.snapshot
+
+    state.publish_snapshot_payload(payload)
+
+    updates.should eq([payload])
+    state.telemetry.should eq(telemetry_after_mutation)
+    state.snapshot.should eq(snapshot_after_mutation)
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+    state.telemetry.last_disconnected_at.should eq(requested_at)
+    state.telemetry.last_reconnect_attempt_at.should eq(attempt_at)
+    state.telemetry.last_connection_failed_at.should be_nil
+  end
 end
