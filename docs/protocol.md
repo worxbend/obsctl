@@ -78,7 +78,10 @@ it does not mean OBS is already connected. Accepted explicit requests are
 durable across the next retry boundary, so a request made after a failed
 connection attempt but before retry sleep starts is still acted on promptly. In
 that case, `last_error` is set to `OBS reconnect requested`; the next connection
-success or failure becomes the next public outcome.
+success or failure becomes the next public outcome. After the supervisor accepts
+the request and any detached OBS client is closed, subscriber `state` and `logs`
+fanout is best-effort. Publication failures are recorded as sanitized server
+diagnostics and do not turn the accepted command into `SERVER_ERROR`.
 
 ```json
 {"id":"req-000005","type":"response","ok":true,"result":{"message":"OBS reconnect requested"}}

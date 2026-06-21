@@ -29,6 +29,7 @@ module Obsctl
         @state : StateStore,
         @event_broadcast : Proc(JSON::Any, Nil)? = nil,
         @log_broadcast : Proc(JSON::Any, Nil)? = nil,
+        @logger : Runtime::Logger? = nil,
       )
         @client = nil.as(OBS::Client?)
         @client_lock = Mutex.new
@@ -305,14 +306,60 @@ module Obsctl
         detached_client_closed = false
         begin
           detached_client.try do |client|
-            detached_client_closed = true
             client.close
+            detached_client_closed = true
           end
-          @state.publish_snapshot_payload(publication.state_payload)
-          @log_broadcast.try(&.call(publication.log_payload))
+          publish_reconnect_state(publication.state_payload)
+          publish_reconnect_log(publication.log_payload)
         ensure
           detached_client.try(&.close) unless detached_client_closed
         end
+      end
+
+      private def publish_reconnect_state(payload : JSON::Any) : Nil
+        @state.publish_snapshot_payload(payload)
+      rescue ex
+        publish_reconnect_diagnostic(
+          "obs_reconnect_state_publication_failed",
+          "OBS reconnect state publication failed",
+          ex
+        )
+      end
+
+      private def publish_reconnect_log(payload : JSON::Any) : Nil
+        @log_broadcast.try(&.call(payload))
+      rescue ex
+        publish_reconnect_diagnostic(
+          "obs_reconnect_log_publication_failed",
+          "OBS reconnect log publication failed",
+          ex
+        )
+      end
+
+      private def publish_reconnect_diagnostic(code : String, message : String, cause : Exception) : Nil
+        diagnostic = "#{message}: #{exception_summary(cause)}"
+        delivered = false
+        @log_broadcast.try do |broadcast|
+          broadcast.call(log_payload("warn", code, diagnostic))
+          delivered = true
+        end
+        write_reconnect_diagnostic(code, diagnostic) unless delivered
+      rescue ex
+        fallback = "#{diagnostic}; diagnostic log publication failed: #{exception_summary(ex)}"
+        write_reconnect_diagnostic(code, fallback)
+      end
+
+      private def write_reconnect_diagnostic(code : String, message : String) : Nil
+        @logger.try(&.warn("#{code} #{Runtime::Logger.redact_secrets(message)}"))
+      rescue
+      end
+
+      private def exception_summary(ex : Exception) : String
+        exception_name = ex.class.name || "Exception"
+        message = ex.message
+        return exception_name unless message && !message.empty?
+
+        "#{exception_name}: #{Runtime::Logger.redact_secrets(message)}"
       end
 
       private def public_message(message : String?, fallback : String) : String

@@ -686,6 +686,10 @@ Implemented:
   - detached reconnect client cleanup is protected with `ensure`, so an
     unexpected state or log publication exception cannot skip closing the old
     OBS WebSocket client
+  - accepted explicit reconnect requests use best-effort state/log publication:
+    once a live supervisor accepts the request and detached-client cleanup has
+    happened, subscriber publication failures are logged as sanitized
+    diagnostics and do not change the command result
   - stopped reconnect attempts expose a test-only, lifecycle-lock-guarded bit so
     specs can prove the simple sequential post-stop path returns `false`
     without publishing public reconnect state
@@ -760,6 +764,9 @@ Implemented:
   - blocked reconnect-publication specs prove detached OBS client closure before
     or independently of releasing blocked state fanout, blocked log fanout, and
     unexpected state/log publication exceptions
+  - command-level reconnect specs prove raising state/log publication callbacks
+    do not turn an accepted `reconnect_obs` command into `SERVER_ERROR`, while
+    detached-client cleanup still happens and diagnostics remain sanitized
   - signal-level reconnect specs cover explicit request-before-wait,
     request-during-wait, handled-request stale wake behavior, transient internal
     wakes, cancel wakes, and repeated durable request epochs without needing a
@@ -935,6 +942,9 @@ Partial:
   lock is released and before subscriber/log fanout can block
 - reconnect detached-client cleanup is `ensure`-protected if state or log
   publication raises unexpectedly
+- accepted reconnect publication is best-effort after lifecycle acceptance and
+  detached-client cleanup; sanitized diagnostics are logged for subscriber
+  delivery failures, but public `reconnect_obs` responses remain successful
 - the sequential post-stop reconnect rejection path is proven with a
   lifecycle-lock-guarded test hook plus state immutability assertions
 - the concurrent reconnect-vs-stop interleaving is also proven: reconnect
@@ -943,6 +953,9 @@ Partial:
 - reconnect liveness specs cover blocked state fanout, blocked log fanout, and
   unexpected state/log publication exceptions while asserting the detached OBS
   client is still closed
+- command-level reconnect coverage proves raising state/log publication
+  callbacks stay diagnostic-only after acceptance and never surface as
+  `SERVER_ERROR`
 - supervisor reconnect proof after protocol-error client closes while IPC remains available
 
 ### Milestone 8: Polish
@@ -1035,15 +1048,16 @@ Remaining:
 ## Planned Next
 
 With reconnect lifecycle publication decoupled, detached-client cleanup ordered
-before blockable fanout, and the state/log/raising publication liveness proofs
-represented above, the highest reconnect follow-up is flake cleanup.
+before blockable fanout, and accepted reconnect publication settled as
+best-effort with supervisor and command-level coverage, the highest reconnect
+follow-up is flake cleanup.
 
 1. Add a deterministic unavailable-then-bind helper to retire the remaining
    reconnect `unused_tcp_port` windows, then clean up `wait_for_disconnect`
    polling where practical.
-2. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
-   when `../obsctl-rs` is available with compatible contract fixtures.
-3. Add or coordinate the Rust-side shared contract fixture root so the manual
+2. Add or coordinate the Rust-side shared contract fixture root so the manual
    or scheduled strict compatibility workflow can become a required signal.
+3. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
+   when `../obsctl-rs` is available with compatible contract fixtures.
 4. Return to demo config, packaging polish, and optional `termisu` backend
    evaluation once the stabilized contract gates stay green.
