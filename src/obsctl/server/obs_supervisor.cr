@@ -127,7 +127,7 @@ module Obsctl
             end
             ReconnectPublication.new(
               detached_client,
-              @state.mark_reconnect_requested_payload(accepted_at),
+              @state.mark_reconnect_requested_and_build_payload(accepted_at),
               log_payload("info", "obs_reconnect_requested", "OBS reconnect requested", accepted_at)
             )
           end
@@ -301,9 +301,18 @@ module Obsctl
       end
 
       private def publish_reconnect(publication : ReconnectPublication) : Nil
-        @state.publish_snapshot_payload(publication.state_payload)
-        @log_broadcast.try(&.call(publication.log_payload))
-        publication.detached_client.try(&.close)
+        detached_client = publication.detached_client
+        detached_client_closed = false
+        begin
+          detached_client.try do |client|
+            detached_client_closed = true
+            client.close
+          end
+          @state.publish_snapshot_payload(publication.state_payload)
+          @log_broadcast.try(&.call(publication.log_payload))
+        ensure
+          detached_client.try(&.close) unless detached_client_closed
+        end
       end
 
       private def public_message(message : String?, fallback : String) : String

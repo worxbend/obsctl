@@ -392,6 +392,8 @@ describe Obsctl::Server::ObsSupervisor do
       raise "reconnect publication did not reach blocking state callback"
     end
 
+    obs.next_close_observed(2.seconds).should be_true
+
     spawn(name: "obs-supervisor-stop-during-blocked-publication-spec") do
       supervisor.stop
       stop_finished.send(nil)
@@ -425,6 +427,140 @@ describe Obsctl::Server::ObsSupervisor do
       else
       end
     end
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "stops promptly while accepted reconnect log fanout is blocked" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    block_reconnect_log = false
+    block_lock = Mutex.new
+    log_blocked = Channel(Nil).new(1)
+    release_log = Channel(Nil).new(1)
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(
+      obs.config,
+      state,
+      nil,
+      ->(payload : JSON::Any) {
+        should_block = block_lock.synchronize do
+          block_reconnect_log && payload["code"]?.try(&.as_s?) == "obs_reconnect_requested"
+        end
+
+        if should_block
+          select
+          when log_blocked.send(nil)
+          else
+          end
+          release_log.receive
+        end
+      }
+    )
+    reconnect_result = Channel(Bool).new(1)
+    stop_finished = Channel(Nil).new(1)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    block_lock.synchronize { block_reconnect_log = true }
+    spawn(name: "obs-supervisor-blocked-reconnect-log-publication-spec") do
+      reconnect_result.send(supervisor.reconnect)
+    end
+
+    select
+    when log_blocked.receive
+    when timeout(2.seconds)
+      raise "reconnect publication did not reach blocking log callback"
+    end
+
+    obs.next_close_observed(2.seconds).should be_true
+
+    spawn(name: "obs-supervisor-stop-during-blocked-log-publication-spec") do
+      supervisor.stop
+      stop_finished.send(nil)
+    end
+
+    select
+    when stop_finished.receive
+    when timeout(250.milliseconds)
+      raise "supervisor stop was blocked by reconnect log fanout"
+    end
+
+    supervisor.alive?.should be_false
+    select
+    when reconnect_result.receive
+      raise "reconnect finished before blocked log publication was released"
+    when timeout(50.milliseconds)
+    end
+
+    release_log.send(nil)
+    result = select
+    when accepted = reconnect_result.receive
+      accepted
+    when timeout(2.seconds)
+      raise "reconnect did not finish after log publication was released"
+    end
+    result.should be_true
+  ensure
+    if release = release_log
+      select
+      when release.send(nil)
+      else
+      end
+    end
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "closes detached OBS client when reconnect state publication raises" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
+      if payload["last_error"]?.try(&.as_s?) == "OBS reconnect requested"
+        raise "state publication failed"
+      end
+    })
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    expect_raises(Exception, "state publication failed") do
+      supervisor.reconnect
+    end
+    obs.next_close_observed(2.seconds).should be_true
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "closes detached OBS client when reconnect log publication raises" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(
+      obs.config,
+      state,
+      nil,
+      ->(payload : JSON::Any) {
+        if payload["code"]?.try(&.as_s?) == "obs_reconnect_requested"
+          raise "log publication failed"
+        end
+      }
+    )
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    expect_raises(Exception, "log publication failed") do
+      supervisor.reconnect
+    end
+    obs.next_close_observed(2.seconds).should be_true
+  ensure
     supervisor.try(&.stop)
     obs.try(&.stop)
     wait_for_supervisor { !supervisor.alive? } if supervisor

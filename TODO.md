@@ -680,8 +680,12 @@ Implemented:
   - explicit reconnect acceptance is lifecycle-gated with an accept-then-emit
     boundary: generation/lifecycle re-checks, reconnect request registration,
     active-client detachment, and public reconnect state mutation are decided
-    under `@lifecycle_lock`, while subscriber fanout, socket writes, and log
-    publication run only after the lifecycle lock is released
+    under `@lifecycle_lock`, while detached OBS clients are closed immediately
+    after that lock is released and before subscriber fanout, socket writes, or
+    log publication can block
+  - detached reconnect client cleanup is protected with `ensure`, so an
+    unexpected state or log publication exception cannot skip closing the old
+    OBS WebSocket client
   - stopped reconnect attempts expose a test-only, lifecycle-lock-guarded bit so
     specs can prove the simple sequential post-stop path returns `false`
     without publishing public reconnect state
@@ -753,6 +757,9 @@ Implemented:
     reconnect observes a live generation, pauses before public publication,
     `stop` completes, reconnect resumes, and stale reconnect state remains
     unobservable
+  - blocked reconnect-publication specs prove detached OBS client closure before
+    or independently of releasing blocked state fanout, blocked log fanout, and
+    unexpected state/log publication exceptions
   - signal-level reconnect specs cover explicit request-before-wait,
     request-during-wait, handled-request stale wake behavior, transient internal
     wakes, cancel wakes, and repeated durable request epochs without needing a
@@ -924,12 +931,18 @@ Partial:
   generation-scoped
 - reconnect publication uses an accept-then-emit boundary: reconnect acceptance
   and public state mutation remain generation-safe under the supervisor
-  lifecycle lock, while subscriber/log fanout runs after that lock is released
+  lifecycle lock, while detached OBS clients are closed immediately after the
+  lock is released and before subscriber/log fanout can block
+- reconnect detached-client cleanup is `ensure`-protected if state or log
+  publication raises unexpectedly
 - the sequential post-stop reconnect rejection path is proven with a
   lifecycle-lock-guarded test hook plus state immutability assertions
 - the concurrent reconnect-vs-stop interleaving is also proven: reconnect
   observes a live generation, pauses before publication, `stop` completes,
   reconnect resumes, and stale public reconnect state remains unobservable
+- reconnect liveness specs cover blocked state fanout, blocked log fanout, and
+  unexpected state/log publication exceptions while asserting the detached OBS
+  client is still closed
 - supervisor reconnect proof after protocol-error client closes while IPC remains available
 
 ### Milestone 8: Polish
@@ -1021,8 +1034,9 @@ Remaining:
 
 ## Planned Next
 
-With reconnect lifecycle publication decoupled and both stop-wins reconnect
-proofs represented above, the highest reconnect follow-up is flake cleanup.
+With reconnect lifecycle publication decoupled, detached-client cleanup ordered
+before blockable fanout, and the state/log/raising publication liveness proofs
+represented above, the highest reconnect follow-up is flake cleanup.
 
 1. Add a deterministic unavailable-then-bind helper to retire the remaining
    reconnect `unused_tcp_port` windows, then clean up `wait_for_disconnect`
