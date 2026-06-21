@@ -1,11 +1,11 @@
 # obsctl Improvement Plan
 
-This plan reflects a fresh senior review of the 2026-06-21 iteration 8
-status-telemetry contract slice. The iteration finalized the public contract
-for `dropped_reconnect_diagnostic_logs`: human status output distinguishes
-missing older-daemon telemetry from a real zero, JSON output preserves daemon
-payloads, and current-daemon serialization clamps the internal `UInt64` counter
-to a JSON-safe signed integer.
+This plan reflects a fresh senior review of the 2026-06-21 iteration 9
+status-contract hardening slice. The latest iteration closed the two remaining
+local coverage gaps for `dropped_reconnect_diagnostic_logs`: daemon-only
+`server-status --json` older-daemon payloads now have direct JSON-fidelity
+coverage, and focused human formatter specs now assert present non-zero values
+outside the golden fixture harness.
 
 ## Current Assessment
 
@@ -69,23 +69,29 @@ Completed or correct in the reviewed reconnect and diagnostic work:
 Reviewer findings from the latest pass:
 
 - No blocking correctness regression was found in the status/drop-telemetry
-  contract changes.
-- The implementation correctly separates human compatibility behavior from JSON
-  fidelity: human output shows `-` for omitted telemetry, while JSON envelopes
-  pass daemon payloads through unchanged.
-- The server-side counter is now explicitly JSON-safe and covered for positive,
-  default-zero, and saturation cases.
-- The current golden CLI fixtures freeze present non-zero telemetry for both
-  combined status and daemon-only status.
-- A small coverage gap remains: JSON fidelity for an older daemon-only
-  `server-status` payload without the drop field is implied by pass-through
-  behavior but not directly asserted.
-- Direct unit specs for present human status currently use `0`; non-zero human
-  rendering is covered by golden fixtures, but adding a direct non-zero formatter
-  assertion would make failures easier to localize.
+  hardening changes.
+- The implementation now has local coverage for all finalized telemetry
+  semantics: human missing-versus-zero behavior, present non-zero human values,
+  combined and daemon-only JSON payload fidelity for omitted older-daemon
+  telemetry, current-daemon default and positive values, and JSON-safe
+  saturation.
+- The latest additions are intentionally spec-only. They verify the already
+  implemented pass-through JSON path and formatter behavior without changing
+  production code.
+- The new daemon-only JSON spec is correctly placed at the CLI JSON envelope
+  boundary, so it catches accidental synthesis in the public scriptable surface
+  rather than only in lower-level formatter code.
+- The new non-zero human assertions make failures easier to localize than the
+  golden fixtures alone.
 - Cross-implementation fixture ownership remains the highest-value next step:
   `obsctl-rs` still needs a recognized contract fixture root before strict
   compatibility can become a stronger signal.
+- If mixed-version CLI/server compatibility is important as a frozen public
+  contract, older-daemon omitted-telemetry fixtures should be added explicitly
+  instead of relying only on focused specs.
+- Status specs now contain repeated JSON payload setup; if status grows again,
+  small fixture/builders should replace inline payload duplication to reduce
+  drift without hiding the public contract.
 - Ordinary state/log/event broadcasts still use synchronous
   `ClientRegistry#broadcast`, so broader slow-subscriber isolation remains
   future work.
@@ -133,6 +139,8 @@ Reviewer findings from the latest pass:
    - Present values render as the daemon-reported integer, including `0`.
    - JSON output remains faithful to the daemon payload and does not synthesize
      missing fields.
+   - Combined `status --json` and daemon-only `server-status --json` both have
+     direct older-daemon omitted-field coverage.
 
 2. Document counter lifecycle and scope.
    - The counter is process-local runtime telemetry.
@@ -147,6 +155,12 @@ Reviewer findings from the latest pass:
    - Internal `UInt64` values larger than `Int64::MAX` saturate to
      `Int64::MAX`.
    - Specs cover positive, default-zero, and saturation behavior.
+
+4. Localize formatter failures.
+   - Direct human formatter specs assert present non-zero values for combined
+     `status` and daemon-only `server-status`.
+   - Golden fixtures still freeze the current public output shape, but focused
+     specs now identify formatter regressions closer to the implementation.
 
 ## Completed P1: Reconnect Determinism Slice
 
@@ -192,7 +206,7 @@ Reviewer findings from the latest pass:
    - Once the Rust fixtures exist and pass, decide whether scheduled/manual is
      enough or whether the workflow should become a required PR signal.
 
-## P1: Status Contract Coverage Hardening
+## Completed P1: Status Contract Coverage Hardening
 
 1. Add a daemon-only JSON compatibility spec.
    - Cover `obsctl --json server-status` when an older daemon omits
@@ -204,11 +218,25 @@ Reviewer findings from the latest pass:
    - Add or adjust a focused human status test so non-zero present values are
      checked outside the golden fixture harness as well.
 
-3. Consider adding older-daemon compatibility fixtures.
+## P1: Mixed-Version Contract Fixtures
+
+1. Consider adding older-daemon compatibility fixtures.
    - If mixed-version CLI/server behavior is important as a frozen contract,
      add explicit fixture cases for omitted telemetry.
    - Keep them separate from current-daemon fixtures so the main success
      fixtures continue to represent the current contract.
+
+2. Keep fixture duplication intentional.
+   - Current-daemon golden fixtures should continue to include present
+     `dropped_reconnect_diagnostic_logs` values.
+   - Older-daemon fixtures, if added, should document compatibility behavior
+     without weakening the current-daemon success fixtures.
+
+3. Reduce status spec setup drift if the status surface grows again.
+   - The current inline JSON payloads are acceptable for this small hardening
+     slice.
+   - If more status fields are added, introduce narrow status-payload builders
+     or fixture helpers so specs do not silently diverge field by field.
 
 ## P1: Remaining Reconnect Test Polish
 
@@ -350,8 +378,8 @@ Add breadth only after the daemon/IPC/reconnect contract remains stable.
 
 1. Coordinate the Rust-side `obsctl-rs` contract fixture root and run
    `make contract-rs-compat` in a prepared dual-repo workspace.
-2. Add the small remaining status contract coverage hardening: daemon-only
-   older-payload JSON fidelity and direct non-zero human formatter assertions.
+2. Add older-daemon compatibility fixtures for omitted telemetry if
+   mixed-version CLI/server behavior should be frozen as a golden contract.
 3. Continue reconnect spec polish by replacing remaining sleep/no-event
    assertions with deterministic probes where practical.
 4. Decide whether `OBS::Client#wait_for_close` should remain a single-owner

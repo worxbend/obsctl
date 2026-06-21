@@ -117,6 +117,66 @@ describe Obsctl::CLI::ClientCommands do
     output.should contain("last_connection_failed_at: 2026-06-20T12:07:00Z")
   end
 
+  it "formats present non-zero drop telemetry in combined human status" do
+    result = JSON.parse(<<-JSON)
+    {
+      "server": {
+        "pid": 123,
+        "uptime_seconds": 9,
+        "socket_path": "/tmp/obsctl.sock",
+        "client_count": 2,
+        "dropped_reconnect_diagnostic_logs": 7,
+        "obs_connected": true,
+        "reconnecting": false,
+        "last_connected_at": "2026-06-20T12:00:00Z",
+        "last_disconnected_at": null,
+        "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+        "last_connection_failed_at": null,
+        "last_error": null
+      },
+      "obs": {
+        "connected": true,
+        "current_scene": "Main Camera",
+        "scenes": [],
+        "audio_inputs": []
+      }
+    }
+    JSON
+    response = Obsctl::IPC::Response.new("req-000001", true, result)
+
+    output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
+      .execute(Obsctl::Domain::StatusCommand.new)
+      .message
+
+    output.lines.should contain("  dropped_reconnect_diagnostic_logs: 7")
+  end
+
+  it "formats present non-zero drop telemetry in daemon human status" do
+    result = JSON.parse(<<-JSON)
+    {
+      "pid": 123,
+      "uptime_seconds": 9,
+      "socket_path": "/tmp/obsctl.sock",
+      "client_count": 2,
+      "dropped_reconnect_diagnostic_logs": 11,
+      "obs_connected": false,
+      "reconnecting": true,
+      "last_connected_at": "2026-06-20T12:00:00Z",
+      "last_disconnected_at": "2026-06-20T12:05:00Z",
+      "last_reconnect_attempt_at": "2026-06-20T12:06:00Z",
+      "last_connection_failed_at": "2026-06-20T12:07:00Z",
+      "last_error": "connection failed"
+    }
+    JSON
+    response = Obsctl::IPC::Response.new("req-000001", true, result)
+
+    output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
+      .execute(Obsctl::Domain::ServerStatusCommand.new)
+      .message
+
+    output.lines.should contain("dropped_reconnect_diagnostic_logs: 11")
+  end
+
   it "renders missing drop telemetry as unknown for older daemon status payloads" do
     result = JSON.parse(<<-JSON)
     {

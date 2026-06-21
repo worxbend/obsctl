@@ -2795,3 +2795,101 @@ M  spec/obsctl/contracts/golden_cli_spec.cr
 M  spec/obsctl/server/command_executor_spec.cr
 M  src/obsctl/cli/client_commands.cr
 M  src/obsctl/server/command_executor.cr
+2026-06-21T09:45:54Z iteration 9 started remaining=11392s
+2026-06-21T09:45:54Z iteration 9 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-21T09:45:54Z iteration 9 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-gm_kfdv2/repo copied_entries=184
+2026-06-21T09:45:54Z iteration 9 ideator phase started count=3
+2026-06-21T09:45:54Z iteration 9 ideator phase concurrency workers=3
+2026-06-21T09:45:54Z iteration 9 ideator 1 role="the pragmatist" started
+2026-06-21T09:45:54Z iteration 9 ideator 2 role="the architect" started
+2026-06-21T09:45:54Z iteration 9 ideator 3 role="the contrarian" started
+2026-06-21T09:46:05Z iteration 9 ideator 3 role="the contrarian" completed status=0
+2026-06-21T09:46:05Z iteration 9 ideator 1 role="the pragmatist" completed status=0
+2026-06-21T09:46:06Z iteration 9 ideator 2 role="the architect" completed status=0
+2026-06-21T09:46:06Z iteration 9 ideator phase completed approaches=3
+2026-06-21T09:46:06Z iteration 9 selector started approaches=3
+2026-06-21T09:46:20Z iteration 9 selector completed status=0
+2026-06-21T09:46:20Z iteration 9 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-gm_kfdv2/repo
+2026-06-21T09:46:20Z iteration 9 selector rejected alternative role="the contrarian" approach="Invert the Compatibility Dependency: treat the Crystal contract fixtures as the temporary public spec and make the next planner harden local compatibility semantics before waiti..." reason="It correctly identifies the external dependency risk, but selected as-is it would underweight the explicit P0: Rust-side fixture ownership is the strategic blocker, not merely optional follow-up polish."
+2026-06-21T09:46:20Z iteration 9 selector rejected alternative role="the pragmatist" approach="Contract Anchor First: treat the Rust fixture root as the next public-contract boundary, then let implementation polish resume only after compatibility ownership is explicit." reason="It is directionally right, but too dependent on immediate Rust-side coordination. The planner needs a strategy that still makes progress by anchoring the contract locally if the counterpart repo is unavailable."
+2026-06-21T09:46:20Z iteration 9 selector rejected alternative role="the architect" approach="Contract-First Stabilization: prioritize making the cross-implementation contract authoritative before expanding product surface, treating Crystal as the current source of truth..." reason="It captures the right governance framing, but selected as-is it risks treating cross-repo fixture creation as fully actionable from this repository. The hybrid makes the dependency boundary explicit."
+2026-06-21T09:46:20Z iteration 9 selector alternatives persisted count=3
+2026-06-21T09:46:20Z iteration 9 selector structured alternatives persisted count=3
+2026-06-21T09:46:20Z iteration 9 planner started
+2026-06-21T09:46:47Z iteration 9 plan: 4 task(s) in 3 phase(s). This iteration keeps the Crystal contract authoritative while hardening the two remaining local status coverage gaps. Rust fixture ownership remains the strategic next step, but it depends on an external repository and should not block deterministic single-repo validation.
+2026-06-21T09:46:47Z iteration 9 phase 1 started parallel=True tasks=2
+2026-06-21T09:48:29Z iteration 9 task t1 ('Add older daemon server-status JSON fidelity spec') status=0
+2026-06-21T09:48:40Z iteration 9 task t2 ('Add direct non-zero human status formatter assertions') status=0
+2026-06-21T09:48:40Z iteration 9 phase 2 started parallel=False tasks=1
+2026-06-21T09:49:12Z iteration 9 task t3 ('Refresh contract tracker notes') started
+- Refreshed `TODO.md` to record the new local status contract hardening:
+  daemon-only older-payload `obsctl --json server-status` now has direct JSON
+  fidelity coverage for omitted `dropped_reconnect_diagnostic_logs`, and
+  focused human formatter specs assert present non-zero values for combined
+  `status` and daemon-only `server-status`.
+- Kept cross-implementation fixture ownership as the planned next strategic
+  item because the Rust fixture root is external to this repository.
+- Validation for this docs-only tracker slice:
+  `git diff --check -- TODO.md AGENT_LOG.md` passed.
+2026-06-21T09:49:12Z iteration 9 task t3 ('Refresh contract tracker notes') status=0
+2026-06-21T09:49:56Z iteration 9 task t3 ('Refresh contract tracker notes') status=0
+2026-06-21T09:49:56Z iteration 9 phase 3 started parallel=False tasks=1
+2026-06-21T09:51:47Z iteration 9 task t4 ('Run focused validation') status=0
+2026-06-21T09:51:47Z iteration 9 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 9 local status contract hardening
+
+- Iteration reviewed:
+  - daemon-only `obsctl --json server-status` older-daemon payload coverage
+  - direct non-zero human formatter assertions for combined `status` and
+    daemon-only `server-status`
+  - `TODO.md`, `PLAN.md`, `AGENT_LOG.md`, and planner telemetry updates
+- What was done correctly:
+  - The daemon-only JSON envelope spec now directly proves older daemon payloads
+    that omit `dropped_reconnect_diagnostic_logs` are passed through without
+    synthesizing the field.
+  - Focused formatter specs now assert present non-zero drop telemetry for both
+    combined status and daemon-only status, so formatter regressions no longer
+    rely only on golden fixture diffs.
+  - The changes are appropriately spec/tracker scoped; no production code was
+    changed because the behavior already existed.
+  - Focused validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/cli/client_commands_spec.cr spec/obsctl/cli/main_spec.cr`
+    with 33 examples.
+- What was found:
+  - No blocking correctness regression was found in this iteration.
+  - The local status telemetry contract is now covered for missing versus zero
+    human output, non-zero human output, JSON payload fidelity for combined and
+    daemon-only older payloads, and current-daemon JSON-safe numeric behavior.
+  - Cross-implementation fixture ownership remains unresolved because
+    `obsctl-rs` still needs a recognized contract fixture root.
+  - Older-daemon compatibility is covered by focused specs but not by golden
+    fixture files; add explicit omitted-telemetry fixtures only if
+    mixed-version behavior should become a frozen fixture contract.
+  - Status specs now repeat inline JSON payload setup. This is acceptable for
+    this slice, but future status-field expansion should use narrow builders or
+    fixture helpers to prevent field drift.
+- Top improvement proposals:
+  - Coordinate the Rust-side contract fixture root and run
+    `make contract-rs-compat` in a prepared dual-repo workspace.
+  - Add older-daemon omitted-telemetry fixtures if mixed-version CLI/server
+    compatibility needs a golden contract, keeping them separate from
+    current-daemon success fixtures.
+  - Continue reconnect test polish by replacing remaining no-event sleeps with
+    deterministic fake OBS probes where practical.
+  - Decide whether `OBS::Client#wait_for_close` remains a documented
+    single-owner supervisor primitive or becomes a multi-waiter close
+    notification abstraction.
+2026-06-21T09:54:02Z iteration 9 reviewer completed status=0
+2026-06-21T09:54:02Z iteration 9 memory updated
+2026-06-21T09:54:02Z iteration 9 completed validation_status=0
+2026-06-21T09:54:02Z iteration 9 checkpoint started
+2026-06-21T09:54:02Z iteration 9 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
+M  TODO.md
+M  spec/obsctl/cli/client_commands_spec.cr
+M  spec/obsctl/cli/main_spec.cr

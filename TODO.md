@@ -817,8 +817,10 @@ Implemented:
   - command executor, CLI, server, and golden contract specs cover
     `dropped_reconnect_diagnostic_logs` in daemon status and combined status,
     including present-zero human output, missing-field human `-` compatibility,
-    JSON payload fidelity, default-zero command-executor behavior, and
-    `Int64::MAX` saturation for very large internal counters
+    daemon-only older-payload JSON fidelity for omitted telemetry, direct
+    non-zero human formatter assertions, JSON payload fidelity, default-zero
+    command-executor behavior, and `Int64::MAX` saturation for very large
+    internal counters
   - command-level reconnect specs prove raising state/log publication callbacks
     do not turn an accepted `reconnect_obs` command into `SERVER_ERROR`, while
     detached-client cleanup still happens and diagnostics remain sanitized
@@ -1024,6 +1026,11 @@ Partial:
   counts only dropped secondary reconnect diagnostic `logs` topic fanout
   deliveries, and public JSON values are non-negative signed integers saturated
   at `Int64::MAX`
+- focused CLI/status specs now harden the finalized contract locally: older
+  daemon-only `server-status` JSON envelopes do not synthesize
+  `dropped_reconnect_diagnostic_logs`, and present non-zero human formatter
+  output is asserted directly for both combined `status` and daemon-only
+  `server-status`
 - command-level reconnect coverage proves raising state/log publication
   callbacks stay diagnostic-only after acceptance and never surface as
   `SERVER_ERROR`
@@ -1127,9 +1134,10 @@ With reconnect lifecycle publication decoupled, detached-client cleanup ordered
 before blockable fanout, publication-failure diagnostics now runtime-logger
 primary with bounded, lossy, non-blocking secondary log-topic fanout, and the
 status telemetry contract now finalized for missing-versus-zero human output,
-process-local reset/scope semantics, JSON-safe saturation, and Crystal golden
-fixtures, the next highest-value work is cross-implementation fixture
-ownership.
+process-local reset/scope semantics, JSON-safe saturation, Crystal golden
+fixtures, daemon-only older-payload JSON fidelity, and direct non-zero human
+formatter coverage, the next highest-value work is cross-implementation
+fixture ownership.
 
 1. Add or coordinate the Rust-side shared contract fixture root so the manual
    or scheduled strict compatibility workflow can become a required signal.
