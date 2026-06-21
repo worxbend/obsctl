@@ -1,4 +1,5 @@
 require "../../spec_helper"
+require "../../../src/obsctl/server/best_effort_log_broadcast"
 require "../../../src/obsctl/server/obs_supervisor"
 require "../../support/fake_obs_server"
 require "../../support/tcp_gate"
@@ -10,6 +11,11 @@ private def wait_for_supervisor(timeout : Time::Span = 3.seconds, &block : -> Bo
     raise "timed out waiting for supervisor condition" if Time.instant >= deadline
     Fiber.yield
   end
+end
+
+private def obs_supervisor_diagnostic_log_broadcast_for(log_broadcast : Proc(JSON::Any, Nil)) : Proc(JSON::Any, Bool)
+  helper = Obsctl::Server::BestEffortLogBroadcast.new(log_broadcast)
+  ->(payload : JSON::Any) { helper.broadcast(payload) }
 end
 
 private class FailedAttemptBeforeDelayStateStore < Obsctl::Server::StateStore
@@ -524,11 +530,14 @@ describe Obsctl::Server::ObsSupervisor do
         raise "state publication failed password=supersecret token: abc123"
       end
     })
+    log_broadcast = ->(payload : JSON::Any) { log_update_lock.synchronize { log_updates << payload } }
     supervisor = Obsctl::Server::ObsSupervisor.new(
       obs.config,
       state,
       nil,
-      ->(payload : JSON::Any) { log_update_lock.synchronize { log_updates << payload } }
+      log_broadcast,
+      nil,
+      obs_supervisor_diagnostic_log_broadcast_for(log_broadcast)
     )
 
     supervisor.start
@@ -539,6 +548,11 @@ describe Obsctl::Server::ObsSupervisor do
     supervisor.reconnect.should be_true
     obs.next_close_observed(2.seconds).should be_true
     state.snapshot.last_error.should eq("OBS reconnect requested")
+    wait_for_supervisor do
+      log_update_lock.synchronize do
+        log_updates.any? { |payload| payload["code"].as_s == "obs_reconnect_state_publication_failed" }
+      end
+    end
 
     logs_after_reconnect = log_update_lock.synchronize { log_updates.dup }
     diagnostic = logs_after_reconnect.find do |payload|
@@ -571,23 +585,26 @@ describe Obsctl::Server::ObsSupervisor do
         raise "state publication failed password=supersecret token: abc123"
       end
     })
+    log_broadcast = ->(payload : JSON::Any) {
+      should_block = block_lock.synchronize do
+        block_diagnostic && payload["code"]?.try(&.as_s?) == "obs_reconnect_state_publication_failed"
+      end
+
+      if should_block
+        select
+        when diagnostic_blocked.send(nil)
+        else
+        end
+        release_diagnostic.receive
+      end
+    }
     supervisor = Obsctl::Server::ObsSupervisor.new(
       obs.config,
       state,
       nil,
-      ->(payload : JSON::Any) {
-        should_block = block_lock.synchronize do
-          block_diagnostic && payload["code"]?.try(&.as_s?) == "obs_reconnect_state_publication_failed"
-        end
-
-        if should_block
-          select
-          when diagnostic_blocked.send(nil)
-          else
-          end
-          release_diagnostic.receive
-        end
-      }
+      log_broadcast,
+      nil,
+      obs_supervisor_diagnostic_log_broadcast_for(log_broadcast)
     )
     reconnect_result = Channel(Bool).new(1)
 
@@ -628,21 +645,94 @@ describe Obsctl::Server::ObsSupervisor do
     wait_for_supervisor { !supervisor.alive? } if supervisor
   end
 
+  it "bounds repeated reconnect state publication diagnostics behind a blocked log subscriber" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    diagnostic_capacity = 2
+    diagnostic_blocked = Channel(Nil).new(diagnostic_capacity)
+    release_diagnostic = Channel(Nil).new(diagnostic_capacity)
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
+      if payload["last_error"]?.try(&.as_s?) == "OBS reconnect requested"
+        raise "state publication failed password=supersecret token: abc123"
+      end
+    })
+    log_broadcast = ->(payload : JSON::Any) {
+      if payload["code"]?.try(&.as_s?) == "obs_reconnect_state_publication_failed"
+        select
+        when diagnostic_blocked.send(nil)
+        else
+        end
+        release_diagnostic.receive
+      end
+    }
+    diagnostic_helper = Obsctl::Server::BestEffortLogBroadcast.new(log_broadcast, diagnostic_capacity)
+    supervisor = Obsctl::Server::ObsSupervisor.new(
+      obs.config,
+      state,
+      nil,
+      log_broadcast,
+      nil,
+      ->(payload : JSON::Any) { diagnostic_helper.broadcast(payload) }
+    )
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    supervisor.reconnect.should be_true
+    obs.next_close_observed(2.seconds).should be_true
+
+    (diagnostic_capacity - 1).times do
+      supervisor.reconnect.should be_true
+    end
+
+    diagnostic_capacity.times do
+      select
+      when diagnostic_blocked.receive
+      when timeout(2.seconds)
+        raise "diagnostic log callback did not block at configured capacity"
+      end
+    end
+    wait_for_supervisor { diagnostic_helper.outstanding == diagnostic_capacity }
+
+    2.times do
+      supervisor.reconnect.should be_true
+    end
+
+    diagnostic_helper.outstanding.should eq(diagnostic_capacity)
+    diagnostic_helper.dropped_count.should eq(2_u64)
+    state.snapshot.last_error.should eq("OBS reconnect requested")
+  ensure
+    if release = release_diagnostic
+      2.times do
+        select
+        when release.send(nil)
+        else
+        end
+      end
+    end
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
   it "returns success and records a sanitized diagnostic when reconnect log publication raises" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     log_updates = [] of JSON::Any
     log_update_lock = Mutex.new
     state = Obsctl::Server::StateStore.new
+    log_broadcast = ->(payload : JSON::Any) {
+      if payload["code"]?.try(&.as_s?) == "obs_reconnect_requested"
+        raise "log publication failed authentication string is generated-token secret: abc123"
+      end
+      log_update_lock.synchronize { log_updates << payload }
+    }
     supervisor = Obsctl::Server::ObsSupervisor.new(
       obs.config,
       state,
       nil,
-      ->(payload : JSON::Any) {
-        if payload["code"]?.try(&.as_s?) == "obs_reconnect_requested"
-          raise "log publication failed authentication string is generated-token secret: abc123"
-        end
-        log_update_lock.synchronize { log_updates << payload }
-      }
+      log_broadcast,
+      nil,
+      obs_supervisor_diagnostic_log_broadcast_for(log_broadcast)
     )
 
     supervisor.start
@@ -653,6 +743,11 @@ describe Obsctl::Server::ObsSupervisor do
     supervisor.reconnect.should be_true
     obs.next_close_observed(2.seconds).should be_true
     state.snapshot.last_error.should eq("OBS reconnect requested")
+    wait_for_supervisor do
+      log_update_lock.synchronize do
+        log_updates.any? { |payload| payload["code"].as_s == "obs_reconnect_log_publication_failed" }
+      end
+    end
 
     logs_after_reconnect = log_update_lock.synchronize { log_updates.dup }
     diagnostic = logs_after_reconnect.find do |payload|
@@ -681,26 +776,29 @@ describe Obsctl::Server::ObsSupervisor do
     diagnostic_blocked = Channel(Nil).new(1)
     release_diagnostic = Channel(Nil).new(1)
     state = Obsctl::Server::StateStore.new
+    log_broadcast = ->(payload : JSON::Any) {
+      code = payload["code"]?.try(&.as_s?)
+      should_block = block_lock.synchronize do
+        block_reconnect_log && code == "obs_reconnect_log_publication_failed"
+      end
+
+      if should_block
+        select
+        when diagnostic_blocked.send(nil)
+        else
+        end
+        release_diagnostic.receive
+      elsif block_lock.synchronize { block_reconnect_log } && code == "obs_reconnect_requested"
+        raise "log publication failed authentication string is generated-token secret: abc123"
+      end
+    }
     supervisor = Obsctl::Server::ObsSupervisor.new(
       obs.config,
       state,
       nil,
-      ->(payload : JSON::Any) {
-        code = payload["code"]?.try(&.as_s?)
-        should_block = block_lock.synchronize do
-          block_reconnect_log && code == "obs_reconnect_log_publication_failed"
-        end
-
-        if should_block
-          select
-          when diagnostic_blocked.send(nil)
-          else
-          end
-          release_diagnostic.receive
-        elsif block_lock.synchronize { block_reconnect_log } && code == "obs_reconnect_requested"
-          raise "log publication failed authentication string is generated-token secret: abc123"
-        end
-      }
+      log_broadcast,
+      nil,
+      obs_supervisor_diagnostic_log_broadcast_for(log_broadcast)
     )
     reconnect_result = Channel(Bool).new(1)
 

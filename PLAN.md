@@ -1,18 +1,17 @@
 # obsctl Improvement Plan
 
-This plan reflects a fresh senior review of the 2026-06-21 reconnect
-diagnostic-liveness slice. Accepted reconnects now complete after lifecycle
-acceptance and detached-client cleanup even when publication-failure diagnostics
-cannot be delivered to log-topic subscribers. The next highest-value work is to
-bound the remaining detached fanout resource risk, then continue reconnect flake
-cleanup and Rust fixture ownership.
+This plan reflects a fresh senior review of the 2026-06-21 bounded reconnect
+diagnostic fanout slice. Accepted reconnects now complete after lifecycle
+acceptance and detached-client cleanup even when state/log publication fails,
+diagnostic log-topic subscribers block, or secondary diagnostic delivery is at
+capacity. Runtime logging remains the durable primary diagnostic sink.
 
 ## Current Assessment
 
 `obsctl` has a mature local daemon architecture: one server owns the OBS
 WebSocket session, thin CLI/TUI clients use Unix socket IPC, public CLI/IPC
 contracts are fixture-backed, reconnect behavior has focused primitive specs,
-and the default Crystal gate is green at 267 examples.
+and the default Crystal gate is green at 271 examples.
 
 The intended process model remains:
 
@@ -23,24 +22,29 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
 
 Completed or correct in the reviewed slice:
 
-- `ObsSupervisor#reconnect` still preserves the accept-then-emit boundary:
-  lifecycle/generation acceptance, reconnect request registration, active-client
-  detachment, and authoritative reconnect state mutation are decided under
-  `@lifecycle_lock`.
+- `ObsSupervisor#reconnect` still preserves the generation-safe
+  accept-then-emit boundary: lifecycle acceptance, reconnect request
+  registration, active-client detachment, and authoritative reconnect state
+  mutation are decided under `@lifecycle_lock`.
 - Detached OBS clients are closed immediately after the lifecycle lock is
-  released and before state/log fanout can block; cleanup remains protected with
-  `ensure`.
+  released and before state/log publication can block; cleanup remains protected
+  with `ensure`.
 - Accepted reconnect state/log publication exceptions are diagnostic-only after
   lifecycle acceptance and detached-client cleanup.
-- Reconnect publication diagnostics now write sanitized diagnostics to the
-  runtime logger first, when one is configured.
-- Log-topic delivery of reconnect diagnostics is secondary and detached, so a
-  blocked `@log_broadcast` callback no longer blocks the accepted reconnect
-  command.
-- New supervisor specs cover blocked diagnostic log fanout after both state
-  publication failure and log publication failure.
-- New command-level coverage proves sanitized fallback diagnostics reach the
-  runtime logger when diagnostic log-topic delivery itself raises.
+- Reconnect publication diagnostics write sanitized diagnostics to the runtime
+  logger first when one is configured.
+- Secondary reconnect diagnostic log-topic fanout is now routed through
+  `Server::BestEffortLogBroadcast`, which caps outstanding async deliveries and
+  drops new secondary diagnostics once capacity is exhausted.
+- Secondary reconnect diagnostics bypass `Server#broadcast_log`, avoiding
+  duplicate runtime-log entries when the primary runtime diagnostic has already
+  been written.
+- New coverage proves blocked secondary diagnostic fanout does not block
+  accepted reconnect completion; repeated blocked diagnostics reach the helper
+  bound, drop excess work, and later accepted reconnects still succeed.
+- Command-level coverage proves sanitized runtime diagnostics are written
+  exactly once whether secondary diagnostic delivery succeeds, raises, or
+  blocks.
 - The deterministic reconnect-vs-stop spec still proves the stop-wins
   interleaving where reconnect observes a live generation, pauses, `stop`
   completes, reconnect resumes, and stale public reconnect state remains
@@ -50,50 +54,59 @@ Completed or correct in the reviewed slice:
 
 Reviewer findings from the latest pass:
 
-- No blocking correctness regression was found in the targeted reconnect
-  diagnostic-liveness behavior.
-- The implementation satisfies the previous P0 liveness decision: accepted
-  reconnects no longer synchronously depend on diagnostic log-topic fanout.
-- Diagnostics remain redacted before runtime logging and log-topic broadcast.
-- The current detached diagnostic fanout is implemented as an untracked spawned
-  fiber. This protects command liveness, but a permanently blocked subscriber
-  can leave a fiber parked indefinitely. Repeated publication failures could
-  accumulate parked fibers.
+- No blocking correctness regression was found in the targeted bounded
+  diagnostic fanout behavior.
+- The previous unbounded detached diagnostic-fiber risk is addressed in the
+  server path. Permanently blocked log-topic subscribers can consume only the
+  helper's fixed capacity.
+- The helper intentionally drops secondary diagnostics silently after capacity
+  is exhausted. That preserves reconnect liveness, but operators currently have
+  no aggregated visibility that log-topic diagnostics are being dropped.
+- `BestEffortLogBroadcast` is covered through supervisor/server behavior, but
+  it does not yet have a focused unit spec for capacity validation, exception
+  containment, outstanding-count cleanup after failures, and recovery after
+  blocked work is released.
+- The bounded helper protects reconnect publication diagnostics only. Ordinary
+  state/log/event broadcasts still use synchronous `ClientRegistry#broadcast`;
+  slow IPC subscribers can still block non-diagnostic fanout paths.
 - Runtime logger delivery is synchronous and file-backed. That is acceptable as
   the durable local sink today because the logger rescues internally, but a
-  future high-volume diagnostic path should avoid doing repeated per-event file
-  opens on hot paths.
-- `Server#broadcast_log` still writes diagnostics to the runtime logger after
-  registry broadcast. Because reconnect diagnostics now write the logger before
-  detached fanout, successfully delivered diagnostics may be duplicated in the
-  runtime log.
+  future high-volume diagnostic path should avoid repeated per-event file opens
+  on hot paths.
 - Close-observed specs still do not identify the specific OBS connection that
   closed, which limits future overlapping reconnect assertions.
 - Remaining reconnect flake sources are unchanged: some reconnect specs still
   depend on unavailable-then-bind port windows and `wait_for_disconnect` still
   polls every 250 ms.
 
-## P0: Bound Best-Effort Diagnostic Fanout
+## Completed P0: Reconnect Diagnostic Liveness
 
-1. Replace ad hoc detached diagnostic broadcast with a bounded helper.
-   - Add a small `best_effort_log_broadcast` or server-side async fanout helper
-     with clear ownership and bounded resource behavior.
-   - Avoid spawning unlimited permanently blocked fibers for repeated
-     reconnect publication failures.
-   - Preserve the public contract: diagnostic log-topic delivery must never
-     block accepted reconnect completion.
+1. Preserve generation-safe reconnect acceptance.
+   - Reconnect acceptance is lifecycle-gated and generation-scoped.
+   - Public reconnect state is not published when `stop` wins the concurrent
+     reconnect-vs-stop interleaving.
+   - Explicit reconnect requests are durable generation-scoped epochs; transient
+     active-client-close wakes do not leak into unrelated retry delays.
 
-2. Define slow-subscriber behavior for best-effort diagnostics.
-   - Prefer dropping or evicting slow log-topic subscribers over accumulating
-     blocked diagnostic workers.
-   - Keep runtime logger delivery as the primary durable diagnostic sink.
-   - Add specs proving repeated blocked diagnostic fanout does not create
-     unbounded outstanding work or block later reconnect commands.
+2. Keep detached OBS client cleanup ahead of blockable publication.
+   - Active clients detached by reconnect are closed before state/log fanout.
+   - Cleanup is protected by `ensure`.
+   - Specs prove cleanup before blocked state fanout, blocked log fanout, and
+     unexpected publication exceptions are released.
 
-3. Avoid duplicate runtime-log diagnostics.
-   - Ensure reconnect diagnostics are written once through the runtime logger
-     primary path, even if secondary log-topic broadcast succeeds.
-   - Preserve normal `logs` topic delivery for TUI clients.
+3. Make accepted reconnect publication best-effort.
+   - State/log publication failures are sanitized diagnostics after acceptance,
+     not public command failures.
+   - `reconnect_obs` returns success once the live supervisor accepts the
+     request and detached-client cleanup has happened.
+
+4. Bound reconnect diagnostic log-topic fanout.
+   - `Server::BestEffortLogBroadcast` limits outstanding secondary diagnostic
+     deliveries.
+   - Excess secondary diagnostics are dropped.
+   - Runtime logger delivery remains the durable primary sink.
+   - Secondary log-topic delivery avoids the runtime logger path to prevent
+     duplicate persisted diagnostics.
 
 ## P0: Finish Strict Compatibility Fixture Ownership
 
@@ -113,26 +126,48 @@ Reviewer findings from the latest pass:
    - Once the Rust fixtures exist and pass, decide whether scheduled/manual is
      enough or whether the workflow should become a required PR signal.
 
-## P1: Reduce Reconnect Test Flake Surface
+## P1: Reconnect Flake Cleanup
 
 1. Retire unavailable-then-bind port races.
-   - Replace remaining `unused_tcp_port` style windows with the deterministic
-     port-reservation helper already introduced for reconnect specs.
-   - Ensure helper/probe names distinguish accepted WebSocket connections from
-     failed TCP attempts.
+   - Replace remaining `unused_tcp_port` windows in reconnect specs with the
+     deterministic reservation helper already introduced for this area.
+   - Ensure helper and probe names distinguish accepted WebSocket connections
+     from failed TCP attempts.
 
 2. Continue replacing polling/sleep-based reconnect specs.
-   - Convert remaining reconnect tests to fake OBS probes for Identify received,
-     close observed, request received, and no-attempt windows.
    - Add connection identifiers to fake OBS close probes so specs can assert the
      exact detached client closed when reconnect and retry attempts overlap.
+   - Convert reconnect assertions to fake OBS probes for Identify received,
+     close observed, request received, and no-attempt windows.
    - Replace the ad hoc `StateStore` subclass used as a pre-delay barrier with a
      narrower supervisor test hook if it remains useful.
 
 3. Make disconnect detection more event-driven.
-   - Replace or supplement the 250 ms `wait_for_disconnect` polling loop with an
-     OBS client close/error notification.
+   - Replace or supplement the 250 ms `wait_for_disconnect` polling loop with
+     an OBS client close/error notification.
    - Keep a defensive timeout or polling fallback for cleanup.
+
+## P1: Diagnostic Fanout Polish
+
+1. Add focused `BestEffortLogBroadcast` unit specs.
+   - Cover positive-capacity validation.
+   - Cover exception containment and outstanding-count decrement after raises.
+   - Cover drop accounting while at capacity.
+   - Cover recovery after blocked workers are released.
+
+2. Make secondary diagnostic drops observable without compromising liveness.
+   - Add an aggregate counter or rate-limited runtime log entry for dropped
+     secondary reconnect diagnostics.
+   - Avoid per-drop log spam on hot failure paths.
+   - Consider exposing the drop count in daemon diagnostics or a future
+     `server-status` observability section.
+
+3. Decide whether the helper should be a broader slow-subscriber primitive.
+   - Today it is intentionally scoped to reconnect diagnostics.
+   - Ordinary state/log/event broadcasts still use synchronous
+     `ClientRegistry#broadcast`.
+   - A future registry-level slow-subscriber policy should drop, evict, or bound
+     slow sessions rather than blocking command paths indefinitely.
 
 ## P1: Main CI And Validation Polish
 
@@ -227,12 +262,12 @@ Add breadth only after the daemon/IPC/reconnect contract remains stable.
 
 ## Suggested Next Pull Requests
 
-1. Bound reconnect diagnostic log-topic fanout so blocked subscribers cannot
-   accumulate parked detached fibers or duplicate runtime-log entries.
-2. Replace remaining reconnect unavailable-then-bind port windows with the
-   deterministic reservation helper.
-3. Add connection-specific fake OBS close probes and keep removing
+1. Replace remaining reconnect unavailable-then-bind port windows with the
+   deterministic reservation helper and keep the full Crystal gate green.
+2. Add connection-specific fake OBS close probes and remove the next batch of
    sleep/poll-based reconnect assertions.
+3. Add focused `BestEffortLogBroadcast` unit specs and an aggregate drop
+   observability policy.
 4. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
    `make contract-rs-compat` in a prepared dual-repo workspace.
 5. Add main Crystal CI and decide whether Ameba should become an installed dev

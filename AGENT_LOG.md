@@ -2366,3 +2366,114 @@ M  AGENT_LOG.md
 M  MEMORY.md
 M  PLAN.md
 M  SCORES.jsonl
+2026-06-21T08:39:05Z iteration 5 started remaining=15400s
+2026-06-21T08:39:05Z iteration 5 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-21T08:39:06Z iteration 5 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-9r8rpx_j/repo copied_entries=181
+2026-06-21T08:39:06Z iteration 5 ideator phase started count=3
+2026-06-21T08:39:06Z iteration 5 ideator phase concurrency workers=3
+2026-06-21T08:39:06Z iteration 5 ideator 1 role="the pragmatist" started
+2026-06-21T08:39:06Z iteration 5 ideator 2 role="the architect" started
+2026-06-21T08:39:06Z iteration 5 ideator 3 role="the contrarian" started
+2026-06-21T08:39:15Z iteration 5 ideator 1 role="the pragmatist" completed status=0
+2026-06-21T08:39:15Z iteration 5 ideator 3 role="the contrarian" completed status=0
+2026-06-21T08:39:17Z iteration 5 ideator 2 role="the architect" completed status=0
+2026-06-21T08:39:17Z iteration 5 ideator phase completed approaches=3
+2026-06-21T08:39:17Z iteration 5 selector started approaches=3
+2026-06-21T08:39:28Z iteration 5 selector completed status=0
+2026-06-21T08:39:28Z iteration 5 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-9r8rpx_j/repo
+2026-06-21T08:39:28Z iteration 5 selector rejected alternative role="the pragmatist" approach="Bounded-Liveness First: treat reconnect diagnostics as a resource-control problem before further flake cleanup. Preserve the accepted reconnect contract, make best-effort log fa..." reason="Strong and aligned, but it frames the slice mostly as reconnect liveness/resource control. The selected hybrid adds the contrarian emphasis that capacity, drop or eviction semantics, and duplicate-log behavior should be treated as an exp..."
+2026-06-21T08:39:28Z iteration 5 selector rejected alternative role="the contrarian" approach="Contract-First Fanout Governance: treat bounded diagnostic fanout as a public server resource policy before touching reconnect internals, defining ownership, capacity, drop/evic..." reason="Correctly challenges the stale TODO ordering and elevates fanout governance, but risks becoming too contract-design-heavy. The selected hybrid keeps that policy framing while anchoring it to the narrow reconnect diagnostic path and exist..."
+2026-06-21T08:39:28Z iteration 5 selector rejected alternative role="the architect" approach="Resource-Budget First Reconnect Hardening: treat diagnostic fanout as an explicitly budgeted subsystem before pursuing more reconnect flake cleanup, with runtime logging as the..." reason="Very close to the selected direction and strongest on delivery hierarchy, but it is not selected as-is because the planner also needs the more explicit governance angle: bounded capacity and slow-subscriber behavior should be intentional..."
+2026-06-21T08:39:28Z iteration 5 selector alternatives persisted count=3
+2026-06-21T08:39:28Z iteration 5 selector structured alternatives persisted count=3
+2026-06-21T08:39:28Z iteration 5 planner started
+2026-06-21T08:39:58Z iteration 5 plan: 5 task(s) in 4 phase(s). This slice targets the P0 production resource risk left by detached reconnect diagnostic fanout. The helper is introduced first, reconnect wiring depends on it, and behavior specs can then be split across different spec files because they validate separate outcomes: bounded outstanding work and runtime-log de-duplication.
+2026-06-21T08:39:58Z iteration 5 phase 1 started parallel=False tasks=1
+2026-06-21T08:42:22Z iteration 5 task t1 ('Add bounded best-effort log fanout helper') status=0
+2026-06-21T08:42:22Z iteration 5 phase 2 started parallel=False tasks=1
+2026-06-21T08:48:05Z iteration 5 task t2 ('Route reconnect diagnostics through bounded fanout') status=0
+2026-06-21T08:48:05Z iteration 5 phase 3 started parallel=True tasks=2
+2026-06-21T08:50:20Z iteration 5 task t3 ('Spec bounded diagnostic fanout under blocked subscribers') status=0
+2026-06-21T08:52:08Z iteration 5 task t4 ('Spec runtime-log de-duplication for reconnect diagnostics') status=0
+2026-06-21T08:52:08Z iteration 5 phase 4 started parallel=False tasks=1
+2026-06-21T08:54:38Z iteration 5 task t5 ('Update tracker and validation notes') status=0
+- Updated `TODO.md` and `PLAN.md` to record bounded, lossy reconnect diagnostic log-topic fanout, runtime logging as the durable primary sink, duplicate runtime-log diagnostic avoidance, and remaining reconnect work moving back to flake cleanup.
+- Validation:
+  - `make format` passed.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` passed: 271 examples, 0 failures, 0 errors, 0 pending.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build` passed.
+  - `make lint` passed with the existing skip message: `ameba not installed; run shards install`.
+2026-06-21T08:55:48Z iteration 5 task t5 ('Update tracker and validation notes') status=0
+2026-06-21T08:55:48Z iteration 5 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 5 bounded reconnect diagnostic fanout
+
+- Iteration reviewed:
+  - `Server::BestEffortLogBroadcast` capacity, drop accounting, async worker
+    behavior, and exception containment.
+  - `ObsSupervisor#publish_reconnect_diagnostic` runtime-logger-primary
+    behavior and secondary diagnostic fanout through the bounded helper.
+  - `Server` wiring that routes reconnect diagnostics directly to
+    `ClientRegistry#broadcast("logs", ...)` instead of `Server#broadcast_log`.
+  - Supervisor, command-executor, and server log-broadcast specs for blocked
+    subscribers, dropped secondary diagnostics, runtime-log fallback, and
+    runtime-log de-duplication.
+  - `PLAN.md`, `TODO.md`, `AGENT_LOG.md`, and `ALTERNATIVES.jsonl` changes.
+- What was done correctly:
+  - Accepted reconnect completion no longer depends on diagnostic log-topic
+    delivery, even when diagnostic delivery blocks.
+  - The previous unbounded detached diagnostic worker risk is addressed by a
+    fixed-capacity helper; excess secondary reconnect diagnostics are dropped
+    while runtime logging remains durable.
+  - Reconnect diagnostics avoid duplicate runtime-log entries by writing the
+    runtime logger once in the primary diagnostic path and bypassing
+    `Server#broadcast_log` for secondary log-topic fanout.
+  - Specs cover blocked diagnostic fanout after both state and log publication
+    failures, repeated blocked diagnostics reaching capacity, secondary
+    diagnostic delivery raises, and secondary delivery blocks.
+  - The prior generation-safe reconnect acceptance and detached-client
+    close-before-fanout invariants are preserved.
+- What was found:
+  - No blocking correctness regression was found in the targeted bounded
+    diagnostic fanout behavior.
+  - `BestEffortLogBroadcast` is only indirectly tested. It needs focused unit
+    specs for invalid capacity, exception cleanup, drop accounting, and
+    recovery after blocked workers are released.
+  - Secondary diagnostic drops are silent. That is good for command liveness,
+    but weak for operator observability when log-topic subscribers are stuck.
+  - The bounded helper is scoped to reconnect diagnostics only. Ordinary
+    state/log/event fanout still uses synchronous `ClientRegistry#broadcast`,
+    so broader slow-subscriber isolation remains future work.
+  - Close-observed specs still do not identify which accepted OBS connection
+    closed, and reconnect specs still have unavailable-then-bind port windows
+    plus 250 ms `wait_for_disconnect` polling.
+- Top improvement proposals:
+  - Add focused `BestEffortLogBroadcast` unit specs covering capacity
+    validation, exception containment, outstanding-count cleanup, drop
+    accounting, and post-release recovery.
+  - Add aggregate observability for dropped secondary reconnect diagnostics,
+    such as a drop counter or rate-limited runtime log entry, without logging
+    every drop.
+  - Continue reconnect flake cleanup with deterministic port reservation,
+    connection-specific fake OBS close probes, and event-driven disconnect
+    observation.
+  - Add or coordinate the Rust-side `obsctl-rs` contract fixture root, then run
+    `make contract-rs-compat` in a prepared dual-repo workspace.
+2026-06-21T09:00:34Z iteration 5 reviewer completed status=0
+2026-06-21T09:00:34Z iteration 5 memory updated
+2026-06-21T09:00:34Z iteration 5 completed validation_status=0
+2026-06-21T09:00:34Z iteration 5 checkpoint started
+2026-06-21T09:00:34Z iteration 5 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
+M  TODO.md
+M  spec/obsctl/server/command_executor_spec.cr
+M  spec/obsctl/server/obs_supervisor_spec.cr
+A  spec/obsctl/server/server_log_broadcast_spec.cr
+M  src/obsctl.cr
+A  src/obsctl/server/best_effort_log_broadcast.cr
+M  src/obsctl/server/obs_supervisor.cr
+M  src/obsctl/server/server.cr
