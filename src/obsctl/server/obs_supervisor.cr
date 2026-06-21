@@ -18,6 +18,11 @@ module Obsctl
         Stopped
       end
 
+      private record ReconnectPublication,
+        detached_client : OBS::Client?,
+        state_payload : JSON::Any,
+        log_payload : JSON::Any
+
       # Creates a supervisor that updates server state and optional event/log broadcasts.
       def initialize(
         @config : Config::Config,
@@ -106,29 +111,31 @@ module Obsctl
 
         @test_reconnect_before_publication.try(&.call)
 
-        client = nil.as(OBS::Client?)
-        accepted = @lifecycle_lock.synchronize do
+        publication = @lifecycle_lock.synchronize do
           if @lifecycle_state == LifecycleState::Stopped ||
              @lifecycle_generation != generation ||
              @reconnect_signal != reconnect_signal
             @stopped_reconnect_attempted = true if @lifecycle_state == LifecycleState::Stopped
-            false
+            nil
           else
+            accepted_at = Time.utc
             reconnect_signal.request
-            client = @client_lock.synchronize do
+            detached_client = @client_lock.synchronize do
               existing = @client
               @client = nil
               existing
             end
-            @state.mark_reconnect_requested
-            publish_log("info", "obs_reconnect_requested", "OBS reconnect requested")
-            true
+            ReconnectPublication.new(
+              detached_client,
+              @state.mark_reconnect_requested_payload(accepted_at),
+              log_payload("info", "obs_reconnect_requested", "OBS reconnect requested", accepted_at)
+            )
           end
         end
 
-        return false unless accepted
+        return false unless publication
 
-        client.try(&.close)
+        publish_reconnect(publication)
         true
       end
 
@@ -281,12 +288,22 @@ module Obsctl
       end
 
       private def publish_log(level : String, code : String, message : String) : Nil
-        @log_broadcast.try(&.call(JSON.parse({
+        @log_broadcast.try(&.call(log_payload(level, code, message)))
+      end
+
+      private def log_payload(level : String, code : String, message : String, at : Time = Time.utc) : JSON::Any
+        JSON.parse({
           level:      level,
           code:       code,
           message:    Runtime::Logger.redact_secrets(message),
-          created_at: Time.utc.to_rfc3339,
-        }.to_json)))
+          created_at: at.to_rfc3339,
+        }.to_json)
+      end
+
+      private def publish_reconnect(publication : ReconnectPublication) : Nil
+        @state.publish_snapshot_payload(publication.state_payload)
+        @log_broadcast.try(&.call(publication.log_payload))
+        publication.detached_client.try(&.close)
       end
 
       private def public_message(message : String?, fallback : String) : String

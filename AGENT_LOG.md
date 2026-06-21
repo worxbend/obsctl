@@ -1949,3 +1949,111 @@ M  src/obsctl/server/obs_supervisor.cr
 2026-06-21T07:47:10Z iteration final-2 checkpoint started
 2026-06-21T07:47:10Z iteration final-2 checkpoint status before commit:
 M  AGENT_LOG.md
+2026-06-21T07:47:10Z orchestrator finished iterations_run=2 iterations_attempted=2 iterations_completed_successfully=2 had_nonfatal_failures=false nonfatal_failure_count=0 last_nonfatal_exit_code=0 last_nonfatal_failure_reason=none loop_exit_code=0 process_exit_code=0 fatal=false terminal_reason=iterations_complete final_checkpoint_behavior=source_and_telemetry
+2026-06-21T07:55:45Z orchestrator started provider=codex budget=18000s iterations=10 max_workers=4
+2026-06-21T07:55:45Z iteration 1 started remaining=18000s
+2026-06-21T07:55:45Z iteration 1 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-21T07:55:45Z iteration 1 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-x_q86n_g/repo copied_entries=181
+2026-06-21T07:55:45Z iteration 1 ideator phase started count=3
+2026-06-21T07:55:45Z iteration 1 ideator phase concurrency workers=3
+2026-06-21T07:55:45Z iteration 1 ideator 1 role="the pragmatist" started
+2026-06-21T07:55:45Z iteration 1 ideator 2 role="the architect" started
+2026-06-21T07:55:45Z iteration 1 ideator 3 role="the contrarian" started
+2026-06-21T07:55:54Z iteration 1 ideator 3 role="the contrarian" completed status=0
+2026-06-21T07:55:57Z iteration 1 ideator 2 role="the architect" completed status=0
+2026-06-21T07:56:05Z iteration 1 ideator 1 role="the pragmatist" completed status=0
+2026-06-21T07:56:05Z iteration 1 ideator phase completed approaches=3
+2026-06-21T07:56:05Z iteration 1 selector started approaches=3
+2026-06-21T07:56:16Z iteration 1 selector completed status=0
+2026-06-21T07:56:16Z iteration 1 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-x_q86n_g/repo
+2026-06-21T07:56:16Z iteration 1 selector rejected alternative role="the contrarian" approach="State-Transition Outbox: treat reconnect acceptance as a pure lifecycle state transition that emits an explicit publication intent, then drain that intent outside lifecycle owne..." reason="Strong invariant framing, but the outbox language could invite a larger async queue redesign than this slice needs. The better plan keeps the outbox concept as a small immutable publication result unless existing code proves a queue is n..."
+2026-06-21T07:56:16Z iteration 1 selector rejected alternative role="the architect" approach="Accept-Then-Emit Boundary: treat reconnect acceptance as a tiny serialized decision that produces immutable publication work, then emit all IPC/log side effects outside the life..." reason="Nearly selected as-is; it clearly identifies the right boundary and risks. It was folded into the synthesized strategy, with extra emphasis on preserving the existing generation-scoped race proof and avoiding observable ordering changes."
+2026-06-21T07:56:16Z iteration 1 selector rejected alternative role="the pragmatist" approach="Acceptance Token With Deferred Publication: treat reconnect as a two-phase lifecycle operation where the lock only decides and records acceptance, then returns a compact publica..." reason="Also substantially correct, especially the acceptance-token framing. It was not selected alone because the planner should also account for the broader publication surfaces called out in PLAN.md, including IPC fanout, log broadcast, and f..."
+2026-06-21T07:56:16Z iteration 1 selector alternatives persisted count=3
+2026-06-21T07:56:16Z iteration 1 selector structured alternatives persisted count=3
+2026-06-21T07:56:16Z iteration 1 planner started
+2026-06-21T07:56:43Z iteration 1 plan: 4 task(s) in 3 phase(s). This decomposition focuses on the P0 slice: keep reconnect acceptance linearizable while removing blocking IPC/log/file publication from the supervisor lifecycle lock. The implementation must land before the liveness spec because the spec exercises the new accept-then-emit boundary. Tracker and log updates are independent documentation files after the code/test behavior is established.
+2026-06-21T07:56:43Z iteration 1 phase 1 started parallel=False tasks=1
+2026-06-21T07:59:54Z iteration 1 task t1 ('Decouple reconnect publication from lifecycle lock') status=0
+2026-06-21T07:59:54Z iteration 1 phase 2 started parallel=False tasks=1
+2026-06-21T08:01:35Z iteration 1 task t2 ('Add lifecycle-lock liveness regression spec') status=0
+2026-06-21T08:01:35Z iteration 1 phase 3 started parallel=True tasks=2
+2026-06-21T08:01:48Z iteration 1 task t4 ('Record iteration outcome') completed
+- Reconnect acceptance now uses an accept-then-emit boundary: lifecycle-locked
+  work accepts the request and records state, then publication side effects run
+  after releasing `@lifecycle_lock`.
+- Added blocked-publication shutdown regression coverage proving reconnect
+  publication fanout cannot prevent supervisor shutdown, while preserving the
+  stop-wins reconnect-vs-stop proof.
+- `TODO.md` was aligned to credit the sequential reconnect-after-stop rejection
+  proof and the concurrent paused-live-then-stop interleaving proof distinctly;
+  Planned Next now leads with remaining reconnect flake cleanup.
+- Validation: intentionally skipped for this log-only task; no code or spec
+  files were changed by t4.
+2026-06-21T08:02:05Z iteration 1 task t4 ('Record iteration outcome') status=0
+2026-06-21T08:02:36Z iteration 1 task t3 ('Align TODO tracker with reconnect proof') status=0
+2026-06-21T08:02:36Z iteration 1 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 1 accept-then-emit reconnect publication
+
+- Iteration reviewed:
+  - `ObsSupervisor#reconnect` accept-then-emit publication packet, lifecycle
+    generation re-check, reconnect request registration, active-client
+    detachment, state mutation, state fanout, log fanout, and detached-client
+    close ordering
+  - `StateStore#mark_reconnect_requested_payload`,
+    `publish_snapshot_payload`, and deferred reconnect state payload behavior
+  - blocked-publication lifecycle-liveness spec and existing reconnect-vs-stop
+    race proof
+  - `TODO.md`, `AGENT_LOG.md`, and `ALTERNATIVES.jsonl` changes from the
+    iteration
+- What was done correctly:
+  - Reconnect acceptance remains generation-safe: the stale reconnect-vs-stop
+    publication race stays closed.
+  - Subscriber state fanout and log fanout are no longer executed while holding
+    `@lifecycle_lock`.
+  - The new liveness spec proves `stop` can reach stopped lifecycle state while
+    reconnect state publication is blocked.
+  - `TODO.md` now credits the sequential post-stop proof and the exact
+    concurrent paused-live-then-stop proof separately.
+  - Focused validation passed:
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/obs_supervisor_spec.cr`
+    and
+    `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/reconnect_signal_spec.cr`.
+- What was found:
+  - No regression was found in the targeted stop-wins reconnect publication
+    invariant.
+  - The liveness fix is incomplete for shutdown cleanup: `publish_reconnect`
+    publishes state/log callbacks before closing the detached OBS client, so a
+    blocked publication callback can let `stop` return while the old OBS
+    WebSocket remains open.
+  - Detached-client cleanup is not protected if a publication callback raises;
+    the close can be skipped.
+  - `StateStore#mark_reconnect_requested_payload` mutates authoritative state
+    despite the payload-oriented name; it needs focused specs and clearer naming
+    or documentation.
+  - Remaining reconnect flake sources are unchanged: unavailable-then-bind port
+    windows and 250 ms disconnect polling.
+- Top improvement proposals:
+  - Close detached OBS clients before any blockable reconnect publication fanout,
+    and guarantee cleanup with `ensure`.
+  - Strengthen blocked-publication specs to assert the OBS close is observed
+    without releasing the publication blocker, and cover blocked log fanout.
+  - Add focused `StateStore` specs for deferred reconnect payload semantics and
+    callback timing.
+  - Continue reconnect flake cleanup with deterministic port reservation and an
+    event-driven close/error notification path.
+2026-06-21T08:06:10Z iteration 1 reviewer completed status=0
+2026-06-21T08:06:10Z iteration 1 memory updated
+2026-06-21T08:06:10Z iteration 1 completed validation_status=0
+2026-06-21T08:06:10Z iteration 1 checkpoint started
+2026-06-21T08:06:10Z iteration 1 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
+M  TODO.md
+M  spec/obsctl/server/obs_supervisor_spec.cr
+M  src/obsctl/server/obs_supervisor.cr
+M  src/obsctl/server/state_store.cr
