@@ -1,6 +1,7 @@
 require "../config/config"
 require "../ipc/protocol"
 require "../runtime/logger"
+require "./best_effort_log_broadcast"
 require "./client_registry"
 require "./command_executor"
 require "./obs_supervisor"
@@ -20,10 +21,12 @@ module Obsctl
         @logger : Runtime::Logger? = nil,
       )
         @registry = ClientRegistry.new
+        @diagnostic_log_broadcast = BestEffortLogBroadcast.new(->(entry : JSON::Any) { @registry.broadcast("logs", entry) })
         @state = StateStore.new(->(snapshot : JSON::Any) { @registry.broadcast("state", snapshot) })
         event_broadcast = ->(event : JSON::Any) { @registry.broadcast("events", event) }
         log_broadcast = ->(entry : JSON::Any) { broadcast_log(entry) }
-        @supervisor = ObsSupervisor.new(@config, @state, event_broadcast, log_broadcast, @logger)
+        diagnostic_log_broadcast = ->(entry : JSON::Any) { @diagnostic_log_broadcast.broadcast(entry) }
+        @supervisor = ObsSupervisor.new(@config, @state, event_broadcast, log_broadcast, @logger, diagnostic_log_broadcast)
         @executor = CommandExecutor.new(@config, @config_path, @state, @supervisor, @socket_path, client_count: -> { @registry.client_count }, log_broadcast: log_broadcast)
         @ipc = IPC::UnixServer.new(@socket_path)
       end

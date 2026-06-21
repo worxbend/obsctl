@@ -30,6 +30,7 @@ module Obsctl
         @event_broadcast : Proc(JSON::Any, Nil)? = nil,
         @log_broadcast : Proc(JSON::Any, Nil)? = nil,
         @logger : Runtime::Logger? = nil,
+        @diagnostic_log_broadcast : Proc(JSON::Any, Bool)? = nil,
       )
         @client = nil.as(OBS::Client?)
         @client_lock = Mutex.new
@@ -340,16 +341,12 @@ module Obsctl
         diagnostic = "#{message}: #{exception_summary(cause)}"
         write_reconnect_diagnostic(code, diagnostic)
 
-        broadcast = @log_broadcast
+        broadcast = @diagnostic_log_broadcast
         return unless broadcast
 
-        spawn(name: "obsctl-reconnect-diagnostic-log") do
-          begin
-            broadcast.call(log_payload("warn", code, diagnostic))
-          rescue ex
-            fallback = "#{diagnostic}; diagnostic log publication failed: #{exception_summary(ex)}"
-            write_reconnect_diagnostic(code, fallback)
-          end
+        begin
+          broadcast.call(log_payload("warn", code, diagnostic))
+        rescue
         end
       end
 
