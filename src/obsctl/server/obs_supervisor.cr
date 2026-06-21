@@ -12,6 +12,8 @@ module Obsctl
   module Server
     # Owns the single OBS WebSocket client and reconnect loop for the daemon.
     class ObsSupervisor
+      DISCONNECT_FALLBACK_TIMEOUT = 100.milliseconds
+
       enum LifecycleState
         Starting
         Running
@@ -207,13 +209,15 @@ module Obsctl
       end
 
       private def wait_for_disconnect(generation : UInt64, client : OBS::Client) : Domain::ConnectionFailed?
-        until stopped?(generation) || !client.connected?
+        loop do
           drain_events(client)
           return client.terminal_error if client.terminal_error
-          sleep 250.milliseconds
-        end
+          return client.terminal_error if stopped?(generation) || !client.connected?
 
-        client.terminal_error
+          if error = client.wait_for_close(DISCONNECT_FALLBACK_TIMEOUT)
+            return error
+          end
+        end
       end
 
       private def stopped?(generation : UInt64) : Bool

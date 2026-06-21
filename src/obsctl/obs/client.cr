@@ -33,6 +33,7 @@ module Obsctl
         @pending_lock = Mutex.new
         @terminal_error = nil.as(Domain::ConnectionFailed?)
         @terminal_error_lock = Mutex.new
+        @close_notifications = Channel(Domain::ConnectionFailed).new(1)
         @close_requested = false
       end
 
@@ -47,6 +48,22 @@ module Obsctl
       # Returns the safe terminal connection error that closed this client.
       def terminal_error : Domain::ConnectionFailed?
         @terminal_error_lock.synchronize { @terminal_error }
+      end
+
+      # Waits for the WebSocket reader to observe a terminal close or protocol
+      # error, returning the same sanitized error exposed by `terminal_error`.
+      def wait_for_close(timeout : Time::Span) : Domain::ConnectionFailed?
+        notifications = @terminal_error_lock.synchronize do
+          return @terminal_error if @terminal_error
+          @close_notifications
+        end
+
+        select
+        when error = notifications.receive
+          error
+        when timeout(timeout)
+          terminal_error
+        end
       end
 
       # Opens the WebSocket, performs Hello/Identify/Identified, and starts the
@@ -338,6 +355,7 @@ module Obsctl
       private def reset_terminal_state : Nil
         @terminal_error_lock.synchronize do
           @terminal_error = nil
+          @close_notifications = Channel(Domain::ConnectionFailed).new(1)
           @close_requested = false
         end
       end
@@ -353,8 +371,24 @@ module Obsctl
       end
 
       private def record_terminal_error(error : Domain::ConnectionFailed) : Domain::ConnectionFailed
-        @terminal_error_lock.synchronize do
-          @terminal_error ||= error
+        notifications = nil.as(Channel(Domain::ConnectionFailed)?)
+        terminal = @terminal_error_lock.synchronize do
+          if existing = @terminal_error
+            existing
+          else
+            @terminal_error = error
+            notifications = @close_notifications
+            error
+          end
+        end
+        notify_close(notifications.not_nil!, terminal) if notifications
+        terminal
+      end
+
+      private def notify_close(notifications : Channel(Domain::ConnectionFailed), error : Domain::ConnectionFailed) : Nil
+        select
+        when notifications.send(error)
+        else
         end
       end
 

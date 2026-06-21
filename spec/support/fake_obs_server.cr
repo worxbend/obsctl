@@ -24,11 +24,15 @@ module Obsctl
       @identify_count = 0_i64
       @request_count = 0_i64
       @close_count = 0_i64
+      @next_websocket_connection_id = 0_i64
+      @closed_websocket_connection_ids = [] of Int64
       @connection_notifications = Channel(Nil).new(16)
+      @accepted_websocket_connection_notifications = Channel(Int64).new(16)
       @identify_notifications = Channel(JSON::Any).new(16)
       @request_notifications = Channel(String).new(16)
       @delayed_response_notifications = Channel(String).new(16)
       @close_notifications = Channel(Nil).new(16)
+      @closed_websocket_connection_notifications = Channel(Int64).new(16)
       @connection_or_identify_notifications = Channel(String).new(16)
       @websockets = [] of HTTP::WebSocket
 
@@ -129,6 +133,15 @@ module Obsctl
         end
       end
 
+      def next_accepted_websocket_connection_id(timeout : Time::Span = 1.second) : Int64?
+        select
+        when connection_id = @accepted_websocket_connection_notifications.receive
+          connection_id
+        when timeout(timeout)
+          nil
+        end
+      end
+
       def next_identify(timeout : Time::Span = 1.second) : JSON::Any?
         select
         when identify = @identify_notifications.receive
@@ -177,6 +190,37 @@ module Obsctl
         next_close(timeout)
       end
 
+      def next_closed_websocket_connection_id(timeout : Time::Span = 1.second) : Int64?
+        select
+        when connection_id = @closed_websocket_connection_notifications.receive
+          connection_id
+        when timeout(timeout)
+          nil
+        end
+      end
+
+      def assert_websocket_connection_closed(connection_id : Int64, timeout : Time::Span = 1.second) : Nil
+        deadline = Time.instant + timeout
+
+        loop do
+          return if websocket_connection_closed?(connection_id)
+
+          remaining = deadline - Time.instant
+          break if remaining <= 0.seconds
+
+          select
+          when closed_connection_id = @closed_websocket_connection_notifications.receive
+            return if closed_connection_id == connection_id
+          when timeout(remaining)
+            break
+          end
+        end
+
+        return if websocket_connection_closed?(connection_id)
+
+        raise "fake OBS did not observe WebSocket connection #{connection_id} close within #{timeout}"
+      end
+
       def no_identify_or_connection_attempt?(timeout : Time::Span = 100.milliseconds) : Bool
         start_connection_attempt_count, start_identify_count = identify_or_connection_counts
         no_identify_or_connection_attempt_since?(
@@ -220,17 +264,20 @@ module Obsctl
 
       private def websocket_handler : HTTP::WebSocketHandler
         HTTP::WebSocketHandler.new do |websocket, _context|
-          @mutex.synchronize do
+          connection_id = @mutex.synchronize do
+            @next_websocket_connection_id += 1
             @websockets << websocket
             @connection_attempt_count += 1
+            @next_websocket_connection_id
           end
-          notify_connection_attempt
+          notify_connection_attempt(connection_id)
           websocket.on_close do
             @mutex.synchronize do
               @websockets.delete(websocket)
               @close_count += 1
+              @closed_websocket_connection_ids << connection_id
             end
-            notify_close
+            notify_close(connection_id)
           end
           send_frame(websocket, hello_frame)
           websocket.on_message do |message|
@@ -288,6 +335,10 @@ module Obsctl
         @mutex.synchronize { {@connection_attempt_count, @identify_count} }
       end
 
+      private def websocket_connection_closed?(connection_id : Int64) : Bool
+        @mutex.synchronize { @closed_websocket_connection_ids.includes?(connection_id) }
+      end
+
       private def identify_or_connection_counts_changed?(
         start_connection_attempt_count : Int64,
         start_identify_count : Int64,
@@ -322,9 +373,14 @@ module Obsctl
         end
       end
 
-      private def notify_connection_attempt : Nil
+      private def notify_connection_attempt(connection_id : Int64) : Nil
         select
         when @connection_notifications.send(nil)
+        else
+        end
+
+        select
+        when @accepted_websocket_connection_notifications.send(connection_id)
         else
         end
 
@@ -355,9 +411,14 @@ module Obsctl
         end
       end
 
-      private def notify_close : Nil
+      private def notify_close(connection_id : Int64) : Nil
         select
         when @close_notifications.send(nil)
+        else
+        end
+
+        select
+        when @closed_websocket_connection_notifications.send(connection_id)
         else
         end
       end

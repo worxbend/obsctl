@@ -107,6 +107,28 @@ describe Obsctl::OBS::Client do
     end
   end
 
+  it "notifies when fake OBS closes the websocket" do
+    server = Obsctl::SpecSupport::FakeObsServer.new.start
+    client = Obsctl::OBS::Client.new(server.config)
+
+    begin
+      client.connect
+      started = Time.instant
+      server.close_connections
+
+      error = client.wait_for_close(1.second)
+      elapsed = Time.instant - started
+      error.should be_a(Obsctl::Domain::ConnectionFailed)
+      error.not_nil!.message.to_s.should eq("OBS WebSocket disconnected")
+      client.terminal_error.not_nil!.message.to_s.should eq(error.not_nil!.message.to_s)
+      elapsed.should be < 1.second
+      client.connected?.should be_false
+    ensure
+      client.try(&.close)
+      server.stop
+    end
+  end
+
   it "clears pending requests when a malformed OBS frame is read" do
     server = Obsctl::SpecSupport::FakeObsServer.new(
       request_delays: {"GetVersion" => 2.seconds},
@@ -132,7 +154,10 @@ describe Obsctl::OBS::Client do
       error = receive_result(result, 1.second)
       error.should be_a(Obsctl::Domain::ConnectionFailed)
       error.not_nil!.message.to_s.should contain("malformed OBS frame")
-      client.terminal_error.not_nil!.message.to_s.should contain("malformed OBS frame")
+      notification = client.wait_for_close(1.second)
+      notification.should be_a(Obsctl::Domain::ConnectionFailed)
+      notification.not_nil!.message.to_s.should contain("malformed OBS frame")
+      client.terminal_error.not_nil!.message.to_s.should eq(notification.not_nil!.message.to_s)
       client.pending_request_count_for_spec.should eq(0)
       client.connected?.should be_false
       server.next_close.should be_true
@@ -167,7 +192,10 @@ describe Obsctl::OBS::Client do
       error = receive_result(result, 1.second)
       error.should be_a(Obsctl::Domain::ConnectionFailed)
       error.not_nil!.message.to_s.should contain("response parser error")
-      client.terminal_error.not_nil!.message.to_s.should contain("response parser error")
+      notification = client.wait_for_close(1.second)
+      notification.should be_a(Obsctl::Domain::ConnectionFailed)
+      notification.not_nil!.message.to_s.should contain("response parser error")
+      client.terminal_error.not_nil!.message.to_s.should eq(notification.not_nil!.message.to_s)
       client.pending_request_count_for_spec.should eq(0)
       client.connected?.should be_false
       server.next_close.should be_true
@@ -191,6 +219,54 @@ describe Obsctl::OBS::Client do
         client.current_scene
       end
 
+      client.pending_request_count_for_spec.should eq(0)
+    ensure
+      client.try(&.close)
+      server.stop
+    end
+  end
+
+  it "notifies explicit close without leaking secrets or breaking pending request failure" do
+    secret = "top-secret-close-password"
+    server = Obsctl::SpecSupport::FakeObsServer.new(
+      request_delays: {"GetVersion" => 2.seconds},
+      request_timeout_ms: 2_000
+    ).start
+    config = server.config
+    config.connection = Obsctl::Config::ConnectionConfig.new(
+      host: server.host,
+      port: server.port,
+      password_env: nil,
+      password: secret,
+      request_timeout_ms: 2_000
+    )
+    client = Obsctl::OBS::Client.new(config)
+    result = Channel(Exception?).new(1)
+
+    begin
+      client.connect
+      spawn do
+        begin
+          client.version
+          result.send(nil)
+        rescue ex
+          result.send(ex)
+        end
+      end
+
+      server.next_request.should eq("GetVersion")
+      client.close
+
+      error = receive_result(result, 1.second)
+      notification = client.wait_for_close(1.second)
+
+      error.should be_a(Obsctl::Domain::ConnectionFailed)
+      error.not_nil!.message.to_s.should eq("OBS WebSocket closed cleanly")
+      error.not_nil!.message.to_s.should_not contain(secret)
+      notification.should be_a(Obsctl::Domain::ConnectionFailed)
+      notification.not_nil!.message.to_s.should eq(error.not_nil!.message.to_s)
+      notification.not_nil!.message.to_s.should_not contain(secret)
+      client.terminal_error.not_nil!.message.to_s.should_not contain(secret)
       client.pending_request_count_for_spec.should eq(0)
     ensure
       client.try(&.close)

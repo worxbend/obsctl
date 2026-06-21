@@ -2477,3 +2477,131 @@ M  src/obsctl.cr
 A  src/obsctl/server/best_effort_log_broadcast.cr
 M  src/obsctl/server/obs_supervisor.cr
 M  src/obsctl/server/server.cr
+2026-06-21T09:00:34Z iteration 6 started remaining=14112s
+2026-06-21T09:00:34Z iteration 6 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-21T09:00:34Z iteration 6 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-kld9uw05/repo copied_entries=183
+2026-06-21T09:00:34Z iteration 6 ideator phase started count=3
+2026-06-21T09:00:34Z iteration 6 ideator phase concurrency workers=3
+2026-06-21T09:00:34Z iteration 6 ideator 1 role="the pragmatist" started
+2026-06-21T09:00:34Z iteration 6 ideator 2 role="the architect" started
+2026-06-21T09:00:34Z iteration 6 ideator 3 role="the contrarian" started
+2026-06-21T09:00:45Z iteration 6 ideator 2 role="the architect" completed status=0
+2026-06-21T09:00:46Z iteration 6 ideator 1 role="the pragmatist" completed status=0
+2026-06-21T09:00:47Z iteration 6 ideator 3 role="the contrarian" completed status=0
+2026-06-21T09:00:47Z iteration 6 ideator phase completed approaches=3
+2026-06-21T09:00:47Z iteration 6 selector started approaches=3
+2026-06-21T09:01:01Z iteration 6 selector completed status=0
+2026-06-21T09:01:01Z iteration 6 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-kld9uw05/repo
+2026-06-21T09:01:01Z iteration 6 selector rejected alternative role="the architect" approach="Stabilize Before Expanding: prioritize deterministic reconnect proof quality and contract ownership before adding new product surface, treating every next slice as either reduci..." reason="Selected in spirit, but too broad as-is for the immediate next planner because it gives equal weight to flake cleanup and Rust fixture ownership; the current repo-local highest leverage is reconnect determinism."
+2026-06-21T09:01:01Z iteration 6 selector rejected alternative role="the pragmatist" approach="Flake-Budget Burn-Down: spend the next slice on making reconnect tests more deterministic before adding new behavior, using existing fake OBS probes and reservation patterns as..." reason="Strong immediate direction, but too narrow as a guiding strategy because it does not explicitly preserve the wider compatibility and diagnostic-hardening priorities that should shape subsequent planning."
+2026-06-21T09:01:01Z iteration 6 selector rejected alternative role="the contrarian" approach="Observability-first hardening: pause reconnect flake work briefly and make the new bounded diagnostic fanout independently measurable before expanding or refactoring adjacent re..." reason="Valuable follow-up, especially for lossy diagnostic drop visibility, but not the best immediate guide because the current TODO and plan both rank reconnect flake cleanup ahead of diagnostic polish."
+2026-06-21T09:01:01Z iteration 6 selector alternatives persisted count=3
+2026-06-21T09:01:01Z iteration 6 selector structured alternatives persisted count=3
+2026-06-21T09:01:01Z iteration 6 planner started
+2026-06-21T09:02:28Z iteration 6 plan: 5 task(s) in 4 phase(s). This iteration follows the reliability-ratchet constraint by removing nondeterministic reconnect test timing and port-window behavior before adding new product surface. Phase 2 is parallel because the OBS client notification and fake-server probe work touch different files and are both prerequisites for the supervisor cleanup in phase 3.
+2026-06-21T09:02:28Z iteration 6 phase 1 started parallel=False tasks=1
+2026-06-21T09:04:09Z iteration 6 task t1 ('Replace server spec port races with TcpGate') status=0
+2026-06-21T09:04:09Z iteration 6 phase 2 started parallel=True tasks=2
+2026-06-21T09:06:11Z iteration 6 task t3 ('Add connection-specific fake OBS close probes') status=0
+2026-06-21T09:07:06Z iteration 6 task t2 ('Add OBS client close notification') status=0
+2026-06-21T09:07:06Z iteration 6 phase 3 started parallel=False tasks=1
+2026-06-21T09:12:16Z iteration 6 task t4 ('Make supervisor disconnect waiting event-driven') status=0
+2026-06-21T09:12:16Z iteration 6 phase 4 started parallel=False tasks=1
+2026-06-21T09:12:41Z iteration 6 task t5 ('Update iteration tracking') status=0
+- Updated tracking files:
+  - `TODO.md`
+  - `AGENT_LOG.md`
+- Reliability slice captured:
+  - `spec/obsctl/server/server_spec.cr` now uses `SpecSupport::TcpGate` instead
+    of unavailable-then-bind `unused_tcp_port` windows for server IPC/reconnect
+    port setup.
+  - `spec/support/fake_obs_server.cr` exposes connection-specific accepted and
+    closed WebSocket probes so reconnect specs can identify the exact detached
+    connection.
+  - `src/obsctl/obs/client.cr` exposes `wait_for_close`, and
+    `src/obsctl/server/obs_supervisor.cr` uses the close/error notification as
+    the primary disconnect signal with a defensive fallback timeout.
+  - Specs updated around OBS pending close notification, supervisor reconnect,
+    command executor reconnect diagnostics, and server IPC reconnect behavior.
+- Flake source removed:
+  - Server reconnect specs no longer depend on an unavailable-then-bind port
+    race, and supervisor disconnect observation no longer depends on the fixed
+    250 ms polling sleep as its primary mechanism.
+- Validation:
+  - Not run for task t5; this phase changed only tracker/log Markdown and the
+    iteration requested no validation command for the tracking update.
+2026-06-21T09:13:57Z iteration 6 task t5 ('Update iteration tracking') status=0
+2026-06-21T09:13:57Z iteration 6 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 6 reconnect determinism
+
+- Iteration reviewed:
+  - `SpecSupport::TcpGate` use in server reconnect specs.
+  - Fake OBS accepted/closed WebSocket connection-id probes.
+  - `OBS::Client#wait_for_close` terminal close/error notification.
+  - `ObsSupervisor#wait_for_disconnect` event-driven primary close path with
+    defensive fallback timeout.
+  - Pending-request, supervisor, command-executor, server reconnect specs, plus
+    `TODO.md`, `PLAN.md`, `MEMORY.md`, `AGENT_LOG.md`, and planner telemetry.
+- What was done correctly:
+  - Server reconnect specs no longer use unavailable-then-bind
+    `unused_tcp_port` windows; `TcpGate` keeps deterministic port ownership
+    until fake OBS is opened on the reserved port.
+  - Fake OBS now exposes accepted and closed WebSocket ids, and reconnect specs
+    assert the exact detached connection closes.
+  - OBS client close/error notification covers remote disconnect, explicit
+    close, malformed frames, response parser failures, pending-request cleanup,
+    and secret-free close messages.
+  - The supervisor now waits on close/error notification first and keeps only a
+    short 100 ms fallback timeout, preserving event draining and stop/cancel
+    liveness.
+- What was found:
+  - No blocking correctness regression was found in the targeted reconnect
+    determinism slice.
+  - `wait_for_close` is a single-owner primitive today: one buffered close
+    notification plus terminal-error fallback is fine for the supervisor, but
+    concurrent waiters would need per-waiter or condition-style semantics.
+  - The new disconnect path is not purely edge-triggered; when no notification
+    arrives, event processing can still wait up to the 100 ms fallback.
+  - `TcpGate` solves the server reconnect port race, but fake OBS
+    `connection_attempt_count` still means accepted WebSocket connections, not
+    failed TCP attempts while the gate is closed.
+  - `BestEffortLogBroadcast` still needs focused unit specs, and secondary
+    diagnostic drops remain silent.
+- Top improvement proposals:
+  - Add focused `BestEffortLogBroadcast` unit specs for capacity validation,
+    exception cleanup, drop accounting, and recovery after blocked workers are
+    released.
+  - Add aggregate observability for dropped secondary reconnect diagnostics
+    without per-drop log spam.
+  - Decide and document whether `OBS::Client#wait_for_close` is intentionally
+    single-owner or should become a multi-waiter primitive before broader use.
+  - Continue replacing remaining reconnect no-event sleeps with deterministic
+    fake OBS probes where practical.
+  - Coordinate Rust-side contract fixtures and run `make contract-rs-compat` in
+    a prepared dual-repo workspace.
+- Review validation:
+  - `git diff --check` passed.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/obs/client_pending_request_spec.cr spec/obsctl/server/obs_supervisor_spec.cr spec/obsctl/server/server_spec.cr spec/obsctl/server/command_executor_spec.cr`
+    passed with 61 examples.
+  - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` passed with 273
+    examples.
+2026-06-21T09:18:44Z iteration 6 reviewer completed status=0
+2026-06-21T09:18:44Z iteration 6 memory updated
+2026-06-21T09:18:44Z iteration 6 completed validation_status=0
+2026-06-21T09:18:44Z iteration 6 checkpoint started
+2026-06-21T09:18:44Z iteration 6 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl
+M  TODO.md
+M  spec/obsctl/obs/client_pending_request_spec.cr
+M  spec/obsctl/server/command_executor_spec.cr
+M  spec/obsctl/server/obs_supervisor_spec.cr
+M  spec/obsctl/server/server_spec.cr
+M  spec/support/fake_obs_server.cr
+M  spec/support/tcp_gate.cr
+M  src/obsctl/obs/client.cr
+M  src/obsctl/server/obs_supervisor.cr
