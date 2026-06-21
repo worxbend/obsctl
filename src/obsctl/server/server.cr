@@ -27,7 +27,16 @@ module Obsctl
         log_broadcast = ->(entry : JSON::Any) { broadcast_log(entry) }
         diagnostic_log_broadcast = ->(entry : JSON::Any) { @diagnostic_log_broadcast.broadcast(entry) }
         @supervisor = ObsSupervisor.new(@config, @state, event_broadcast, log_broadcast, @logger, diagnostic_log_broadcast)
-        @executor = CommandExecutor.new(@config, @config_path, @state, @supervisor, @socket_path, client_count: -> { @registry.client_count }, log_broadcast: log_broadcast)
+        @executor = CommandExecutor.new(
+          @config,
+          @config_path,
+          @state,
+          @supervisor,
+          @socket_path,
+          client_count: -> { @registry.client_count },
+          dropped_reconnect_diagnostic_logs: -> { @diagnostic_log_broadcast.dropped_count },
+          log_broadcast: log_broadcast
+        )
         @ipc = IPC::UnixServer.new(@socket_path)
       end
 

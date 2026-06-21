@@ -53,6 +53,7 @@ describe Obsctl::CLI::ClientCommands do
         "uptime_seconds": 9,
         "socket_path": "/tmp/obsctl.sock",
         "client_count": 2,
+        "dropped_reconnect_diagnostic_logs": 3,
         "obs_connected": true,
         "reconnecting": false,
         "last_connected_at": "2026-06-20T12:00:00Z",
@@ -77,6 +78,7 @@ describe Obsctl::CLI::ClientCommands do
 
     output.should contain("server:\n  pid: 123")
     output.should contain("  socket_path: /tmp/obsctl.sock")
+    output.should contain("  dropped_reconnect_diagnostic_logs: 3")
     output.should contain("  last_connected_at: 2026-06-20T12:00:00Z")
     output.should contain("  last_disconnected_at: 2026-06-20T11:55:00Z")
     output.should contain("  last_reconnect_attempt_at: 2026-06-20T11:59:59Z")
@@ -92,6 +94,7 @@ describe Obsctl::CLI::ClientCommands do
       "uptime_seconds": 9,
       "socket_path": "/tmp/obsctl.sock",
       "client_count": 2,
+      "dropped_reconnect_diagnostic_logs": 5,
       "obs_connected": false,
       "reconnecting": true,
       "last_connected_at": "2026-06-20T12:00:00Z",
@@ -108,6 +111,7 @@ describe Obsctl::CLI::ClientCommands do
       .message
 
     output.should contain("last_connected_at: 2026-06-20T12:00:00Z")
+    output.should contain("dropped_reconnect_diagnostic_logs: 5")
     output.should contain("last_disconnected_at: 2026-06-20T12:05:00Z")
     output.should contain("last_reconnect_attempt_at: 2026-06-20T12:06:00Z")
     output.should contain("last_connection_failed_at: 2026-06-20T12:07:00Z")
@@ -134,6 +138,7 @@ describe Obsctl::CLI::ClientCommands do
       .execute(Obsctl::Domain::ServerStatusCommand.new)
       .message
 
+    output.should contain("dropped_reconnect_diagnostic_logs: 0")
     output.should contain("last_connection_failed_at: -")
   end
 

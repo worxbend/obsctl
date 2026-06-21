@@ -43,9 +43,17 @@ private def default_executor(
   config_path : String = "/tmp/obsctl-command-executor-spec.yml",
   supervisor : Obsctl::Server::ObsSupervisor? = nil,
   state : Obsctl::Server::StateStore = Obsctl::Server::StateStore.new,
+  dropped_reconnect_diagnostic_logs : Proc(UInt64)? = nil,
 ) : Obsctl::Server::CommandExecutor
   runtime_supervisor = supervisor || Obsctl::Server::ObsSupervisor.new(config, state)
-  Obsctl::Server::CommandExecutor.new(config, config_path, state, runtime_supervisor, "/tmp/obsctl.sock")
+  Obsctl::Server::CommandExecutor.new(
+    config,
+    config_path,
+    state,
+    runtime_supervisor,
+    "/tmp/obsctl.sock",
+    dropped_reconnect_diagnostic_logs: dropped_reconnect_diagnostic_logs
+  )
 end
 
 private def expect_error(response : Obsctl::IPC::Response, code : String) : Obsctl::IPC::ErrorPayload
@@ -98,7 +106,7 @@ describe Obsctl::Server::CommandExecutor do
         Obsctl::OBS::State::AudioState.new("Mic/Aux", muted: false, volume_percent: 72),
       ]
     ))
-    executor = default_executor(state: state)
+    executor = default_executor(state: state, dropped_reconnect_diagnostic_logs: -> { 7_u64 })
 
     combined = executor.execute(command_request(Obsctl::IPC::CommandPayload.new("status")))
     obs_only = executor.execute(command_request(Obsctl::IPC::CommandPayload.new("get_obs_status")))
@@ -108,6 +116,7 @@ describe Obsctl::Server::CommandExecutor do
     combined_result = combined.result.not_nil!
     combined_result["server"]["pid"].as_i.should eq(Process.pid)
     combined_result["server"]["obs_connected"].as_bool.should be_true
+    combined_result["server"]["dropped_reconnect_diagnostic_logs"].as_i64.should eq(7)
     parse_rfc3339(combined_result["server"]["last_connected_at"]).should be_a(Time)
     combined_result["server"]["last_disconnected_at"].raw.should be_nil
     combined_result["server"]["last_reconnect_attempt_at"].raw.should be_nil
@@ -126,6 +135,7 @@ describe Obsctl::Server::CommandExecutor do
     daemon_result = daemon_only.result.not_nil!
     daemon_result["pid"].as_i.should eq(Process.pid)
     daemon_result["obs_connected"].as_bool.should be_true
+    daemon_result["dropped_reconnect_diagnostic_logs"].as_i64.should eq(7)
     parse_rfc3339(daemon_result["last_connected_at"]).should be_a(Time)
     daemon_result["last_disconnected_at"].raw.should be_nil
     daemon_result["last_reconnect_attempt_at"].raw.should be_nil
@@ -140,6 +150,7 @@ describe Obsctl::Server::CommandExecutor do
     result = response.result.not_nil!
     result["obs_connected"].as_bool.should be_false
     result["reconnecting"].as_bool.should be_false
+    result["dropped_reconnect_diagnostic_logs"].as_i64.should eq(0)
     result["last_connected_at"].raw.should be_nil
     result["last_disconnected_at"].raw.should be_nil
     result["last_reconnect_attempt_at"].raw.should be_nil

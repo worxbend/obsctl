@@ -23,6 +23,7 @@ module Obsctl
         @socket_path : String,
         @started_at : Time = Time.utc,
         @client_count : Proc(Int32)? = nil,
+        @dropped_reconnect_diagnostic_logs : Proc(UInt64)? = nil,
         @log_broadcast : Proc(JSON::Any, Nil)? = nil,
       )
       end
@@ -131,17 +132,18 @@ module Obsctl
       private def server_status_for(snapshot : OBS::State::ObsSnapshot) : JSON::Any
         telemetry = @state.telemetry
         object({
-          "pid"                       => Process.pid,
-          "uptime_seconds"            => (Time.utc - @started_at).total_seconds.to_i64,
-          "socket_path"               => @socket_path,
-          "client_count"              => @client_count.try(&.call) || 0,
-          "obs_connected"             => snapshot.connected,
-          "reconnecting"              => telemetry.reconnecting,
-          "last_connected_at"         => timestamp(telemetry.last_connected_at),
-          "last_disconnected_at"      => timestamp(telemetry.last_disconnected_at),
-          "last_reconnect_attempt_at" => timestamp(telemetry.last_reconnect_attempt_at),
-          "last_connection_failed_at" => timestamp(telemetry.last_connection_failed_at),
-          "last_error"                => snapshot.last_error,
+          "pid"                               => Process.pid,
+          "uptime_seconds"                    => (Time.utc - @started_at).total_seconds.to_i64,
+          "socket_path"                       => @socket_path,
+          "client_count"                      => @client_count.try(&.call) || 0,
+          "dropped_reconnect_diagnostic_logs" => @dropped_reconnect_diagnostic_logs.try(&.call) || 0_u64,
+          "obs_connected"                     => snapshot.connected,
+          "reconnecting"                      => telemetry.reconnecting,
+          "last_connected_at"                 => timestamp(telemetry.last_connected_at),
+          "last_disconnected_at"              => timestamp(telemetry.last_disconnected_at),
+          "last_reconnect_attempt_at"         => timestamp(telemetry.last_reconnect_attempt_at),
+          "last_connection_failed_at"         => timestamp(telemetry.last_connection_failed_at),
+          "last_error"                        => snapshot.last_error,
         })
       end
 

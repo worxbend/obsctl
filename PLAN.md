@@ -1,18 +1,17 @@
 # obsctl Improvement Plan
 
-This plan reflects a fresh senior review of the 2026-06-21 reconnect
-determinism slice. The server reconnect specs now reserve OBS ports with
-`SpecSupport::TcpGate` instead of unavailable-then-bind `unused_tcp_port`
-windows, fake OBS exposes connection-specific accepted/closed WebSocket probes,
-and the supervisor uses `OBS::Client#wait_for_close` as its primary established
-disconnect signal with a short defensive fallback.
+This plan reflects a fresh senior review of the 2026-06-21 iteration 7
+diagnostic-observability slice. The iteration added focused
+`Server::BestEffortLogBroadcast` unit coverage and exposed aggregate dropped
+secondary reconnect diagnostic log-topic deliveries as
+`dropped_reconnect_diagnostic_logs` in daemon status and combined status.
 
 ## Current Assessment
 
 `obsctl` has a mature local daemon architecture: one server owns the OBS
 WebSocket session, thin CLI/TUI clients use Unix socket IPC, public CLI/IPC
-contracts are fixture-backed, reconnect behavior has focused primitive specs,
-and the reviewed default Crystal gate is green at 273 examples.
+contracts are fixture-backed, reconnect behavior has focused primitive and
+integration specs, and reconnect diagnostic fanout is bounded and lossy.
 
 The intended process model remains:
 
@@ -21,79 +20,58 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
                                                                <---- Unix socket IPC ----> obsctl TUI
 ```
 
-Completed or correct in the reviewed reconnect work:
+Completed or correct in the reviewed reconnect and diagnostic work:
 
-- `ObsSupervisor#reconnect` still preserves the generation-safe
-  accept-then-emit boundary: lifecycle acceptance, reconnect request
-  registration, active-client detachment, and authoritative reconnect state
-  mutation are decided under `@lifecycle_lock`.
-- Detached OBS clients are closed immediately after the lifecycle lock is
-  released and before state/log publication can block; cleanup remains protected
-  with `ensure`.
+- `ObsSupervisor#reconnect` preserves the generation-safe accept-then-emit
+  boundary: lifecycle acceptance, reconnect request registration, active-client
+  detachment, and authoritative reconnect state mutation are decided under
+  `@lifecycle_lock`, while publication side effects happen after the lock is
+  released.
+- Detached OBS clients are closed before state/log fanout can block, and cleanup
+  is protected with `ensure`.
 - Accepted reconnect state/log publication exceptions are diagnostic-only after
   lifecycle acceptance and detached-client cleanup.
-- Reconnect publication diagnostics write sanitized diagnostics to the runtime
-  logger first when one is configured.
-- Secondary reconnect diagnostic log-topic fanout is now routed through
+- Reconnect diagnostics write sanitized diagnostics to the runtime logger first.
+- Secondary reconnect diagnostic log-topic fanout is routed through
   `Server::BestEffortLogBroadcast`, which caps outstanding async deliveries and
-  drops new secondary diagnostics once capacity is exhausted.
+  drops new secondary diagnostics when capacity is exhausted.
 - Secondary reconnect diagnostics bypass `Server#broadcast_log`, avoiding
   duplicate runtime-log entries when the primary runtime diagnostic has already
   been written.
-- New coverage proves blocked secondary diagnostic fanout does not block
-  accepted reconnect completion; repeated blocked diagnostics reach the helper
-  bound, drop excess work, and later accepted reconnects still succeed.
-- Command-level coverage proves sanitized runtime diagnostics are written
-  exactly once whether secondary diagnostic delivery succeeds, raises, or
-  blocks.
-- The deterministic reconnect-vs-stop spec still proves the stop-wins
-  interleaving where reconnect observes a live generation, pauses, `stop`
-  completes, reconnect resumes, and stale public reconnect state remains
-  unobservable.
-- Server reconnect specs that previously depended on an unused-port reservation
-  window now use `SpecSupport::TcpGate`, which keeps deterministic ownership of
-  the selected port until fake OBS is opened on that exact port.
-- Fake OBS now exposes accepted and closed WebSocket connection identifiers,
-  letting reconnect specs assert the exact detached OBS connection was closed
-  instead of only observing that some close happened.
-- `OBS::Client#wait_for_close` records the sanitized terminal close/error and
-  lets the supervisor wait on reader close, reader failure, malformed-frame
-  close, or response-parser close without relying on the old 250 ms polling
-  loop as the primary signal.
-- `ObsSupervisor#wait_for_disconnect` still drains OBS events and keeps a
-  short fallback timeout, so stop/cancel paths and unexpected missed
-  notifications can still make progress.
+- Focused `BestEffortLogBroadcast` unit specs now cover capacity validation,
+  outstanding-count cleanup, exception containment, drop accounting while full,
+  and recovery after blocked workers drain.
+- Aggregate secondary reconnect diagnostic drops are exposed as
+  `dropped_reconnect_diagnostic_logs` in `server-status` and in the `server`
+  object of combined `status`, with CLI docs and golden fixtures updated.
+- Server reconnect specs use `SpecSupport::TcpGate` instead of
+  unavailable-then-bind `unused_tcp_port` windows.
+- Fake OBS exposes accepted/closed WebSocket connection identifiers, letting
+  specs prove the exact detached connection closed.
+- `OBS::Client#wait_for_close` is the supervisor's primary established
+  disconnect signal, with a short defensive fallback timeout.
 - Strict Rust compatibility remains manual/scheduled until `obsctl-rs` owns a
   matching contract fixture root.
 
 Reviewer findings from the latest pass:
 
-- No blocking correctness regression was found in the targeted reconnect
-  determinism behavior.
-- The port-window race called out in the previous plan is addressed in the
-  server reconnect specs reviewed here.
-- Connection-specific fake OBS close probes are now present and already used by
-  reconnect, command-executor, and server specs that need to prove detached
-  client cleanup.
-- Disconnect observation is materially improved, but it is not a general
-  multi-subscriber close event bus: `OBS::Client#wait_for_close` uses a single
-  buffered notification plus terminal-error fallback. That is sufficient for
-  the current supervisor owner, but future concurrent waiters would need a
-  condition-style primitive or per-waiter notification.
-- The supervisor fallback interval is now 100 ms instead of a fixed 250 ms poll.
-  This keeps liveness defensive but means event processing can still wait up to
-  the fallback interval when no close/error notification arrives.
-- `TcpGate` is a good local test primitive for OBS-unavailable scenarios, but
-  its docs and users should keep the distinction clear: fake OBS
-  `connection_attempt_count` counts accepted WebSocket connections, not failed
-  TCP connection attempts while the gate is closed.
-- The newly added close-notification specs cover remote close, protocol-error
-  close, parser-error close, explicit close, pending-request cleanup, and
-  secret-free close messages.
-- `BestEffortLogBroadcast` remains only indirectly tested through reconnect
-  behavior and still needs focused unit coverage.
-- Secondary reconnect diagnostic drops remain silent; this preserves liveness
-  but leaves operators without aggregate visibility into slow log subscribers.
+- No blocking correctness regression was found in the new diagnostic drop-count
+  behavior.
+- The new helper unit specs directly cover the previously indirect
+  `BestEffortLogBroadcast` behavior.
+- The public drop counter is useful operator telemetry for slow or blocked
+  reconnect diagnostic subscribers, and it does not change reconnect command
+  liveness.
+- The CLI human formatter currently renders a missing
+  `dropped_reconnect_diagnostic_logs` field as `0`. That preserves older-payload
+  formatting, but it conflates "daemon did not report this field" with "zero
+  drops". This should be resolved before treating mixed-version status output as
+  a polished contract.
+- The drop counter is process-local runtime telemetry and resets on daemon
+  restart; docs should say this explicitly.
+- The counter is stored as `UInt64` and serialized through JSON. Practically it
+  will not overflow, but the public JSON contract would be cleaner with an
+  explicitly JSON-safe non-negative integer policy or saturation behavior.
 - Ordinary state/log/event broadcasts still use synchronous
   `ClientRegistry#broadcast`, so broader slow-subscriber isolation is still
   future work.
@@ -116,8 +94,8 @@ Reviewer findings from the latest pass:
 3. Make accepted reconnect publication best-effort.
    - State/log publication failures are sanitized diagnostics after acceptance,
      not public command failures.
-   - `reconnect_obs` returns success once the live supervisor accepts the
-     request and detached-client cleanup has happened.
+   - `reconnect_obs` returns success once the live supervisor accepts the request
+     and detached-client cleanup has happened.
 
 4. Bound reconnect diagnostic log-topic fanout.
    - `Server::BestEffortLogBroadcast` limits outstanding secondary diagnostic
@@ -126,6 +104,12 @@ Reviewer findings from the latest pass:
    - Runtime logger delivery remains the durable primary sink.
    - Secondary log-topic delivery avoids the runtime logger path to prevent
      duplicate persisted diagnostics.
+
+5. Expose aggregate diagnostic drops.
+   - `dropped_reconnect_diagnostic_logs` is present in daemon status and
+     combined status.
+   - Command-executor, CLI, server, and golden contract specs cover the field.
+   - Focused helper specs cover the bounded fanout accounting that feeds it.
 
 ## Completed P1: Reconnect Determinism Slice
 
@@ -155,6 +139,9 @@ Reviewer findings from the latest pass:
      `spec/fixtures/contracts/`, `tests/fixtures/contracts/`, or
      `fixtures/contracts/`.
    - Populate matching `cli/human/`, `cli/json/`, and `ipc/` fixtures.
+   - Include `dropped_reconnect_diagnostic_logs` in the status fixtures or make
+     a deliberate public-contract decision if Rust should expose a different
+     observability shape.
    - Run `make contract-rs-compat` in a prepared dual-repo workspace and treat
      content differences as public-contract decisions.
 
@@ -165,6 +152,34 @@ Reviewer findings from the latest pass:
      dual-repo contexts.
    - Once the Rust fixtures exist and pass, decide whether scheduled/manual is
      enough or whether the workflow should become a required PR signal.
+
+## P1: Status And Diagnostic Contract Polish
+
+1. Clarify missing versus zero drop-count semantics.
+   - Decide whether older daemon payloads missing
+     `dropped_reconnect_diagnostic_logs` should render as `-`/unknown instead of
+     `0` in human output.
+   - Add a compatibility spec for the chosen behavior.
+   - Keep JSON output faithful to the daemon payload unless a versioned default
+     policy is explicitly chosen.
+
+2. Document counter lifecycle precisely.
+   - State that `dropped_reconnect_diagnostic_logs` is process-local runtime
+     telemetry.
+   - State that it resets on daemon restart.
+   - State that it counts only secondary reconnect diagnostic log-topic drops,
+     not ordinary log/state/event subscriber drops.
+
+3. Make the counter's numeric contract explicit.
+   - Prefer an `Int64`/JSON-safe non-negative counter or documented saturation
+     behavior over exposing an unbounded `UInt64` through `JSON::Any`.
+   - Add a small unit spec for the serialized field type.
+
+4. Consider exposing current diagnostic pressure.
+   - `outstanding` is useful internally but not currently public.
+   - If operators need more signal, add a separate status field such as
+     `reconnect_diagnostic_logs_in_flight`; avoid expanding status unless it
+     answers a real operational question.
 
 ## P1: Remaining Reconnect Test Polish
 
@@ -192,27 +207,19 @@ Reviewer findings from the latest pass:
      avoid implying failed TCP attempts are counted.
    - Prefer connection-id assertions for any future overlapping reconnect specs.
 
-## P1: Diagnostic Fanout Polish
+## P1: Broader Slow-Subscriber Policy
 
-1. Add focused `BestEffortLogBroadcast` unit specs.
-   - Cover positive-capacity validation.
-   - Cover exception containment and outstanding-count decrement after raises.
-   - Cover drop accounting while at capacity.
-   - Cover recovery after blocked workers are released.
-
-2. Make secondary diagnostic drops observable without compromising liveness.
-   - Add an aggregate counter or rate-limited runtime log entry for dropped
-     secondary reconnect diagnostics.
-   - Avoid per-drop log spam on hot failure paths.
-   - Consider exposing the drop count in daemon diagnostics or a future
-     `server-status` observability section.
-
-3. Decide whether the helper should be a broader slow-subscriber primitive.
+1. Decide whether `BestEffortLogBroadcast` should become a broader primitive.
    - Today it is intentionally scoped to reconnect diagnostics.
    - Ordinary state/log/event broadcasts still use synchronous
      `ClientRegistry#broadcast`.
    - A future registry-level slow-subscriber policy should drop, evict, or bound
      slow sessions rather than blocking command paths indefinitely.
+
+2. Preserve runtime logging as the durable sink.
+   - Do not route best-effort secondary diagnostics back through
+     `Server#broadcast_log` if the primary logger has already written them.
+   - Keep secret redaction before every public or persisted diagnostic surface.
 
 ## P1: Main CI And Validation Polish
 
@@ -307,10 +314,10 @@ Add breadth only after the daemon/IPC/reconnect contract remains stable.
 
 ## Suggested Next Pull Requests
 
-1. Add focused `BestEffortLogBroadcast` unit specs and an aggregate drop
-   observability policy.
-2. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
+1. Coordinate the Rust-side `obsctl-rs` contract fixture root and run
    `make contract-rs-compat` in a prepared dual-repo workspace.
+2. Polish the new status telemetry contract: missing-versus-zero human output,
+   counter reset/scope docs, and JSON-safe numeric semantics.
 3. Continue reconnect spec polish by replacing remaining sleep/no-event
    assertions with deterministic probes where practical.
 4. Decide whether `OBS::Client#wait_for_close` should remain a single-owner

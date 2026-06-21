@@ -122,7 +122,8 @@ OBS-only command and is not an alias for the combined `status` command.
 `obsctl server-status` checks only the local daemon. Its output includes `pid`,
 `uptime_seconds`, `socket_path`, `client_count`, `obs_connected`,
 `reconnecting`, `last_connected_at`, `last_disconnected_at`,
-`last_reconnect_attempt_at`, `last_connection_failed_at`, and `last_error`.
+`last_reconnect_attempt_at`, `last_connection_failed_at`, `last_error`, and
+`dropped_reconnect_diagnostic_logs`.
 Timestamp fields are RFC3339 strings when known and `null` in JSON when absent.
 `last_disconnected_at` is updated only when an established OBS session
 transitions to disconnected. `last_connection_failed_at` is the timestamp of the
@@ -130,6 +131,11 @@ most recent failed OBS connection attempt. It can describe a previous failure
 even while OBS is currently connected, and successful connections do not clear
 it; only a newer failed attempt replaces it. `last_reconnect_attempt_at` records
 when the supervisor last started an OBS connection attempt.
+`dropped_reconnect_diagnostic_logs` is an aggregate counter for secondary
+reconnect diagnostic `logs` topic messages that were dropped because bounded
+best-effort fanout was full. Runtime logging is still the durable primary
+diagnostic sink; the counter gives operators visibility into lossy subscriber
+delivery without emitting one log entry per drop.
 
 `obsctl reconnect` asks the running server supervisor to reconnect OBS. Success
 means the running supervisor accepted a generation-scoped reconnect request, or

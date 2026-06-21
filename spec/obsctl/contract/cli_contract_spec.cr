@@ -83,7 +83,7 @@ describe "CLI public contract" do
 
         received.receive.command.not_nil!.name.should eq("status")
         exit_code.should eq(0)
-        stdout.should eq("server:\n  pid: 4242\n  uptime_seconds: 37\n  socket_path: /tmp/obsctl-contract/obsctl.sock\n  client_count: 2\n  obs_connected: true\n  reconnecting: false\n  last_connected_at: 2026-06-20T12:00:00Z\n  last_disconnected_at: -\n  last_reconnect_attempt_at: 2026-06-20T11:59:59Z\n  last_connection_failed_at: -\n  last_error: -\nobs:\n  connected: true\n  current_scene: Main Camera\n  scenes:\n    * Main Camera\n    - Break\n  audio:\n    - Mic/Aux live volume=72%\n")
+        stdout.should eq("server:\n  pid: 4242\n  uptime_seconds: 37\n  socket_path: /tmp/obsctl-contract/obsctl.sock\n  client_count: 2\n  dropped_reconnect_diagnostic_logs: 4\n  obs_connected: true\n  reconnecting: false\n  last_connected_at: 2026-06-20T12:00:00Z\n  last_disconnected_at: -\n  last_reconnect_attempt_at: 2026-06-20T11:59:59Z\n  last_connection_failed_at: -\n  last_error: -\nobs:\n  connected: true\n  current_scene: Main Camera\n  scenes:\n    * Main Camera\n    - Break\n  audio:\n    - Mic/Aux live volume=72%\n")
         stderr.should eq("")
       end
     end

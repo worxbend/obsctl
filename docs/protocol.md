@@ -58,7 +58,7 @@ Success response:
 Combined status response:
 
 ```json
-{"id":"req-000004","type":"response","ok":true,"result":{"server":{"pid":4242,"uptime_seconds":37,"socket_path":"/tmp/obsctl/obsctl.sock","client_count":2,"obs_connected":true,"reconnecting":false,"last_connected_at":"2026-06-20T12:00:00Z","last_disconnected_at":null,"last_reconnect_attempt_at":"2026-06-20T11:59:59Z","last_connection_failed_at":null,"last_error":null},"obs":{"connected":true,"current_scene":"Main Camera","scenes":[],"audio_inputs":[]}}}
+{"id":"req-000004","type":"response","ok":true,"result":{"server":{"pid":4242,"uptime_seconds":37,"socket_path":"/tmp/obsctl/obsctl.sock","client_count":2,"obs_connected":true,"reconnecting":false,"last_connected_at":"2026-06-20T12:00:00Z","last_disconnected_at":null,"last_reconnect_attempt_at":"2026-06-20T11:59:59Z","last_connection_failed_at":null,"last_error":null,"dropped_reconnect_diagnostic_logs":0},"obs":{"connected":true,"current_scene":"Main Camera","scenes":[],"audio_inputs":[]}}}
 ```
 
 Server status fields are the same in the combined `status` payload and the
@@ -70,6 +70,11 @@ recent failed OBS connection attempt, not necessarily the current disconnected
 episode, and a later successful connection does not clear it. Only a newer
 failed connection attempt replaces it. `last_reconnect_attempt_at` records when
 the supervisor last started an OBS connection attempt.
+`dropped_reconnect_diagnostic_logs` is an aggregate count of secondary
+reconnect diagnostic `logs` topic messages dropped because the bounded
+best-effort fanout was already at capacity. Runtime logging remains the durable
+primary diagnostic sink; this field is telemetry for lossy subscriber fanout,
+not per-drop log spam.
 
 Explicit `reconnect_obs` requests return success only when the supervisor loop
 is alive. Success means the running supervisor accepted a generation-scoped

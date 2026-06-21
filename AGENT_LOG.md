@@ -2605,3 +2605,95 @@ M  spec/support/fake_obs_server.cr
 M  spec/support/tcp_gate.cr
 M  src/obsctl/obs/client.cr
 M  src/obsctl/server/obs_supervisor.cr
+2026-06-21T09:18:44Z iteration 7 started remaining=13022s
+2026-06-21T09:18:44Z iteration 7 preplanner effective budgets untracked_scan_max_bytes=536870912 untracked_scan_max_count=10000 snapshot_copy_max_bytes=536870912 snapshot_copy_max_count=10000 snapshot_copy_max_file_bytes=134217728
+2026-06-21T09:18:44Z iteration 7 disposable preplanner repo created path=/tmp/agent-loop-preplanner-repo-24zgxp_4/repo copied_entries=183
+2026-06-21T09:18:44Z iteration 7 ideator phase started count=3
+2026-06-21T09:18:44Z iteration 7 ideator phase concurrency workers=3
+2026-06-21T09:18:44Z iteration 7 ideator 1 role="the pragmatist" started
+2026-06-21T09:18:44Z iteration 7 ideator 2 role="the architect" started
+2026-06-21T09:18:44Z iteration 7 ideator 3 role="the contrarian" started
+2026-06-21T09:18:54Z iteration 7 ideator 1 role="the pragmatist" completed status=0
+2026-06-21T09:18:57Z iteration 7 ideator 2 role="the architect" completed status=0
+2026-06-21T09:19:05Z iteration 7 ideator 3 role="the contrarian" completed status=0
+2026-06-21T09:19:05Z iteration 7 ideator phase completed approaches=3
+2026-06-21T09:19:05Z iteration 7 selector started approaches=3
+2026-06-21T09:19:14Z iteration 7 selector completed status=0
+2026-06-21T09:19:14Z iteration 7 disposable preplanner repo cleanup path=/tmp/agent-loop-preplanner-repo-24zgxp_4/repo
+2026-06-21T09:19:14Z iteration 7 selector rejected alternative role="the pragmatist" approach="Contract-First Stabilization: make the next planner treat public behavior as the product boundary, prioritizing fixture ownership, compatibility gates, and observability polish..." reason="Strong direction, but selected as-is it underplays the need for a fallback path if obsctl-rs is absent or unprepared."
+2026-06-21T09:19:14Z iteration 7 selector rejected alternative role="the architect" approach="Contract-First Stabilization: treat the Crystal implementation as already functionally mature and shift the next planner toward public-contract ownership before adding more prod..." reason="Strong framing around public-contract ownership, but it risks becoming too dependent on cross-repo availability without naming how to keep single-repo progress useful."
+2026-06-21T09:19:14Z iteration 7 selector rejected alternative role="the contrarian" approach="Stabilize the Contract Before Expanding Surface Area: pause feature and UI polish, treat the Crystal implementation as the reference contract, and make the next planning cycle r..." reason="Correctly challenges feature expansion, but too absolute about pausing local polish; some polish is strategically valuable when it directly reduces contract ambiguity or operational blind spots."
+2026-06-21T09:19:14Z iteration 7 selector alternatives persisted count=3
+2026-06-21T09:19:14Z iteration 7 selector structured alternatives persisted count=3
+2026-06-21T09:19:14Z iteration 7 planner started
+2026-06-21T09:20:08Z iteration 7 plan: 4 task(s) in 2 phase(s). This iteration uses the local polish escape hatch while preserving the contract-first direction: it hardens reconnect diagnostic infrastructure, makes an existing lossy path observable through the public status contract, and updates golden fixtures so future Crystal/Rust compatibility checks can reason about the new field.
+2026-06-21T09:20:08Z iteration 7 phase 1 started parallel=True tasks=2
+2026-06-21T09:22:10Z iteration 7 task t1 ('Add BestEffortLogBroadcast Unit Specs') status=0
+2026-06-21T09:24:48Z iteration 7 task t2 ('Expose Reconnect Diagnostic Drop Count') status=0
+2026-06-21T09:24:48Z iteration 7 phase 2 started parallel=False tasks=2
+2026-06-21T09:26:04Z iteration 7 task t3 ('Document Status Contract Change') status=0
+2026-06-21T09:26:37Z iteration 7 task t4 ('Update Project Trackers') status=0
+- Updated `TODO.md` to record focused `BestEffortLogBroadcast` unit coverage
+  and public `dropped_reconnect_diagnostic_logs` observability for combined
+  status and server-status output.
+- Adjusted `Planned Next` back toward Rust-side contract fixture ownership and
+  contract-adjacent polish now that the local reconnect diagnostic coverage and
+  aggregate drop telemetry slice is in place.
+- Validation: `git diff --check -- TODO.md AGENT_LOG.md` passed. No Crystal
+  specs were run for this markdown-only tracker update.
+2026-06-21T09:27:36Z iteration 7 task t4 ('Update Project Trackers') status=0
+2026-06-21T09:27:36Z iteration 7 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 7 diagnostic drop telemetry
+
+- Iteration reviewed:
+  - focused `Server::BestEffortLogBroadcast` unit specs
+  - `dropped_reconnect_diagnostic_logs` status payload wiring in `CommandExecutor` and `Server`
+  - CLI human/JSON handling for combined `status` and daemon-only `server-status`
+  - golden CLI fixtures and public command/protocol docs
+  - `TODO.md`, `PLAN.md`, `MEMORY.md`, and planner telemetry changes
+- What was done correctly:
+  - `BestEffortLogBroadcast` now has direct unit coverage for invalid capacity, outstanding-count accounting, exception containment, drop counting while full, and accepting work after blocked workers drain.
+  - The dropped reconnect diagnostic counter is exposed in both daemon status and the `server` object of combined status without changing reconnect command liveness.
+  - The server wires the counter to the same bounded helper that owns secondary reconnect diagnostic delivery, so the public field reflects the actual drop source.
+  - CLI human output, JSON envelope assertions, command-executor specs, server specs, docs, and golden fixtures were updated for the new field.
+  - Focused reviewer validation passed: `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/best_effort_log_broadcast_spec.cr spec/obsctl/server/command_executor_spec.cr spec/obsctl/cli/client_commands_spec.cr spec/obsctl/cli/main_spec.cr spec/obsctl/contract/cli_contract_spec.cr` with 55 examples.
+- What was found:
+  - No blocking implementation regression was found in the targeted diagnostic drop-count behavior.
+  - Human CLI formatting currently renders a missing `dropped_reconnect_diagnostic_logs` field as `0`, which conflates older-daemon/unknown telemetry with a real zero-drop value.
+  - The drop counter is runtime-local and resets on daemon restart; docs describe the counter but should explicitly state reset/scope semantics.
+  - The counter is stored as `UInt64` and serialized through `JSON::Any`; a JSON-safe integer or saturation policy would make the public contract sharper.
+  - Broader slow-subscriber isolation remains future work because ordinary state/log/event fanout still uses synchronous `ClientRegistry#broadcast`.
+- Top improvement proposals:
+  - Decide and test mixed-version status behavior: show missing drop telemetry as unknown in human output, or explicitly document the current zero default.
+  - Document that `dropped_reconnect_diagnostic_logs` is process-local, resets on daemon restart, and counts only secondary reconnect diagnostic log-topic drops.
+  - Make the counter's numeric contract explicit with an `Int64`/saturating policy and a serialized-field type spec.
+  - Coordinate Rust-side contract fixtures including the new status field, then run `make contract-rs-compat` in a prepared dual-repo workspace.
+2026-06-21T09:32:42Z iteration 7 reviewer completed status=0
+2026-06-21T09:32:42Z iteration 7 memory updated
+2026-06-21T09:32:42Z iteration 7 completed validation_status=0
+2026-06-21T09:32:42Z iteration 7 checkpoint started
+2026-06-21T09:32:42Z iteration 7 checkpoint status before commit:
+M  AGENT_LOG.md
+M  ALTERNATIVES.jsonl
+M  MEMORY.md
+M  PLAN.md
+M  README.md
+M  SCORES.jsonl
+M  TODO.md
+M  docs/commands.md
+M  docs/protocol.md
+M  spec/fixtures/contracts/cli/human/server_status_success.txt
+M  spec/fixtures/contracts/cli/human/status_success.txt
+M  spec/fixtures/contracts/cli/json/server_status_success.json
+M  spec/fixtures/contracts/cli/json/status_success.json
+M  spec/fixtures/contracts/cli_status_success.json
+M  spec/obsctl/cli/client_commands_spec.cr
+M  spec/obsctl/cli/main_spec.cr
+M  spec/obsctl/contract/cli_contract_spec.cr
+A  spec/obsctl/server/best_effort_log_broadcast_spec.cr
+M  spec/obsctl/server/command_executor_spec.cr
+M  spec/obsctl/server/server_spec.cr
+M  src/obsctl/cli/client_commands.cr
+M  src/obsctl/server/command_executor.cr
+M  src/obsctl/server/server.cr

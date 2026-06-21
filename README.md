@@ -63,8 +63,9 @@ scene, scenes, and audio inputs.
 
 `obsctl server-status` reports only the local daemon status: PID, uptime,
 socket path, subscribed client count, OBS connection state, explicit
-reconnecting state, reconnect timestamps, and last error. `last_disconnected_at`
-is set only after an established OBS session disconnects;
+reconnecting state, reconnect timestamps, last error, and
+`dropped_reconnect_diagnostic_logs`. `last_disconnected_at` is set only after an
+established OBS session disconnects;
 `last_connection_failed_at` records the most recent failed OBS connection
 attempt. It is historical telemetry, not just the current disconnected episode,
 and a later successful connection does not clear it. `obsctl reconnect` success
@@ -80,6 +81,11 @@ the server logs them with secret redaction, and the command still succeeds. If
 the supervisor has already exited, for example after startup failure with
 `reconnect.enabled: false`, `obsctl reconnect` returns `OBS_UNAVAILABLE` with a
 message telling the operator to restart the server or enable reconnect.
+`dropped_reconnect_diagnostic_logs` counts secondary reconnect diagnostic
+`logs` topic messages dropped because bounded best-effort fanout was at
+capacity. Runtime logging remains the durable primary diagnostic sink, so this
+is aggregate telemetry for slow or blocked subscribers rather than per-drop log
+spam.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
 

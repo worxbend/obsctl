@@ -698,6 +698,9 @@ Implemented:
   - server-owned `BestEffortLogBroadcast` caps outstanding reconnect
     diagnostic log-topic deliveries and drops new secondary diagnostics when
     capacity is exhausted; runtime logging remains the durable primary sink
+  - aggregate dropped secondary reconnect diagnostic log-topic deliveries are
+    exposed as `dropped_reconnect_diagnostic_logs` in daemon status and the
+    combined status server object without changing reconnect command liveness
   - reconnect diagnostic log-topic fanout bypasses `Server#broadcast_log`, so
     primary runtime-log diagnostics are not duplicated when secondary delivery
     succeeds, while ordinary server log events still use the normal logs-topic
@@ -725,6 +728,9 @@ Implemented:
   - non-interactive OBS control commands are thin IPC clients
   - `status` is the combined daemon-and-OBS status command
   - `server-status` exists with PID, uptime, socket path, connected state, explicit reconnecting state, reconnect timestamps including `last_connection_failed_at`, last error, and subscribed client count
+  - `status` and `server-status` human and JSON output include
+    `dropped_reconnect_diagnostic_logs` as aggregate lossy secondary diagnostic
+    fanout telemetry
   - `obs-status`, `reconnect`, and guarded `shutdown-server` are thin IPC client commands
 - TUI:
   - currently a simple ANSI dashboard with raw key input and a command palette state machine
@@ -795,6 +801,11 @@ Implemented:
   - command-level and server-level reconnect diagnostic specs prove sanitized
     diagnostics reach the runtime logger exactly once when secondary log-topic
     delivery succeeds, raises, or blocks
+  - focused `BestEffortLogBroadcast` unit specs cover capacity validation,
+    outstanding-count accounting, exception containment, drop accounting while
+    full, and acceptance recovery after blocked workers are released
+  - command executor, CLI, server, and golden contract specs cover
+    `dropped_reconnect_diagnostic_logs` in daemon status and combined status
   - command-level reconnect specs prove raising state/log publication callbacks
     do not turn an accepted `reconnect_obs` command into `SERVER_ERROR`, while
     detached-client cleanup still happens and diagnostics remain sanitized
@@ -988,6 +999,12 @@ Partial:
   with excess drops, and logger-fallback coverage proving sanitized diagnostics
   are persisted exactly once when diagnostic log-topic delivery succeeds,
   raises, or blocks
+- focused `BestEffortLogBroadcast` unit specs cover constructor capacity
+  validation, accepted-worker outstanding accounting, exception cleanup,
+  drop-count increments while full, and acceptance after blocked workers drain
+- aggregate dropped secondary reconnect diagnostic log-topic deliveries are
+  observable through `dropped_reconnect_diagnostic_logs` in `server-status` and
+  the combined `status` server object, with docs and golden fixtures updated
 - command-level reconnect coverage proves raising state/log publication
   callbacks stay diagnostic-only after acceptance and never surface as
   `SERVER_ERROR`
@@ -1086,12 +1103,16 @@ With reconnect lifecycle publication decoupled, detached-client cleanup ordered
 before blockable fanout, publication-failure diagnostics now runtime-logger
 primary with bounded, lossy, non-blocking secondary log-topic fanout, and the
 reconnect flake cleanup slice removing port-window races plus polling-primary
-disconnect detection, the next highest-value work moves back to contract and
-polish items.
+disconnect detection, focused `BestEffortLogBroadcast` unit coverage and
+aggregate reconnect diagnostic drop observability are now in place. The next
+highest-value work moves back to contract ownership and contract-adjacent
+polish.
 
 1. Add or coordinate the Rust-side shared contract fixture root so the manual
    or scheduled strict compatibility workflow can become a required signal.
 2. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
    when `../obsctl-rs` is available with compatible contract fixtures.
-3. Return to demo config, packaging polish, and optional `termisu` backend
-   evaluation once the stabilized contract gates stay green.
+3. Keep contract-adjacent polish next: review fixture wording and status
+   examples for the new reconnect diagnostic drop field, then return to demo
+   config, packaging polish, and optional `termisu` backend evaluation once the
+   stabilized contract gates stay green.

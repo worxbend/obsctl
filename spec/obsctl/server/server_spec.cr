@@ -257,6 +257,7 @@ describe Obsctl::Server::Server do
     (status["uptime_seconds"].as_i64 >= 0).should be_true
     status["socket_path"].as_s.should eq(path)
     status["client_count"].as_i.should eq(1)
+    status["dropped_reconnect_diagnostic_logs"].as_i64.should eq(0)
     status["obs_connected"].as_bool.should be_false
     status["reconnecting"].as_bool.should be_false
     status.as_h.has_key?("last_connected_at").should be_true

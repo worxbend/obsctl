@@ -93,6 +93,7 @@ describe Obsctl::CLI::Main do
           "uptime_seconds": 5,
           "socket_path": "/tmp/obsctl.sock",
           "client_count": 1,
+          "dropped_reconnect_diagnostic_logs": 3,
           "obs_connected": true,
           "reconnecting": false,
           "last_connected_at": "2026-06-20T12:00:00Z",
@@ -121,6 +122,7 @@ describe Obsctl::CLI::Main do
         exit_code.should eq(0)
         stderr.to_s.should eq("")
         stdout.to_s.should contain("server:\n  pid: 123")
+        stdout.to_s.should contain("  dropped_reconnect_diagnostic_logs: 3")
         stdout.to_s.should contain("  last_connected_at: 2026-06-20T12:00:00Z")
         stdout.to_s.should contain("  last_disconnected_at: 2026-06-20T11:55:00Z")
         stdout.to_s.should contain("  last_reconnect_attempt_at: 2026-06-20T11:59:59Z")
@@ -139,6 +141,7 @@ describe Obsctl::CLI::Main do
         "uptime_seconds": 5,
         "socket_path": "/tmp/obsctl.sock",
         "client_count": 1,
+        "dropped_reconnect_diagnostic_logs": 5,
         "obs_connected": false,
         "reconnecting": true,
         "last_connected_at": "2026-06-20T12:00:00Z",
@@ -160,6 +163,7 @@ describe Obsctl::CLI::Main do
         exit_code.should eq(0)
         stderr.to_s.should eq("")
         stdout.to_s.should contain("last_connected_at: 2026-06-20T12:00:00Z")
+        stdout.to_s.should contain("dropped_reconnect_diagnostic_logs: 5")
         stdout.to_s.should contain("last_disconnected_at: 2026-06-20T12:05:00Z")
         stdout.to_s.should contain("last_reconnect_attempt_at: 2026-06-20T12:06:00Z")
         stdout.to_s.should contain("last_connection_failed_at: 2026-06-20T12:07:00Z")
@@ -176,6 +180,7 @@ describe Obsctl::CLI::Main do
           "uptime_seconds": 5,
           "socket_path": "/tmp/obsctl.sock",
           "client_count": 1,
+          "dropped_reconnect_diagnostic_logs": 3,
           "obs_connected": true,
           "reconnecting": false,
           "last_connected_at": "2026-06-20T12:00:00Z",
@@ -205,6 +210,7 @@ describe Obsctl::CLI::Main do
         envelope = parse_single_json(stdout)
         envelope["ok"].as_bool.should be_true
         envelope["result"]["server"]["obs_connected"].as_bool.should be_true
+        envelope["result"]["server"]["dropped_reconnect_diagnostic_logs"].as_i64.should eq(3)
         envelope["result"]["server"]["last_connected_at"].as_s.should eq("2026-06-20T12:00:00Z")
         envelope["result"]["server"]["last_disconnected_at"].as_s.should eq("2026-06-20T11:55:00Z")
         envelope["result"]["server"]["last_reconnect_attempt_at"].as_s.should eq("2026-06-20T11:59:59Z")
@@ -225,6 +231,7 @@ describe Obsctl::CLI::Main do
         "uptime_seconds": 5,
         "socket_path": "/tmp/obsctl.sock",
         "client_count": 1,
+        "dropped_reconnect_diagnostic_logs": 5,
         "obs_connected": false,
         "reconnecting": true,
         "last_connected_at": "2026-06-20T12:00:00Z",
@@ -246,6 +253,7 @@ describe Obsctl::CLI::Main do
 
         envelope = parse_single_json(stdout)
         envelope["ok"].as_bool.should be_true
+        envelope["result"]["dropped_reconnect_diagnostic_logs"].as_i64.should eq(5)
         envelope["result"]["last_connected_at"].as_s.should eq("2026-06-20T12:00:00Z")
         envelope["result"]["last_disconnected_at"].as_s.should eq("2026-06-20T12:05:00Z")
         envelope["result"]["last_reconnect_attempt_at"].as_s.should eq("2026-06-20T12:06:00Z")

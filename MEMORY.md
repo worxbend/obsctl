@@ -36,6 +36,7 @@
 [learning] Detached best-effort fanout protects command liveness, but it should be bounded or evict slow subscribers so blocked diagnostic workers cannot accumulate.
 [pattern] Reconnect diagnostic log-topic fanout should stay bounded, lossy, and separate from runtime logging; runtime logs are the durable sink, log-topic delivery is secondary telemetry.
 [learning] Silent best-effort diagnostic drops preserve liveness but need aggregate observability if operators must diagnose slow log subscribers.
+[learning] Public telemetry defaults must distinguish unknown/missing fields from real zero values, especially for mixed-version CLI/server status output.
 [pattern] Returning a typed result enum from a synchronization primitive eliminates inference at call sites; callers should match on `Requested`/`Interrupted`/`TimedOut`/`Cancelled` rather than comparing epoch values.
 [pattern] OBS established-disconnect detection should wait on client close/error notifications first and keep only a short defensive fallback timeout.
 [learning] A single buffered close notification is adequate for one supervisor owner, but concurrent waiters need per-waiter or condition-style notification semantics.
