@@ -2310,3 +2310,59 @@ M  src/obsctl/server/server.cr
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` passed with 267 examples.
   - `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build` passed.
   - `make lint` passed via the existing `ameba not installed; run shards install` skip path.
+2026-06-21T08:35:31Z iteration 4 task t4 ('Update trackers and validate') status=0
+2026-06-21T08:35:31Z iteration 4 reviewer started
+
+## 2026-06-21 Fresh reviewer audit: iteration 4 reconnect diagnostic liveness
+
+- Iteration reviewed:
+  - `ObsSupervisor#publish_reconnect_diagnostic` runtime-logger-first behavior,
+    detached log-topic diagnostic broadcast, secondary broadcast failure
+    fallback, and secret redaction.
+  - Supervisor specs for blocked diagnostic log-topic fanout after reconnect
+    state publication failure and reconnect log publication failure.
+  - Command-executor spec proving runtime logger fallback when diagnostic
+    log-topic delivery raises.
+  - `TODO.md`, `ALTERNATIVES.jsonl`, and iteration log updates.
+- What was done correctly:
+  - Accepted reconnect commands no longer wait on diagnostic log-topic fanout
+    after state/log publication failures.
+  - Runtime logger delivery is now attempted before secondary log-topic
+    diagnostic delivery, preserving a durable local diagnostic path when a
+    logger is configured.
+  - Secondary diagnostic broadcast failures are contained and logged through the
+    runtime logger fallback path.
+  - New coverage proves reconnect succeeds while diagnostic delivery is blocked,
+    and proves sensitive diagnostic details are redacted from runtime logs.
+  - The prior generation-safe accept-then-emit and detached-client
+    close-before-fanout invariants are preserved.
+- What was found:
+  - No blocking correctness regression was found in the targeted diagnostic
+    liveness behavior.
+  - The detached diagnostic broadcast is an untracked spawned fiber. This
+    protects command liveness, but a permanently blocked subscriber can leave
+    a parked fiber behind; repeated failures could accumulate parked fibers.
+  - Successful secondary diagnostic broadcast can duplicate runtime-log entries
+    because `Server#broadcast_log` also writes to the configured logger after
+    registry broadcast.
+  - Close-observed specs still do not identify which accepted OBS connection
+    closed, and reconnect flake sources around unavailable-then-bind port
+    windows plus `wait_for_disconnect` polling remain.
+- Top improvement proposals:
+  - Add a bounded best-effort diagnostic fanout helper or queue so blocked
+    subscribers cannot accumulate unbounded detached workers.
+  - Define slow-subscriber behavior for logs-topic diagnostics, preferably
+    dropping or evicting slow subscribers while keeping runtime logs durable.
+  - Avoid duplicate runtime-log entries for diagnostics that are already written
+    through the primary logger path.
+  - Continue reconnect flake cleanup with deterministic port reservation,
+    connection-specific close probes, and event-driven disconnect observation.
+2026-06-21T08:39:05Z iteration 4 reviewer completed status=0
+2026-06-21T08:39:05Z iteration 4 memory updated
+2026-06-21T08:39:05Z iteration 4 completed validation_status=0
+2026-06-21T08:39:05Z iteration 4 checkpoint started
+2026-06-21T08:39:05Z iteration 4 checkpoint status before commit:
+M  AGENT_LOG.md
+M  MEMORY.md
+M  PLAN.md
+M  SCORES.jsonl

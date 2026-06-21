@@ -1,18 +1,18 @@
 # obsctl Improvement Plan
 
 This plan reflects a fresh senior review of the 2026-06-21 reconnect
-best-effort publication slice. The implementation now treats accepted reconnect
-state/log publication exceptions as diagnostic-only after lifecycle acceptance
-and detached-client cleanup. The next highest-value work is to make those
-diagnostics themselves non-blocking and independently durable, then continue the
-remaining reconnect flake cleanup.
+diagnostic-liveness slice. Accepted reconnects now complete after lifecycle
+acceptance and detached-client cleanup even when publication-failure diagnostics
+cannot be delivered to log-topic subscribers. The next highest-value work is to
+bound the remaining detached fanout resource risk, then continue reconnect flake
+cleanup and Rust fixture ownership.
 
 ## Current Assessment
 
 `obsctl` has a mature local daemon architecture: one server owns the OBS
 WebSocket session, thin CLI/TUI clients use Unix socket IPC, public CLI/IPC
 contracts are fixture-backed, reconnect behavior has focused primitive specs,
-and the default Crystal gate is green at 264 examples.
+and the default Crystal gate is green at 267 examples.
 
 The intended process model remains:
 
@@ -23,28 +23,24 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
 
 Completed or correct in the reviewed slice:
 
-- `ObsSupervisor#reconnect` preserves the accept-then-emit boundary:
+- `ObsSupervisor#reconnect` still preserves the accept-then-emit boundary:
   lifecycle/generation acceptance, reconnect request registration, active-client
   detachment, and authoritative reconnect state mutation are decided under
   `@lifecycle_lock`.
-- Subscriber state fanout and log fanout run after `@lifecycle_lock` is
-  released.
 - Detached OBS clients are closed immediately after the lifecycle lock is
-  released and before state/log fanout can block.
-- Detached-client cleanup is protected with `ensure`, so a raising state/log
-  publication callback does not skip client close.
-- Accepted reconnect publication exceptions are contained inside
-  `ObsSupervisor#publish_reconnect`; `CommandExecutor` now returns reconnect
-  success once the supervisor accepts the request and cleanup has happened.
-- Publication failure diagnostics are redacted before log-topic delivery or
-  runtime-log fallback.
-- Blocked-publication specs now prove old OBS WebSocket close is observed before
-  blocked state fanout or blocked log fanout is released.
-- Raising-publication specs cover both state publication and log publication,
-  including command-level `reconnect_obs` responses.
-- `StateStore#mark_reconnect_requested_and_build_payload` makes the deferred
-  mutation/payload API explicit, and focused specs prove callback timing,
-  payload equality, and one-time telemetry mutation.
+  released and before state/log fanout can block; cleanup remains protected with
+  `ensure`.
+- Accepted reconnect state/log publication exceptions are diagnostic-only after
+  lifecycle acceptance and detached-client cleanup.
+- Reconnect publication diagnostics now write sanitized diagnostics to the
+  runtime logger first, when one is configured.
+- Log-topic delivery of reconnect diagnostics is secondary and detached, so a
+  blocked `@log_broadcast` callback no longer blocks the accepted reconnect
+  command.
+- New supervisor specs cover blocked diagnostic log fanout after both state
+  publication failure and log publication failure.
+- New command-level coverage proves sanitized fallback diagnostics reach the
+  runtime logger when diagnostic log-topic delivery itself raises.
 - The deterministic reconnect-vs-stop spec still proves the stop-wins
   interleaving where reconnect observes a live generation, pauses, `stop`
   completes, reconnect resumes, and stale public reconnect state remains
@@ -54,51 +50,50 @@ Completed or correct in the reviewed slice:
 
 Reviewer findings from the latest pass:
 
-- No blocking regression was found in the targeted exception-containment
-  behavior.
-- The implementation satisfies the previous P0 semantic decision: accepted
-  reconnects are no longer turned into `SERVER_ERROR` responses by raising
-  state/log publication callbacks.
-- The detached-client close guard is now set after `client.close`, which is
-  mechanically stronger if `OBS::Client#close` ever stops rescuing internally.
-- A remaining liveness gap exists in diagnostic reporting: when a publication
-  callback raises, `publish_reconnect_diagnostic` synchronously reuses
-  `@log_broadcast` for the diagnostic. If that diagnostic broadcast blocks
-  instead of raising, the already-accepted reconnect command can still hang.
-- There is no coverage proving diagnostic fallback reaches the runtime logger
-  when log-topic publication always fails, nor coverage proving reconnect
-  completion when diagnostic log-topic fanout is blocked.
-- The close-observed specs are good regression coverage, but they only assert
-  one close notification. Future fake-server improvements should make it easier
-  to tie close observations to a specific accepted connection when multiple
-  reconnect attempts overlap.
+- No blocking correctness regression was found in the targeted reconnect
+  diagnostic-liveness behavior.
+- The implementation satisfies the previous P0 liveness decision: accepted
+  reconnects no longer synchronously depend on diagnostic log-topic fanout.
+- Diagnostics remain redacted before runtime logging and log-topic broadcast.
+- The current detached diagnostic fanout is implemented as an untracked spawned
+  fiber. This protects command liveness, but a permanently blocked subscriber
+  can leave a fiber parked indefinitely. Repeated publication failures could
+  accumulate parked fibers.
+- Runtime logger delivery is synchronous and file-backed. That is acceptable as
+  the durable local sink today because the logger rescues internally, but a
+  future high-volume diagnostic path should avoid doing repeated per-event file
+  opens on hot paths.
+- `Server#broadcast_log` still writes diagnostics to the runtime logger after
+  registry broadcast. Because reconnect diagnostics now write the logger before
+  detached fanout, successfully delivered diagnostics may be duplicated in the
+  runtime log.
+- Close-observed specs still do not identify the specific OBS connection that
+  closed, which limits future overlapping reconnect assertions.
 - Remaining reconnect flake sources are unchanged: some reconnect specs still
   depend on unavailable-then-bind port windows and `wait_for_disconnect` still
   polls every 250 ms.
 
-## P0: Make Best-Effort Diagnostics Non-Blocking
+## P0: Bound Best-Effort Diagnostic Fanout
 
-1. Decouple reconnect publication diagnostics from synchronous log-topic fanout.
-   - Write sanitized diagnostics to the runtime logger first, when available.
-   - Treat log-topic diagnostic broadcast as secondary best-effort delivery.
-   - Do not let a blocked subscriber or blocked `ClientRegistry#broadcast` hold
-     up the accepted reconnect command while reporting a publication failure.
+1. Replace ad hoc detached diagnostic broadcast with a bounded helper.
+   - Add a small `best_effort_log_broadcast` or server-side async fanout helper
+     with clear ownership and bounded resource behavior.
+   - Avoid spawning unlimited permanently blocked fibers for repeated
+     reconnect publication failures.
+   - Preserve the public contract: diagnostic log-topic delivery must never
+     block accepted reconnect completion.
 
-2. Add focused diagnostic liveness and fallback coverage.
-   - State publication raises, diagnostic log-topic broadcast blocks: reconnect
-     should still return success after detached-client cleanup.
-   - Log publication raises, diagnostic log-topic broadcast blocks: reconnect
-     should still return success after detached-client cleanup.
-   - Log publication always raises: sanitized diagnostics should reach the
-     runtime logger when a logger is configured.
+2. Define slow-subscriber behavior for best-effort diagnostics.
+   - Prefer dropping or evicting slow log-topic subscribers over accumulating
+     blocked diagnostic workers.
+   - Keep runtime logger delivery as the primary durable diagnostic sink.
+   - Add specs proving repeated blocked diagnostic fanout does not create
+     unbounded outstanding work or block later reconnect commands.
 
-3. Keep the public reconnect contract stable.
-   - Accepted reconnect success means lifecycle acceptance plus detached-client
-     cleanup, not successful state/log delivery.
-   - Continue redacting passwords, authentication strings, tokens, and
-     secret-like values in diagnostics.
-   - Preserve the generation-safe accept-then-emit boundary and close-before-
-     fanout invariant.
+3. Avoid duplicate runtime-log diagnostics.
+   - Ensure reconnect diagnostics are written once through the runtime logger
+     primary path, even if secondary log-topic broadcast succeeds.
+   - Preserve normal `logs` topic delivery for TUI clients.
 
 ## P0: Finish Strict Compatibility Fixture Ownership
 
@@ -232,8 +227,8 @@ Add breadth only after the daemon/IPC/reconnect contract remains stable.
 
 ## Suggested Next Pull Requests
 
-1. Make reconnect publication diagnostics non-blocking and add logger-fallback
-   coverage for failed diagnostic log-topic delivery.
+1. Bound reconnect diagnostic log-topic fanout so blocked subscribers cannot
+   accumulate parked detached fibers or duplicate runtime-log entries.
 2. Replace remaining reconnect unavailable-then-bind port windows with the
    deterministic reservation helper.
 3. Add connection-specific fake OBS close probes and keep removing
