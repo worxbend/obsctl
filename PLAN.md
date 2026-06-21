@@ -1,15 +1,17 @@
 # obsctl Improvement Plan
 
-This plan reflects a fresh reviewer pass on the 2026-06-21 reconnect proof
-slice. The touched focused specs are green, but the main reconnect-vs-stop race
-is not fully closed.
+This plan reflects a fresh senior review of the 2026-06-21 reconnect-vs-stop
+truthfulness slice. The implementation closes the targeted stale-publication
+race and adds a deterministic interleaving spec. The next highest-risk item is
+to keep that linearizability guarantee while removing synchronous IPC/log
+callbacks from the supervisor lifecycle lock.
 
 ## Current Assessment
 
 `obsctl` has a mature local daemon architecture: one server owns the OBS
 WebSocket session, thin CLI/TUI clients use Unix socket IPC, public CLI/IPC
 contracts are fixture-backed, reconnect behavior has focused primitive specs,
-and the default Crystal gate has recently been green at 255 examples.
+and the default Crystal gate has recently been green at 256 examples.
 
 The intended process model remains:
 
@@ -18,74 +20,77 @@ OBS Studio <---- obs-websocket 5.x ----> obsctl server <---- Unix socket IPC ---
                                                                <---- Unix socket IPC ----> obsctl TUI
 ```
 
-Completed or already correct:
+Completed or correct in the reviewed slice:
 
-- `ReconnectSignal#on_waiter_registered` now documents its lock contract:
+- `ObsSupervisor#reconnect` now captures the live generation, pauses only through
+  a test hook, and re-checks lifecycle state, generation, and reconnect-signal
+  identity before accepting the reconnect request.
+- When `stop` wins after reconnect observed a live generation, `reconnect`
+  returns `false`, does not request reconnect, does not detach/close another
+  client, does not mutate state/telemetry, and does not publish the
+  `obs_reconnect_requested` log.
+- The deterministic supervisor spec now covers the exact interleaving:
+  reconnect observes a live supervisor, the spec pauses it, `stop` completes,
+  reconnect resumes, and stale public reconnect state remains unobservable.
+- The earlier sequential post-stop spec remains useful and separate.
+- `ReconnectSignal#on_waiter_registered` documents its lock contract:
   callbacks run while `@lock` is held, must not block, and must not send on an
   unbuffered channel.
-- `ReconnectSignal::WaitResult` is explicit and currently has four variants:
+- `ReconnectSignal::WaitResult` remains explicit with
   `Requested(epoch)`, `Interrupted(epoch)`, `TimedOut(epoch)`, and
   `Cancelled(epoch)`.
-- `ObsSupervisor` handles `Cancelled` structurally and breaks retry delay
-  waiting without incrementing backoff.
-- The new supervisor spec deterministically proves the simple post-stop path:
-  `reconnect` called after `stop` returns `false` and does not mutate public
-  state.
-- Reviewer validation passed:
-  `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache crystal spec spec/obsctl/server/reconnect_signal_spec.cr spec/obsctl/server/obs_supervisor_spec.cr`
-  with 16 examples.
-  `CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test` also passed with
-  255 examples.
-
-Reviewer findings:
-
-- No default-gate regression was found.
-- The implementation does **not** fully prove or fix the original
-  reconnect-vs-stop race. `ObsSupervisor#reconnect` checks lifecycle state under
-  `@lifecycle_lock`, releases the lock, then registers the reconnect request and
-  publishes `OBS reconnect requested`. A concurrent `stop` can still run between
-  the lifecycle check and the public state mutation.
-- The new `stopped_reconnect_attempted?` bit is useful test observability for
-  reconnect calls made after stopped state, but it does not observe the
-  interleaving where reconnect already captured a live `ReconnectSignal` before
-  `stop`.
-- `TODO.md` now overclaims this area by saying reconnect-after-stop behavior is
-  proven before stale public state can be published. That statement is true only
-  for the sequential post-stop path, not for the concurrent reconnect-vs-stop
-  interleaving.
-- The `on_waiter_registered` documentation change is correct and should stay.
-- Remaining reconnect flake sources are unchanged: some reconnect specs still
-  use unavailable-then-bind port windows and `wait_for_disconnect` still polls.
 - Strict Rust compatibility remains manual/scheduled until `obsctl-rs` owns a
   matching contract fixture root.
 
-## P0: Close Reconnect-Vs-Stop Truthfulness
+Reviewer findings from the latest pass:
 
-1. Make `ObsSupervisor#reconnect` generation-safe through publication.
-   - Carry the lifecycle generation alongside the captured `ReconnectSignal`.
-   - Before calling `mark_reconnect_requested`, re-check that the same generation
-     is still alive, or hold a lifecycle-gated critical section through request
-     registration, client detachment, and public state mutation.
-   - If `stop` wins after the initial liveness check, return `false` and do not
-     publish `OBS reconnect requested`.
-   - Preserve lock ordering: `@lifecycle_lock` before `@client_lock`, matching
-     `stop` and `claim_client`.
+- No implementation regression was found in the targeted reconnect-vs-stop
+  behavior. The core race from the previous review is closed in the reviewed
+  code path.
+- The new deterministic spec is materially stronger than the previous witness:
+  it uses `test_reconnect_before_publication` as a real barrier and makes the
+  stop-wins outcome mandatory, not conditional.
+- `TODO.md` was corrected before the race spec landed and now underclaims the
+  current proof by still saying the exact concurrent spec is missing. It should
+  be aligned with the final state of this slice.
+- `ObsSupervisor#reconnect` now calls `StateStore#mark_reconnect_requested` and
+  `publish_log` while holding `@lifecycle_lock`. Those callbacks can fan out to
+  `ClientRegistry#broadcast`, which synchronously writes to IPC client sockets.
+  This preserves the publication invariant but expands a lifecycle critical
+  section around potentially blocking IO.
+- The public `test_reconnect_before_publication` hook is acceptable as a narrow
+  internal test seam, but it should remain documented as test-only and should
+  not become part of the production control surface.
+- Remaining reconnect flake sources are unchanged: some reconnect specs still
+  depend on unavailable-then-bind port windows and `wait_for_disconnect` still
+  polls.
 
-2. Add an exact deterministic race spec.
-   - Introduce a narrow test hook/barrier between reconnect's lifecycle check
-     and public state mutation, or refactor reconnect into a helper whose
-     generation token can be exercised directly.
-   - The spec must prove this interleaving:
-     reconnect observes a live supervisor, stop completes, reconnect resumes,
-     reconnect returns `false`, state/telemetry remain unchanged, and no
-     `obs_reconnect_requested` log is published.
-   - Keep the current sequential post-stop spec as a separate simpler case.
+## P0: Keep Reconnect Publication Linearizable Without Blocking Lifecycle
 
-3. Correct project trackers after the fix.
-   - Update `TODO.md` so it does not claim the concurrent proof until the exact
-     interleaving above is covered.
-   - Keep `PLAN.md`, `MEMORY.md`, and `AGENT_LOG.md` aligned with the final
-     behavior.
+1. Split reconnect acceptance from synchronous publication side effects.
+   - Keep the generation/lifecycle decision, reconnect request registration,
+     active-client detachment, and state mutation linearized under
+     `@lifecycle_lock`.
+   - Do not run subscriber fanout, socket writes, or file logging while holding
+     `@lifecycle_lock`.
+   - Preferred shape: refactor state/log publication into a small accepted
+     reconnect result containing the detached client and payloads to broadcast
+     after the lifecycle lock is released, or make broadcast dispatch
+     non-blocking behind an event queue.
+
+2. Add a regression spec for lifecycle-lock callback safety.
+   - Simulate a subscribed client or test callback that blocks on state/log
+     publication.
+   - Prove `stop` is not prevented from reaching stopped state by a blocked
+     subscriber write or log fanout.
+   - Preserve the existing stop-wins reconnect-vs-stop spec while adding this
+     liveness check.
+
+3. Align project trackers after the completed race proof.
+   - Update `TODO.md` so it credits the exact deterministic concurrent
+     reconnect-vs-stop spec now present.
+   - Keep the distinction between the sequential post-stop proof and the
+     concurrent paused-live-then-stop proof.
 
 ## P0: Finish Strict Compatibility Fixture Ownership
 
@@ -108,16 +113,16 @@ Reviewer findings:
 ## P1: Reduce Reconnect Test Flake Surface
 
 1. Retire unavailable-then-bind port races.
-   - Add a deterministic helper that owns port reservation and delayed fake OBS
-     startup.
-   - Ensure the helper distinguishes accepted WebSocket connections from failed
-     TCP attempts so probe names match what they observe.
+   - Replace remaining `unused_tcp_port` style windows with the deterministic
+     port-reservation helper already introduced for reconnect specs.
+   - Ensure helper/probe names distinguish accepted WebSocket connections from
+     failed TCP attempts.
 
 2. Continue replacing polling/sleep-based reconnect specs.
    - Convert remaining reconnect tests to fake OBS probes for Identify received,
      close observed, request received, and no-attempt windows.
    - Replace the ad hoc `StateStore` subclass used as a pre-delay barrier with a
-     narrower supervisor test hook if it remains useful after the race fix.
+     narrower supervisor test hook if it remains useful.
 
 3. Make disconnect detection more event-driven.
    - Replace or supplement the 250 ms `wait_for_disconnect` polling loop with an
@@ -217,11 +222,12 @@ Add breadth only after the daemon/IPC/reconnect contract remains stable.
 
 ## Suggested Next Pull Requests
 
-1. Fix `ObsSupervisor#reconnect` so stop cannot interleave after the liveness
-   check and before public reconnect state is published; add an exact race spec.
-2. Correct `TODO.md` once the concurrent reconnect-vs-stop proof is real.
-3. Add deterministic unavailable-then-bind helpers and reduce reconnect specs'
-   dependence on port races, polling, and fixed no-attempt sleeps.
+1. Decouple reconnect lifecycle publication from synchronous IPC/log callbacks
+   while preserving the stop-wins invariant.
+2. Correct `TODO.md` to reflect that the exact concurrent reconnect-vs-stop spec
+   now exists and passes.
+3. Replace remaining reconnect unavailable-then-bind and polling surfaces with
+   deterministic fake-server probes.
 4. Add or coordinate the Rust-side `obsctl-rs` contract fixtures, then run
    `make contract-rs-compat` in a prepared dual-repo workspace.
 
