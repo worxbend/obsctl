@@ -2994,3 +2994,7 @@ A  spec/fixtures/contracts/README.md
 A  spec/fixtures/contracts/contract_manifest.yml
 M  spec/obsctl/contracts/optional_obsctl_rs_compat_spec.cr
 M  spec/support/optional_obsctl_rs_compat.cr
+2026-06-21T10:13:40Z final checkpoint policy behavior=source_and_telemetry terminal_reason=iterations_complete
+2026-06-21T10:13:40Z iteration final-10 checkpoint started
+2026-06-21T10:13:40Z iteration final-10 checkpoint status before commit:
+M  AGENT_LOG.md
