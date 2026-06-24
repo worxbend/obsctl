@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+
+      - name: Install shards
+        run: shards install --production
+
+      - name: Build release binary
+        env:
+          CRYSTAL_CACHE_DIR: /tmp/obsctl-crystal-cache
+        run: make release
+
+      - name: Package binary
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ARCHIVE="obsctl-${TAG}-linux-amd64.tar.gz"
+          tar -czf "${ARCHIVE}" -C bin obsctl
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE }}
+          generate_release_notes: true
