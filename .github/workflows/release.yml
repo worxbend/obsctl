@@ -24,7 +24,7 @@ jobs:
       - name: Build release binary
         env:
           CRYSTAL_CACHE_DIR: /tmp/obsctl-crystal-cache
-        run: make release
+        run: mkdir -p bin && make release
 
       - name: Package binary
         run: |
