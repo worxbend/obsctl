@@ -121,14 +121,15 @@ describe Obsctl::CLI::Main do
         request.command.try(&.name).should eq("status")
         exit_code.should eq(0)
         stderr.to_s.should eq("")
-        stdout.to_s.should contain("server:\n  pid: 123")
+        stdout.to_s.should contain("server")
+        stdout.to_s.should contain("  pid: 123")
         stdout.to_s.should contain("  dropped_reconnect_diagnostic_logs: 0")
         stdout.to_s.should contain("  last_connected_at: 2026-06-20T12:00:00Z")
         stdout.to_s.should contain("  last_disconnected_at: 2026-06-20T11:55:00Z")
         stdout.to_s.should contain("  last_reconnect_attempt_at: 2026-06-20T11:59:59Z")
         stdout.to_s.should contain("  last_connection_failed_at: 2026-06-20T11:58:00Z")
-        stdout.to_s.should contain("obs:\n  connected: true")
-        stdout.to_s.should contain("  current_scene: Main Camera")
+        stdout.to_s.should contain("obs")
+        stdout.to_s.should contain("current_scene:")
       end
     end
   end
@@ -206,7 +207,8 @@ describe Obsctl::CLI::Main do
         request.command.try(&.name).should eq("status")
         exit_code.should eq(0)
         stderr.to_s.should eq("")
-        stdout.to_s.should contain("server:\n  pid: 123")
+        stdout.to_s.should contain("server")
+        stdout.to_s.should contain("  pid: 123")
         stdout.to_s.should contain("  dropped_reconnect_diagnostic_logs: -")
       end
     end

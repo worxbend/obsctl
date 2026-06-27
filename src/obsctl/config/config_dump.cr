@@ -34,10 +34,8 @@ module Obsctl
           server: config.server,
           connection: config.connection,
           reconnect: config.reconnect,
-          ui: config.ui,
           scenes: scenes,
           audio: AudioConfig.new(inputs),
-          keymap: config.keymap
         )
         validate_conflicts!(merged)
         merged

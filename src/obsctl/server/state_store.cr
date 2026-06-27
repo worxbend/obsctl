@@ -43,6 +43,139 @@ module Obsctl
         publish_snapshot(snapshot)
       end
 
+      # Updates the current program scene without a full snapshot refetch.
+      def update_current_scene(scene_name : String) : Nil
+        next_snapshot = @lock.synchronize do
+          current = @snapshot
+          return unless current.connected
+
+          scenes = current.scenes.map do |scene|
+            OBS::State::SceneState.new(
+              name: scene.name, alias: scene.alias, shortcut: scene.shortcut,
+              group: scene.group, active: scene.name == scene_name
+            )
+          end
+          next_snap = OBS::State::ObsSnapshot.new(
+            connected: current.connected,
+            obs_studio_version: current.obs_studio_version,
+            obs_websocket_version: current.obs_websocket_version,
+            current_scene: scene_name,
+            scenes: scenes,
+            audio_inputs: current.audio_inputs,
+            output: current.output,
+            last_error: current.last_error
+          )
+          @snapshot = next_snap
+          next_snap
+        end
+        publish_snapshot(next_snapshot) if next_snapshot
+      end
+
+      # Updates one audio input's mute state without a full snapshot refetch.
+      def update_input_mute(input_name : String, muted : Bool) : Nil
+        next_snapshot = @lock.synchronize do
+          current = @snapshot
+          return unless current.connected
+
+          inputs = current.audio_inputs.map do |inp|
+            next inp unless inp.name == input_name
+            OBS::State::AudioState.new(
+              name: inp.name, alias: inp.alias, shortcut: inp.shortcut,
+              muted: muted, volume_mul: inp.volume_mul,
+              volume_db: inp.volume_db, volume_percent: inp.volume_percent
+            )
+          end
+          next_snap = OBS::State::ObsSnapshot.new(
+            connected: current.connected,
+            obs_studio_version: current.obs_studio_version,
+            obs_websocket_version: current.obs_websocket_version,
+            current_scene: current.current_scene,
+            scenes: current.scenes,
+            audio_inputs: inputs,
+            output: current.output,
+            last_error: current.last_error
+          )
+          @snapshot = next_snap
+          next_snap
+        end
+        publish_snapshot(next_snapshot) if next_snapshot
+      end
+
+      # Updates one audio input's volume without a full snapshot refetch.
+      def update_input_volume(input_name : String, volume_mul : Float64?, volume_db : Float64?) : Nil
+        next_snapshot = @lock.synchronize do
+          current = @snapshot
+          return unless current.connected
+
+          percent = volume_mul.try { |v| (v * 100).round.to_i32.clamp(0, 100) }
+          inputs = current.audio_inputs.map do |inp|
+            next inp unless inp.name == input_name
+            OBS::State::AudioState.new(
+              name: inp.name, alias: inp.alias, shortcut: inp.shortcut,
+              muted: inp.muted, volume_mul: volume_mul,
+              volume_db: volume_db, volume_percent: percent
+            )
+          end
+          next_snap = OBS::State::ObsSnapshot.new(
+            connected: current.connected,
+            obs_studio_version: current.obs_studio_version,
+            obs_websocket_version: current.obs_websocket_version,
+            current_scene: current.current_scene,
+            scenes: current.scenes,
+            audio_inputs: inputs,
+            output: current.output,
+            last_error: current.last_error
+          )
+          @snapshot = next_snap
+          next_snap
+        end
+        publish_snapshot(next_snapshot) if next_snapshot
+      end
+
+      # Replaces the scene list in the cached snapshot and publishes.
+      def update_scenes(current_scene : String?, scenes : Array(OBS::State::SceneState)) : Nil
+        next_snapshot = @lock.synchronize do
+          current = @snapshot
+          return unless current.connected
+
+          next_snap = OBS::State::ObsSnapshot.new(
+            connected: current.connected,
+            obs_studio_version: current.obs_studio_version,
+            obs_websocket_version: current.obs_websocket_version,
+            current_scene: current_scene,
+            scenes: scenes,
+            audio_inputs: current.audio_inputs,
+            output: current.output,
+            last_error: current.last_error
+          )
+          @snapshot = next_snap
+          next_snap
+        end
+        publish_snapshot(next_snapshot) if next_snapshot
+      end
+
+      # Replaces the audio input list in the cached snapshot and publishes.
+      def update_audio_inputs(audio_inputs : Array(OBS::State::AudioState)) : Nil
+        next_snapshot = @lock.synchronize do
+          current = @snapshot
+          return unless current.connected
+
+          next_snap = OBS::State::ObsSnapshot.new(
+            connected: current.connected,
+            obs_studio_version: current.obs_studio_version,
+            obs_websocket_version: current.obs_websocket_version,
+            current_scene: current.current_scene,
+            scenes: current.scenes,
+            audio_inputs: audio_inputs,
+            output: current.output,
+            last_error: current.last_error
+          )
+          @snapshot = next_snap
+          next_snap
+        end
+        publish_snapshot(next_snapshot) if next_snapshot
+      end
+
       # Records that the supervisor is attempting to establish an OBS session.
       def mark_reconnect_attempt(at : Time = Time.utc) : Nil
         @lock.synchronize do

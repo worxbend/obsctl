@@ -7,6 +7,17 @@ require "../ipc/protocol"
 module Obsctl
   module CLI
     class ClientCommands
+      RESET        = "\e[0m"
+      BOLD         = "\e[1m"
+      DIM          = "\e[2m"
+      GREEN        = "\e[32m"
+      RED          = "\e[31m"
+      YELLOW       = "\e[33m"
+      CYAN         = "\e[36m"
+      BLUE         = "\e[34m"
+      MAGENTA      = "\e[35m"
+      BRIGHT_WHITE = "\e[97m"
+
       def initialize(@client : IPC::UnixClient = IPC::UnixClient.new)
         @sequence = 0
       end
@@ -107,9 +118,9 @@ module Obsctl
         return format_obs_status(result) unless server && obs
 
         [
-          "server:",
+          "#{BOLD}#{BLUE}── server ──────────────────────────#{RESET}",
           indent(format_server_status(server)),
-          "obs:",
+          "#{BOLD}#{CYAN}── obs ─────────────────────────────#{RESET}",
           indent(format_obs_status(obs)),
         ].join('\n')
       end
@@ -117,25 +128,46 @@ module Obsctl
       private def format_obs_status(result : JSON::Any) : String
         lines = [] of String
         connected = result["connected"]?.try(&.as_bool?) || false
-        lines << "connected: #{connected}"
-        lines << "current_scene: #{result["current_scene"]?.try(&.as_s?) || "-"}"
-        lines << "scenes:"
+        if connected
+          lines << "#{GREEN}● connected#{RESET}"
+        else
+          lines << "#{RED}○ disconnected#{RESET}"
+        end
+        lines << "current_scene: #{BRIGHT_WHITE}#{result["current_scene"]?.try(&.as_s?) || "-"}#{RESET}"
+        lines << "#{BOLD}#{CYAN}Scenes:#{RESET}"
         result["scenes"]?.try(&.as_a?).try do |scenes|
           scenes.each do |scene|
             active = scene["active"]?.try(&.as_bool?) || false
-            lines << "  #{active ? "*" : "-"} #{scene["name"].as_s}"
+            if active
+              lines << "  #{BOLD}#{GREEN}▶ #{scene["name"].as_s}#{RESET}"
+            else
+              lines << "    #{scene["name"].as_s}"
+            end
           end
         end
-        lines << "audio:"
+        lines << "#{BOLD}#{CYAN}Audio:#{RESET}"
         result["audio_inputs"]?.try(&.as_a?).try do |inputs|
           inputs.each do |input|
             muted = input["muted"]?.try(&.as_bool?)
-            mute_text = muted.nil? ? "unknown" : (muted ? "muted" : "live")
-            volume = input["volume_percent"]?.try(&.as_i?).try { |value| "#{value}%" } || "unknown"
-            lines << "  - #{input["name"].as_s} #{mute_text} volume=#{volume}"
+            volume_pct = input["volume_percent"]?.try(&.as_i?) || 0
+            volume_bar = volume_bar(volume_pct)
+            if muted.nil?
+              lines << "  #{DIM}? #{input["name"].as_s} unknown#{RESET}"
+            elsif muted
+              lines << "  #{DIM}#{RED}✕ #{input["name"].as_s}#{RESET} #{DIM}muted#{RESET} #{volume_bar}"
+            else
+              lines << "  #{GREEN}♪#{RESET} #{input["name"].as_s} #{volume_bar}"
+            end
           end
         end
         lines.join('\n')
+      end
+
+      private def volume_bar(percent : Int32) : String
+        filled = (percent / 10).clamp(0, 10).to_i
+        empty = 10 - filled
+        bar = "█" * filled + "░" * empty
+        "#{DIM}[#{RESET}#{bar}#{DIM}]#{RESET} #{percent}%"
       end
 
       private def indent(text : String) : String

@@ -271,10 +271,40 @@ module Obsctl
           select
           when event = client.events.receive
             publish_event(event)
-            @state.update(client.snapshot)
+            apply_event(event, client)
           when timeout(0.milliseconds)
             break
           end
+        end
+      rescue ex : Domain::ObsctlError
+        message = public_message(ex.message, "failed to refresh OBS state after event")
+        @state.mark_disconnected(message)
+        publish_log("warn", "obs_event_refresh_failed", message)
+      end
+
+      private def apply_event(event : OBS::Protocol::Event, client : OBS::Client) : Nil
+        data = event.event_data
+        case event.event_type
+        when "CurrentProgramSceneChanged"
+          if scene_name = data.try(&.["sceneName"]?.try(&.as_s?))
+            @state.update_current_scene(scene_name)
+          end
+        when "InputMuteStateChanged"
+          if data && (input_name = data["inputName"]?.try(&.as_s?))
+            muted = data["inputMuted"]?.try(&.as_bool?)
+            @state.update_input_mute(input_name, muted || false) unless muted.nil?
+          end
+        when "InputVolumeChanged"
+          if data && (input_name = data["inputName"]?.try(&.as_s?))
+            vol_mul = data["inputVolumeMul"]?.try { |v| v.as_f? || v.as_i?.try(&.to_f64) }
+            vol_db = data["inputVolumeDb"]?.try { |v| v.as_f? || v.as_i?.try(&.to_f64) }
+            @state.update_input_volume(input_name, vol_mul, vol_db)
+          end
+        when "SceneListChanged", "SceneCreated", "SceneRemoved", "SceneNameChanged"
+          refresh = client.scene_snapshot
+          @state.update_scenes(refresh[:current_scene], refresh[:scenes])
+        when "InputCreated", "InputRemoved", "InputNameChanged"
+          @state.update_audio_inputs(client.audio_snapshot)
         end
       rescue ex : Domain::ObsctlError
         message = public_message(ex.message, "failed to refresh OBS state after event")

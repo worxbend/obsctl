@@ -179,6 +179,40 @@ module Obsctl
         request(Requests::Audio::SET_INPUT_VOLUME, Requests::Audio.set_volume(name, Domain::Aliases.volume_percent_to_mul(percent)))
       end
 
+      # Fetches only the scene list and current scene for targeted state updates.
+      def scene_snapshot : {current_scene: String?, scenes: Array(State::SceneState)}
+        current = current_scene
+        scenes = scene_names.map do |name|
+          configured = @config.scenes.find { |scene| scene.name == name }
+          State::SceneState.new(
+            name: name,
+            alias: configured.try(&.alias),
+            shortcut: configured.try(&.shortcut),
+            group: configured.try(&.group),
+            active: current == name
+          )
+        end
+        {current_scene: current, scenes: scenes}
+      end
+
+      # Fetches only the audio input list for targeted state updates.
+      def audio_snapshot : Array(State::AudioState)
+        input_names.map do |name|
+          configured = @config.audio.inputs.find { |input| input.name == name }
+          muted = input_muted(name)
+          volume = input_volume(name)
+          State::AudioState.new(
+            name: name,
+            alias: configured.try(&.alias),
+            shortcut: configured.try(&.shortcut),
+            muted: muted,
+            volume_mul: volume[:mul],
+            volume_db: volume[:db],
+            volume_percent: volume[:percent]
+          )
+        end
+      end
+
       # Fetches a full state snapshot for publication to local IPC clients.
       def snapshot : State::ObsSnapshot
         version_data = version

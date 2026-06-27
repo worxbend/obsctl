@@ -104,7 +104,7 @@ module Obsctl
       end
     end
 
-    # Raised when CLI or TUI command text cannot be parsed.
+    # Raised when CLI command text cannot be parsed.
     class CommandParseError < ObsctlError
       def initialize(message : String)
         super(message, ExitCode::CommandParse)

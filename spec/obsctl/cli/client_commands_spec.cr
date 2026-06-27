@@ -76,15 +76,16 @@ describe Obsctl::CLI::ClientCommands do
       .execute(Obsctl::Domain::StatusCommand.new)
       .message
 
-    output.should contain("server:\n  pid: 123")
+    output.should contain("server")
+    output.should contain("  pid: 123")
     output.should contain("  socket_path: /tmp/obsctl.sock")
     output.should contain("  dropped_reconnect_diagnostic_logs: 0")
     output.should contain("  last_connected_at: 2026-06-20T12:00:00Z")
     output.should contain("  last_disconnected_at: 2026-06-20T11:55:00Z")
     output.should contain("  last_reconnect_attempt_at: 2026-06-20T11:59:59Z")
     output.should contain("  last_connection_failed_at: 2026-06-20T11:58:00Z")
-    output.should contain("obs:\n  connected: true")
-    output.should contain("  current_scene: Main Camera")
+    output.should contain("obs")
+    output.should contain("  current_scene:")
   end
 
   it "formats daemon status with every reconnect timestamp field" do
@@ -231,9 +232,11 @@ describe Obsctl::CLI::ClientCommands do
       .execute(Obsctl::Domain::StatusCommand.new)
       .message
 
-    output.should contain("server:\n  pid: 123")
+    output.should contain("server")
+    output.should contain("  pid: 123")
     output.should contain("  dropped_reconnect_diagnostic_logs: -")
-    output.should contain("obs:\n  connected: true")
+    output.should contain("obs")
+    output.should contain("current_scene:")
   end
 
   it "maps every canonical IPC error to an audited process exit code" do

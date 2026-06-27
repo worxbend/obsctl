@@ -12,7 +12,6 @@ require "../runtime/logger"
 require "../server/server"
 require "../server/server_options"
 require "../service/service_installer"
-require "../tui/app"
 
 module Obsctl
   module CLI
@@ -74,9 +73,13 @@ module Obsctl
             return 0
           end
 
-          if command.nil? || command == "tui"
-            config = load_config_for(command, options.config_path, stderr)
-            return TUI::App.new(config, options.config_path).run
+          if command.nil?
+            palette_line = "/status"
+            parsed = Domain::CommandParser.new.parse(palette_line)
+            client_commands = ClientCommands.new(IPC::UnixClient.new(client_socket_path(options.config_path)))
+            result = client_commands.execute(parsed)
+            stdout.puts result.message
+            return result.ok ? 0 : 1
           end
 
           palette_line = cli_to_palette(command, command_args)
@@ -149,7 +152,7 @@ module Obsctl
       end
 
       private def self.json_unsupported_message(command : String?) : String
-        name = command || "tui"
+        name = command || "status"
         "JSON output is not supported for command: #{name}"
       end
 
@@ -195,24 +198,13 @@ module Obsctl
         end
       end
 
-      private def self.load_config_for(command : String?, path : String, stderr : IO = STDERR) : Config::Config
-        if command == "dump-config" && !File.exists?(path)
-          return Config::Config.default
-        end
-
-        if (command.nil? || command == "tui") && !File.exists?(path)
-          Config::ConfigWriter.new.write_default(path)
-          stderr.puts "created default config: #{path}"
-        end
-
-        Config::ConfigLoader.new.load(path)
-      end
-
       private def self.client_socket_path(config_path : String) : String
         return IPC::SocketPath.resolve unless File.exists?(config_path)
 
         config = Config::Config.from_yaml(File.read(config_path))
         IPC::SocketPath.resolve(config.server.socket_path)
+      rescue
+        IPC::SocketPath.resolve
       end
 
       def self.write_config_warnings(config : Config::Config, io : IO = STDERR) : Nil

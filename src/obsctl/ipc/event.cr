@@ -2,7 +2,7 @@ require "json"
 
 module Obsctl
   module IPC
-    # Server-pushed topic event for subscribed TUI or long-lived clients.
+    # Server-pushed topic event for subscribed long-lived clients.
     record Event, topic : String, data : JSON::Any? = nil do
       TYPE = "event"
 

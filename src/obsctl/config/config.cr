@@ -29,13 +29,6 @@ module Obsctl
       request_timeout_ms : Int32 = 2500,
       reconnect : ReconnectConfig? = nil
 
-    # TUI presentation settings that are safe for clients to consume.
-    record UiConfig,
-      refresh_interval_ms : Int32 = 250,
-      command_palette_prefix : String = "/",
-      show_icons : Bool = true,
-      theme : String = "default"
-
     # User configuration for one OBS scene and its local aliases.
     record SceneConfig,
       name : String,
@@ -55,13 +48,6 @@ module Obsctl
     # Collection of configured OBS audio inputs.
     record AudioConfig, inputs : Array(AudioInputConfig) = [] of AudioInputConfig
 
-    # Keyboard bindings used by the ANSI TUI controller.
-    record KeymapConfig,
-      quit : Array(String) = ["q", "ctrl+c"],
-      command_palette : Array(String) = ["/", ":"],
-      reload_config : Array(String) = ["r"],
-      dump_config : Array(String) = ["D"]
-
     # Parsed obsctl configuration with canonical top-level server and reconnect sections.
     class Config
       ALLOWED_TOP_LEVEL_KEYS = Set{
@@ -69,20 +55,16 @@ module Obsctl
         "server",
         "connection",
         "reconnect",
-        "ui",
         "scenes",
         "audio",
-        "keymap",
       }
 
       property version : Int32
       property server : ServerConfig
       property connection : ConnectionConfig
       property reconnect : ReconnectConfig
-      property ui : UiConfig
       property scenes : Array(SceneConfig)
       property audio : AudioConfig
-      property keymap : KeymapConfig
 
       # Builds a config object, migrating legacy `connection.reconnect` into the
       # canonical top-level `reconnect` field when present.
@@ -91,10 +73,8 @@ module Obsctl
         @server : ServerConfig = ServerConfig.new,
         @connection : ConnectionConfig = ConnectionConfig.new,
         @reconnect : ReconnectConfig = ReconnectConfig.new,
-        @ui : UiConfig = UiConfig.new,
         @scenes : Array(SceneConfig) = [] of SceneConfig,
         @audio : AudioConfig = AudioConfig.new,
-        @keymap : KeymapConfig = KeymapConfig.new,
       )
         if legacy_reconnect = @connection.reconnect
           @reconnect = legacy_reconnect
@@ -115,19 +95,15 @@ module Obsctl
         server = parse_server(root["server"]?)
         connection = parse_connection(root["connection"]?, include_legacy_reconnect: false)
         reconnect = parse_reconnect(root["reconnect"]?, root["connection"]?)
-        ui = parse_ui(root["ui"]?)
         scenes = parse_scenes(root["scenes"]?)
         audio = parse_audio(root["audio"]?)
-        keymap = parse_keymap(root["keymap"]?)
         new(
           version: root["version"]?.try(&.as_i).try(&.to_i32) || 1,
           server: server,
           connection: connection,
           reconnect: reconnect,
-          ui: ui,
           scenes: scenes,
           audio: audio,
-          keymap: keymap
         )
       end
 
@@ -166,13 +142,6 @@ module Obsctl
               yaml.scalar "multiplier"; yaml.scalar @reconnect.multiplier
               yaml.scalar "jitter_ms"; yaml.scalar @reconnect.jitter_ms
             end
-            yaml.scalar "ui"
-            yaml.mapping do
-              yaml.scalar "refresh_interval_ms"; yaml.scalar @ui.refresh_interval_ms
-              yaml.scalar "command_palette_prefix"; yaml.scalar @ui.command_palette_prefix
-              yaml.scalar "show_icons"; yaml.scalar @ui.show_icons
-              yaml.scalar "theme"; yaml.scalar @ui.theme
-            end
             yaml.scalar "scenes"
             yaml.sequence do
               @scenes.each do |scene|
@@ -204,13 +173,6 @@ module Obsctl
                 end
               end
             end
-            yaml.scalar "keymap"
-            yaml.mapping do
-              write_string_array(yaml, "quit", @keymap.quit)
-              write_string_array(yaml, "command_palette", @keymap.command_palette)
-              write_string_array(yaml, "reload_config", @keymap.reload_config)
-              write_string_array(yaml, "dump_config", @keymap.dump_config)
-            end
           end
         end
       end
@@ -232,11 +194,6 @@ module Obsctl
         else
           yaml.scalar nil
         end
-      end
-
-      private def write_string_array(yaml : YAML::Builder, key : String, values : Array(String)) : Nil
-        yaml.scalar key
-        yaml.sequence { values.each { |value| yaml.scalar value } }
       end
 
       private def self.parse_connection(value : YAML::Any?, include_legacy_reconnect : Bool = true) : ConnectionConfig
@@ -290,16 +247,6 @@ module Obsctl
         )
       end
 
-      private def self.parse_ui(value : YAML::Any?) : UiConfig
-        hash = value.try(&.as_h?) || {} of YAML::Any => YAML::Any
-        UiConfig.new(
-          refresh_interval_ms: int(hash, "refresh_interval_ms", 250),
-          command_palette_prefix: string(hash, "command_palette_prefix", "/"),
-          show_icons: bool(hash, "show_icons", true),
-          theme: string(hash, "theme", "default")
-        )
-      end
-
       private def self.parse_scenes(value : YAML::Any?) : Array(SceneConfig)
         array(value).map do |item|
           hash = item.as_h
@@ -326,16 +273,6 @@ module Obsctl
           )
         end
         AudioConfig.new(inputs)
-      end
-
-      private def self.parse_keymap(value : YAML::Any?) : KeymapConfig
-        hash = value.try(&.as_h?) || {} of YAML::Any => YAML::Any
-        KeymapConfig.new(
-          quit: string_array(hash["quit"]?, ["q", "ctrl+c"]),
-          command_palette: string_array(hash["command_palette"]?, ["/", ":"]),
-          reload_config: string_array(hash["reload_config"]?, ["r"]),
-          dump_config: string_array(hash["dump_config"]?, ["D"])
-        )
       end
 
       private def self.array(value : YAML::Any?) : Array(YAML::Any)
@@ -373,10 +310,6 @@ module Obsctl
 
         parsed = value.as_bool?
         parsed.nil? ? fallback : parsed
-      end
-
-      private def self.string_array(value : YAML::Any?, fallback : Array(String)) : Array(String)
-        value.try(&.as_a?).try(&.map(&.as_s)) || fallback
       end
 
       private def self.password_env(hash) : String?
