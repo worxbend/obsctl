@@ -1,15 +1,11 @@
 require "../spec_helper"
 
-private ROOT                      = File.expand_path("../..", __DIR__)
-private EMBEDDED_TUI_OBS_ADAPTERS = [
-  "src/obsctl/tui/obs_session_client.cr",
-]
+private ROOT              = File.expand_path("../..", __DIR__)
 private SERVER_OBS_OWNERS = [
   "src/obsctl/server/obs_supervisor.cr",
 ]
 private NORMAL_CLIENT_LAYER_GLOBS = [
   "src/obsctl/cli/**/*.cr",
-  "src/obsctl/tui/**/*.cr",
   "src/obsctl/ipc/**/*.cr",
   "src/obsctl/domain/**/*.cr",
   "src/obsctl/support/**/*.cr",
@@ -74,27 +70,10 @@ private def usage_files(usages : Array(String)) : Array(String)
 end
 
 describe "daemon-first architecture boundary" do
-  it "keeps normal CLI, TUI, IPC, domain, and support layers off the OBS websocket client implementation" do
+  it "keeps CLI, IPC, domain, and support layers off the OBS websocket client implementation" do
     normal_client_files = src_files(NORMAL_CLIENT_LAYER_GLOBS)
 
-    direct_obs_client_usages(normal_client_files, EMBEDDED_TUI_OBS_ADAPTERS).should eq([] of String)
-    usage_files(direct_obs_client_usages(normal_client_files)).should eq(EMBEDDED_TUI_OBS_ADAPTERS)
-  end
-
-  it "keeps the normal TUI client path off the OBS websocket client implementation" do
-    tui_files = src_files("src/obsctl/tui/**/*.cr")
-
-    direct_obs_client_usages(tui_files, EMBEDDED_TUI_OBS_ADAPTERS).should eq([] of String)
-    usage_files(direct_obs_client_usages(tui_files)).should eq(EMBEDDED_TUI_OBS_ADAPTERS)
-
-    normal_entrypoints = [
-      src_path("src/obsctl.cr"),
-      src_path("src/obsctl/cli/main.cr"),
-      src_path("src/obsctl/tui/app.cr"),
-      src_path("src/obsctl/tui/session.cr"),
-      src_path("src/obsctl/tui/session_client.cr"),
-    ]
-    pattern_usages(normal_entrypoints, /obs_session_client|ObsSessionClient/, "embedded OBS adapter reference").should eq([] of String)
+    direct_obs_client_usages(normal_client_files).should eq([] of String)
   end
 
   it "keeps server-owned OBS client construction inside the supervisor" do

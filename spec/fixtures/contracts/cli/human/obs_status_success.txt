@@ -1,7 +1,7 @@
-connected: true
-current_scene: Main Camera
-scenes:
-  * Main Camera
-  - Break
-audio:
-  - Mic/Aux live volume=72%
+[32m● connected[0m
+current_scene: [97mMain Camera[0m
+[1m[36mScenes:[0m
+  [1m[32m▶ Main Camera[0m
+    Break
+[1m[36mAudio:[0m
+  [32m♪[0m Mic/Aux [2m[[0m███████░░░[2m][0m 72%

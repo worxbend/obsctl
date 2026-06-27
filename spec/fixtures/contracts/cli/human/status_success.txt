@@ -1,4 +1,4 @@
-server:
+[1m[34m── server ──────────────────────────[0m
   pid: 4242
   uptime_seconds: 37
   socket_path: /tmp/obsctl-contract/obsctl.sock
@@ -11,11 +11,11 @@ server:
   last_reconnect_attempt_at: 2026-06-20T11:59:59Z
   last_connection_failed_at: -
   last_error: -
-obs:
-  connected: true
-  current_scene: Main Camera
-  scenes:
-    * Main Camera
-    - Break
-  audio:
-    - Mic/Aux live volume=72%
+[1m[36m── obs ─────────────────────────────[0m
+  [32m● connected[0m
+  current_scene: [97mMain Camera[0m
+  [1m[36mScenes:[0m
+    [1m[32m▶ Main Camera[0m
+      Break
+  [1m[36mAudio:[0m
+    [32m♪[0m Mic/Aux [2m[[0m███████░░░[2m][0m 72%

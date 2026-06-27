@@ -2,7 +2,7 @@ require "json"
 
 module Obsctl
   module IPC
-    # Typed command payload sent by CLI and TUI clients to the local daemon.
+    # Typed command payload sent by CLI clients to the local daemon.
     record CommandPayload, name : String, target : String? = nil, percent : Int32? = nil do
       # Writes the wire-format JSON object for this command payload.
       def to_json(json : JSON::Builder) : Nil

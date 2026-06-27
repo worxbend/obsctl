@@ -3,7 +3,7 @@ require "./errors"
 
 module Obsctl
   module Domain
-    # Parses CLI and TUI command text into typed command objects.
+    # Parses CLI command text into typed command objects.
     class CommandParser
       # Parses one command line, including quoted arguments.
       def parse(input : String) : Command

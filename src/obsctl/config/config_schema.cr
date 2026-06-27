@@ -18,9 +18,6 @@ module Obsctl
             raise Domain::ConfigInvalid.new("password env var is missing: #{env}")
           end
         end
-        if config.ui.refresh_interval_ms <= 0
-          raise Domain::ConfigInvalid.new("refresh_interval_ms must be positive")
-        end
         if socket_path = config.server.socket_path
           raise Domain::ConfigInvalid.new("server.socket_path cannot be blank") if socket_path.blank?
         end

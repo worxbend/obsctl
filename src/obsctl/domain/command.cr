@@ -1,6 +1,6 @@
 module Obsctl
   module Domain
-    # Base type for parsed CLI/TUI commands.
+    # Base type for parsed CLI commands.
     abstract struct Command
     end
 

@@ -5,7 +5,7 @@ require "./socket_path"
 
 module Obsctl
   module IPC
-    # Local Unix socket IPC client for thin CLI and TUI commands.
+    # Local Unix socket IPC client for thin CLI commands.
     class UnixClient
       # Creates a client targeting the resolved obsctl server socket.
       def initialize(@socket_path : String = SocketPath.resolve, @codec : Codec = Codec.new)
