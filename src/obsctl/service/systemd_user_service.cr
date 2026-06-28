@@ -20,17 +20,17 @@ module Obsctl
         <<-SERVICE
         [Unit]
         Description=obsctl OBS WebSocket control daemon
-        After=graphical-session.target
-        Wants=graphical-session.target
+        After=network.target graphical-session.target
+        StartLimitIntervalSec=0
 
         [Service]
         Type=simple
         ExecStart=#{escaped_executable_path} server --headless
-        Restart=always
-        RestartSec=3
+        Restart=on-failure
+        RestartSec=10
 
         [Install]
-        WantedBy=default.target
+        WantedBy=graphical-session.target
         SERVICE
       end
 

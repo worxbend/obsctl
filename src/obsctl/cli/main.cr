@@ -57,7 +57,7 @@ module Obsctl
           end
 
           if command == "server"
-            config = Config::ConfigLoader.new.load(options.config_path)
+            config = load_server_config(options.config_path, stderr)
             server_options = Server::ServerOptions.new(headless: command_args.includes?("--headless"))
             socket_path = IPC::SocketPath.resolve(config.server.socket_path)
             logger = Runtime::Logger.new(log_level)
@@ -125,6 +125,21 @@ module Obsctl
           end
           Domain::ExitCode::Failure.value
         end
+      end
+
+      private def self.load_server_config(config_path : String, stderr : IO) : Config::Config
+        unless File.exists?(config_path)
+          stderr.puts "obsctl: no config at #{config_path}, creating default"
+          Config::ConfigWriter.new.write_default(config_path)
+          return Config::Config.default
+        end
+        Config::ConfigLoader.new.load(config_path)
+      rescue ex : Domain::ObsctlError
+        stderr.puts "obsctl: config error (#{ex.message}), using defaults"
+        Config::Config.default
+      rescue ex
+        stderr.puts "obsctl: failed to load config (#{ex.message}), using defaults"
+        Config::Config.default
       end
 
       private def self.split_json_flag(args : Array(String)) : Tuple(Array(String), Bool)

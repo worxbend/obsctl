@@ -7,8 +7,10 @@ describe Obsctl::Service::SystemdUserService do
 
     unit.should contain("Description=obsctl OBS WebSocket control daemon")
     unit.should contain("ExecStart=/opt/obsctl/bin/obsctl server --headless")
-    unit.should contain("Restart=always")
-    unit.should contain("WantedBy=default.target")
+    unit.should contain("Restart=on-failure")
+    unit.should contain("StartLimitIntervalSec=0")
+    unit.should contain("WantedBy=graphical-session.target")
+    unit.should_not contain("Wants=graphical-session.target")
   end
 
   it "resolves the user service path from HOME" do
