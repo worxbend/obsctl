@@ -3157,3 +3157,19 @@ M  AGENT_LOG.md
   sink failure.
 - Validation: format, debug/release builds, the focused 45-example
   CLI/server/logger suite, and the complete 399-example suite pass.
+
+## 2026-07-19 — Explain OBS reconnect loops
+
+- Corrected `GetProfileList` decoding to accept OBS's real string array while
+  retaining compatibility with object-shaped profile entries; the old parser
+  raised on real OBS data after connecting and caused the observed reset loop.
+- Preserved WebSocket peer close codes and reasons, with explanations for
+  standard and obs-websocket-specific close codes.
+- Expanded retry warnings with the sanitized failure reason, attempt number,
+  and scheduled delay so every automatic reconnect explains itself.
+- Made scene and audio command resolution merge configured aliases with names
+  from the authoritative live snapshot, so TUI-discovered resources work
+  without requiring a prior `dump-config`.
+- Validation: format, debug/release builds, the focused 87-example OBS/server/
+  dispatcher suite, and the complete 402-example suite pass. Focused Ameba
+  reports only the existing generic alias resolver complexity (11/10).

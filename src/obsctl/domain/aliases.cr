@@ -11,9 +11,37 @@ module Obsctl
         resolve(config.scenes, target, "scene") { |entry| {entry.shortcut, entry.alias, entry.name} }
       end
 
+      # Resolves configured aliases first while also accepting scene names
+      # discovered from the current OBS snapshot.
+      def self.resolve_scene(
+        config : Config::Config,
+        target : String,
+        live_names : Array(String),
+      ) : Config::SceneConfig
+        entries = config.scenes.dup
+        live_names.each do |name|
+          entries << Config::SceneConfig.new(name) unless entries.any? { |entry| entry.name == name }
+        end
+        resolve(entries, target, "scene") { |entry| {entry.shortcut, entry.alias, entry.name} }
+      end
+
       # Resolves an audio target using the same priority as scene resolution.
       def self.resolve_audio(config : Config::Config, target : String) : Config::AudioInputConfig
         resolve(config.audio.inputs, target, "audio input") { |entry| {entry.shortcut, entry.alias, entry.name} }
+      end
+
+      # Resolves configured aliases first while also accepting input names
+      # discovered from the current OBS snapshot.
+      def self.resolve_audio(
+        config : Config::Config,
+        target : String,
+        live_names : Array(String),
+      ) : Config::AudioInputConfig
+        entries = config.audio.inputs.dup
+        live_names.each do |name|
+          entries << Config::AudioInputConfig.new(name) unless entries.any? { |entry| entry.name == name }
+        end
+        resolve(entries, target, "audio input") { |entry| {entry.shortcut, entry.alias, entry.name} }
       end
 
       private def self.resolve(entries : Array(T), target : String, kind : String, &) : T forall T

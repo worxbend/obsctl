@@ -173,11 +173,13 @@ module Obsctl
 
             message = public_message(ex.message, "OBS unavailable")
             @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
-            publish_log("warn", disconnect_log_code(message), message)
+            delay = policy.delay_for(attempt)
+            warning = retry_warning(message, delay, attempt)
+            publish_log("warn", disconnect_log_code(message), warning)
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
             break if stopped?(generation) || !@config.reconnect.enabled
-            result = wait_for_reconnect_delay(policy.delay_for(attempt), reconnect_signal, handled_request_epoch)
+            result = wait_for_reconnect_delay(delay, reconnect_signal, handled_request_epoch)
             case result
             when ReconnectSignal::WaitResult::Requested
               # Explicit reconnect request consumed — retry immediately without incrementing backoff.
@@ -192,10 +194,14 @@ module Obsctl
             message = public_message(ex.message, "OBS supervisor failed")
             @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
             publish_log("error", "obs_supervisor_error", message)
+            delay = policy.delay_for(attempt)
+            if @config.reconnect.enabled
+              publish_log("warn", "obs_reconnect_scheduled", retry_warning(message, delay, attempt))
+            end
             client.close if connected
             @client_lock.synchronize { @client = nil if @client == client }
             break if stopped?(generation) || !@config.reconnect.enabled
-            result = wait_for_reconnect_delay(policy.delay_for(attempt), reconnect_signal, handled_request_epoch)
+            result = wait_for_reconnect_delay(delay, reconnect_signal, handled_request_epoch)
             case result
             when ReconnectSignal::WaitResult::Requested
               # Explicit reconnect request consumed — retry immediately without incrementing backoff.
@@ -453,6 +459,13 @@ module Obsctl
         else
           "obs_disconnected"
         end
+      end
+
+      private def retry_warning(message : String, delay : Time::Span, attempt : Int32) : String
+        return message unless @config.reconnect.enabled
+
+        milliseconds = delay.total_milliseconds.to_i64
+        "#{message}; reconnect attempt #{attempt + 1} scheduled in #{milliseconds}ms"
       end
     end
   end
