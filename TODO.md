@@ -29,10 +29,12 @@ Critical rule:
 - [x] Add the first in-tree `CryTUI` substrate: geometry, constraint layout,
   styles, cells, clipping, cell-level diffing, immediate-mode frames, memory
   test backend, and initial dashboard widget primitives.
-- [ ] Add Unicode display-width handling and finish Ratatui-compatible layout
-  allocation edge cases.
-- [ ] Add ANSI backend, raw terminal lifecycle, input parser, resize handling,
-  and PTY restoration specs.
+- [x] Add Unicode grapheme/display-width handling for combining text, CJK,
+  flags, and ZWJ emoji without splitting wide cells at clipping boundaries.
+- [ ] Finish Ratatui-compatible layout allocation edge cases.
+- [ ] Complete the ANSI terminal layer: raw terminal lifecycle, live size and
+  resize handling, and PTY restoration specs. Cell-diff output, styling,
+  alternate-screen cleanup, and the incremental key/paste parser are present.
 - [ ] Port the Rust TUI model, IPC event applier, completion, and input actions.
 - [ ] Port the dashboard widgets and their TestBackend rendering contracts.
 - [ ] Wire `obsctl` / `obsctl tui` as Unix IPC clients with the unavailable
