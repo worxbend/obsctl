@@ -69,6 +69,7 @@ describe Obsctl::TUI::App do
     dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)
 
     app.process(Obsctl::TUI::InputClosed.new, dispatcher).should be_true
+    app.process(Obsctl::TUI::ResizeDetected.new, dispatcher).should be_false
   end
 
   it "renders unavailable, dashboard, and settings views through CryTUI" do
@@ -90,5 +91,27 @@ describe Obsctl::TUI::App do
     settings.should contain("Settings // Appearance")
     settings.should contain("Themes // 29 palettes")
     settings.should contain("Preview: Claude")
+  end
+
+  it "reflows the dashboard through repeated terminal shrink and expansion" do
+    model = Obsctl::TUI::Model.new(advanced_ui: false)
+    model.connected_to_daemon = true
+    app = Obsctl::TUI::App.new(model: model)
+    backend = CryTUI::TestBackend.new(120, 40)
+    terminal = CryTUI::Terminal.new(backend)
+
+    app.render(terminal)
+    backend.resize(40, 12)
+    app.render(terminal)
+    backend.buffer.area.should eq(CryTUI::Rect.new(0, 0, 40, 12))
+    compact_lines = backend.buffer.lines
+    compact_lines.size.should eq(12)
+    compact_lines.map(&.size).max.should be <= 40
+
+    backend.resize(90, 28)
+    app.render(terminal)
+    backend.buffer.area.should eq(CryTUI::Rect.new(0, 0, 90, 28))
+    backend.buffer.lines.size.should eq(28)
+    backend.buffer.lines.join("\n").should contain("BROADCAST COMMAND CENTER")
   end
 end

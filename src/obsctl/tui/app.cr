@@ -17,14 +17,16 @@ module Obsctl
       error : String? = nil
 
     record InputClosed
+    record ResizeDetected
 
-    alias AppMessage = CryTUI::InputEvent | SubscriptionMessage | InputClosed
+    alias AppMessage = CryTUI::InputEvent | SubscriptionMessage | InputClosed | ResizeDetected
 
     class App
       DEFAULT_REFRESH = 100.milliseconds
       ESCAPE_DELAY    = 25.milliseconds
       SPLASH_DURATION = 2.seconds
       SPLASH_FRAME    = 50.milliseconds
+      RESIZE_POLL     = 50.milliseconds
 
       getter model : Model
       getter refresh : Time::Span
@@ -79,6 +81,7 @@ module Obsctl
           @running = true
           @exit_code = 0
           spawn_input_pump
+          spawn_resize_pump
           run_splash(terminal)
           next unless @exit_code == 0
           command_client = CommandClient.new(@socket_path)
@@ -95,7 +98,6 @@ module Obsctl
               process(message, dispatcher)
             when timeout(@refresh)
               @model.anim.tick
-              terminal.refresh_size
               false
             end
             break if should_quit
@@ -137,6 +139,8 @@ module Obsctl
         when InputClosed
           @exit_code = 1
           true
+        when ResizeDetected
+          false
         else
           false
         end
@@ -224,6 +228,23 @@ module Obsctl
           @messages.send(InputClosed.new) if @running
         rescue IO::Error
           @messages.send(InputClosed.new) if @running
+        end
+      end
+
+      private def spawn_resize_pump
+        spawn(name: "obsctl-tui-resize") do
+          previous = CryTUI::TerminalSize.from(@input)
+          while @running
+            sleep RESIZE_POLL
+            current = CryTUI::TerminalSize.from(@input)
+            next unless current && current != previous
+
+            previous = current
+            select
+            when @messages.send(ResizeDetected.new)
+            else
+            end
+          end
         end
       end
     end

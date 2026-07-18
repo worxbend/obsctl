@@ -92,8 +92,11 @@ wide-cell continuation tracking, cell-level diffing, an immediate-mode
 terminal/frame, memory and ANSI backends, exception-safe output restoration, an
 incremental VT key/paste parser, and initial block, paragraph, gauge, and
 sparkline widgets. Raw-mode ownership uses Crystal's exact termios save/restore
-block, while live ioctl sizing and resize polling feed the backend. A real PTY
-integration probe verifies discovery, resize, and exception-path restoration.
+block, while live ioctl sizing feeds every draw. Geometry changes atomically
+clear the physical screen, invalidate the diff buffer, and repaint at the new
+size so blank cells from the prior layout cannot survive a shrink or expansion.
+A real PTY integration probe verifies repeated active-session shrink/expand
+redraws and exception-path restoration.
 
 The first obsctl layer above CryTUI is also present: a port of the Rust panel
 model and event applier consumes only local IPC state/log/event messages. It

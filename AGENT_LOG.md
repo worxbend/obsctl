@@ -3173,3 +3173,21 @@ M  AGENT_LOG.md
 - Validation: format, debug/release builds, the focused 87-example OBS/server/
   dispatcher suite, and the complete 402-example suite pass. Focused Ameba
   reports only the existing generic alias resolver complexity (11/10).
+
+## 2026-07-19 — Reflow CryTUI safely on terminal resize
+
+- Moved terminal-size synchronization into every draw so resize detection no
+  longer depends on application-level polling or misses the startup splash.
+- Added a change-only 50ms ioctl watcher that wakes the render loop on geometry
+  changes independently of the configured animation refresh interval.
+- Clear the physical terminal and invalidate the previous diff buffer whenever
+  geometry changes, preventing old nonblank cells from surviving in blank
+  areas after shrinking or expanding.
+- Disable automatic terminal wrapping during CryTUI sessions and restore it on
+  exit, preventing bottom-right writes from scrolling a resized dashboard.
+- Added ANSI-buffer, dashboard, and real-PTY regressions covering repeated
+  active-session shrink and expansion plus terminal restoration.
+- Validation: format, debug/release builds, and the complete 405-example suite
+  pass, including the real-PTY resize probe. Focused lint is clean on the
+  CryTUI resize implementation and reports only three pre-existing unused test
+  lambda arguments in the broader app spec.

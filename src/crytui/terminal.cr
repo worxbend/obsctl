@@ -12,6 +12,9 @@ module CryTUI
     def refresh_size : Bool
       false
     end
+
+    def clear : Nil
+    end
   end
 
   class TestBackend < Backend
@@ -30,6 +33,10 @@ module CryTUI
         @buffer[x, y].symbol = cell.symbol
         @buffer[x, y].style = cell.style
       end
+    end
+
+    def clear : Nil
+      @buffer.reset
     end
 
     def resize(width : Int, height : Int)
@@ -85,16 +92,26 @@ module CryTUI
     end
 
     def refresh_size : Bool
-      @backend.refresh_size
+      changed = @backend.refresh_size
+      synchronize_area
+      changed
     end
 
     def draw(& : Frame ->) : Nil
+      refresh_size
       area = @backend.size
-      @previous = Buffer.new(area) unless @previous.area == area
       current = Buffer.new(area)
       yield Frame.new(area, current)
       @backend.draw(@previous.diff(current))
       @previous = current
+    end
+
+    private def synchronize_area : Nil
+      area = @backend.size
+      return if @previous.area == area
+
+      @backend.clear
+      @previous = Buffer.new(area)
     end
   end
 end
