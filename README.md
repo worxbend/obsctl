@@ -1,10 +1,14 @@
 <div align="center">
 
+<img src="docs/assets/obsctl-logo.svg" alt="obsctl logo" width="180" />
+
 # 📡 obsctl
 
 ### Your OBS control room—right inside the terminal.
 
 **A fast Crystal TUI, automation-friendly CLI, and resilient local daemon for OBS Studio.**
+
+🎛️ **Control** · 📊 **Observe** · 🤖 **Automate** · 🔁 **Stay connected**
 
 [![Release](https://img.shields.io/github/v/release/worxbend/obsctl?display_name=tag&sort=semver&style=flat-square)](https://github.com/worxbend/obsctl/releases)
 [![Crystal](https://img.shields.io/badge/Crystal-%E2%89%A5%201.20.2-000000?style=flat-square&logo=crystal)](https://crystal-lang.org/)

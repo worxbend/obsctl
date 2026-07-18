@@ -5,6 +5,8 @@ This tracker is grounded in the initial project brief. It records what is implem
 - [x] Replace the implementation-log-style README with a polished OSS landing
   page covering value, setup, TUI controls, automation, architecture,
   configuration, operations, troubleshooting, development, and contribution.
+- [x] Add a scalable obsctl broadcast-terminal logo and center it with the
+  emoji-rich README title, tagline, badges, and hero navigation.
 
 ## Major Architecture Update: Local Client/Server
 
