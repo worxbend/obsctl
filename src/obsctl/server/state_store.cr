@@ -302,6 +302,10 @@ module Obsctl
               volume_percent: input.volume_percent,
             }
           end,
+          output: {
+            streaming: snapshot.output.streaming,
+            recording: snapshot.output.recording,
+          },
           last_error: snapshot.last_error,
           updated_at: snapshot.updated_at.to_rfc3339,
         }.to_json)

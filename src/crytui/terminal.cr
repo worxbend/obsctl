@@ -8,6 +8,10 @@ module CryTUI
 
     def leave : Nil
     end
+
+    def refresh_size : Bool
+      false
+    end
   end
 
   class TestBackend < Backend
@@ -44,6 +48,10 @@ module CryTUI
   class Terminal
     getter backend : Backend
 
+    def area : Rect
+      @backend.size
+    end
+
     def initialize(@backend : Backend)
       @previous = Buffer.new(@backend.size)
       @active = false
@@ -66,6 +74,18 @@ module CryTUI
       yield self
     ensure
       stop
+    end
+
+    # Runs with the input descriptor in raw mode and restores its exact prior
+    # termios state after normal return or an exception.
+    def run(input : IO::FileDescriptor, & : Terminal ->) : Nil
+      input.raw do
+        run { |terminal| yield terminal }
+      end
+    end
+
+    def refresh_size : Bool
+      @backend.refresh_size
     end
 
     def draw(& : Frame ->) : Nil
