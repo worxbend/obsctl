@@ -99,7 +99,7 @@ module Obsctl
           percent = command.percent
           raise Domain::CommandParseError.new("missing volume percent") unless percent
           @supervisor.with_client(&.set_volume(input.name, percent))
-          refresh_snapshot
+          @state.update_input_volume(input.name, Domain::Aliases.volume_percent_to_mul(percent), nil)
           object({"message" => "volume set: #{input.name} #{percent}%"})
         when "toggle_stream"
           active = @supervisor.with_client(&.toggle_stream)

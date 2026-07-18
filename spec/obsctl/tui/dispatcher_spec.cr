@@ -1,7 +1,7 @@
 require "../../spec_helper"
 require "../../../src/obsctl/tui/dispatcher"
 
-private def dispatcher_fixture
+private def dispatcher_fixture(volume_debounce : Time::Span = 10.milliseconds)
   model = Obsctl::TUI::Model.new
   model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
     connected: true,
@@ -16,7 +16,15 @@ private def dispatcher_fixture
     sent << payload
     Obsctl::IPC::Response.new("test", true, JSON.parse(%({"message":"ok"})))
   end
-  {model, sent, Obsctl::TUI::Dispatcher.new(model, sender)}
+  {model, sent, Obsctl::TUI::Dispatcher.new(model, sender, volume_debounce: volume_debounce)}
+end
+
+private def wait_for_volume_command(sent : Array(Obsctl::IPC::CommandPayload), timeout = 1.second)
+  deadline = Time.instant + timeout
+  until sent.any?(&.name.==("set_volume"))
+    raise "timed out waiting for debounced volume command" if Time.instant >= deadline
+    Fiber.yield
+  end
 end
 
 describe Obsctl::TUI::Dispatcher do
@@ -36,9 +44,27 @@ describe Obsctl::TUI::Dispatcher do
     model.focus = Obsctl::TUI::FocusPanel::Audio
     dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::ToggleMute))
     dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::VolumeUp))
+    model.focused_audio.not_nil!.volume_percent.should eq(55)
+    wait_for_volume_command(sent)
     sent.map(&.name).should eq(["set_scene", "toggle_mute", "set_volume"])
     sent.last.target.should eq("Mic")
     sent.last.percent.should eq(55)
+  end
+
+  it "renders rapid volume changes immediately and sends only the trailing value" do
+    model, sent, dispatcher = dispatcher_fixture(20.milliseconds)
+    model.focus = Obsctl::TUI::FocusPanel::Audio
+
+    6.times do
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::VolumeUp))
+    end
+
+    model.focused_audio.not_nil!.volume_percent.should eq(80)
+    sent.should be_empty
+    wait_for_volume_command(sent)
+    sent.size.should eq(1)
+    sent.first.target.should eq("Mic")
+    sent.first.percent.should eq(80)
   end
 
   it "parses palette commands and formats remote errors" do

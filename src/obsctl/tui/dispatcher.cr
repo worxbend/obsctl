@@ -11,10 +11,18 @@ module Obsctl
       message : String? = nil
 
     class Dispatcher
+      VOLUME_DEBOUNCE = 120.milliseconds
+
       alias Sender = Proc(IPC::CommandPayload, IPC::Response)
       alias ThemePersister = Proc(Theme, String)
 
-      def initialize(@model : Model, @sender : Sender, @theme_persister : ThemePersister? = nil)
+      def initialize(
+        @model : Model,
+        @sender : Sender,
+        @theme_persister : ThemePersister? = nil,
+        @volume_debounce : Time::Span = VOLUME_DEBOUNCE,
+      )
+        @volume_versions = Hash(String, UInt64).new(0_u64)
       end
 
       def handle(action : Action) : ActionOutcome
@@ -174,7 +182,26 @@ module Obsctl
         input = @model.focused_audio
         return ActionOutcome.new unless input
         percent = ((input.volume_percent || 50) + delta).clamp(0, 100)
-        command(IPC::CommandPayload.new("set_volume", input.name, percent))
+        @model.preview_audio_volume(input.name, percent)
+        debounce_volume(input.name, percent)
+        ActionOutcome.new
+      end
+
+      private def debounce_volume(input_name : String, percent : Int32) : Nil
+        version = @volume_versions[input_name] &+ 1
+        @volume_versions[input_name] = version
+        spawn(name: "obsctl-volume-debounce") do
+          sleep @volume_debounce
+          next unless @volume_versions[input_name] == version
+
+          response = @sender.call(IPC::CommandPayload.new("set_volume", input_name, percent))
+          unless response.ok
+            error = response.error
+            @model.set_last_result(error ? "error [#{error.code}]: #{error.message}" : "error: invalid server response")
+          end
+        rescue ex : Domain::ObsctlError | IO::Error
+          @model.set_last_result("error: #{ex.message}")
+        end
       end
 
       private def refresh_completions
