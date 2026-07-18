@@ -3064,3 +3064,14 @@ M  AGENT_LOG.md
 - Added memory-buffer rendering contracts covering connected/disconnected,
   empty/selected resources, scene metadata, audio mute/volume/meter display,
   server startup guidance, result reveal, and completion selection.
+
+## 2026-07-18 — Complete the primary dashboard frame
+
+- Ported the Rust nested dashboard layout with fixed header/live/log/palette
+  rows, flexible scenes/audio panels, and compact profiles/collections panels.
+- Added shared resource lists plus profiles, collections, LIVE/REC telemetry,
+  recent daemon logs, and a top-level dashboard renderer.
+- Added a full-frame memory backend contract at 120x40 and a geometry parity
+  contract at 100x40.
+- Corrected CryTUI buffer layering so symbol writes patch pre-painted cell
+  styles and wide-cell cleanup preserves the dashboard background.

@@ -48,12 +48,12 @@ module CryTUI
           clear_wide_at(x + written, y)
           cell = self[x + written, y]
           cell.symbol = symbol
-          cell.style = style
+          cell.style = cell.style.patch(style)
           cell.continuation = false
           if width == 2
             continuation = self[x + written + 1, y]
-            continuation.reset
-            continuation.style = style
+            clear_content(continuation)
+            continuation.style = continuation.style.patch(style)
             continuation.continuation = true
           end
           written += width
@@ -106,11 +106,16 @@ module CryTUI
     private def clear_wide_at(x : Int, y : Int)
       cell = self[x, y]
       if cell.continuation? && x > @area.left
-        self[x - 1, y].reset
+        clear_content(self[x - 1, y])
       elsif TextWidth.width(cell.symbol) == 2 && x + 1 < @area.right
-        self[x + 1, y].reset
+        clear_content(self[x + 1, y])
       end
-      cell.reset
+      clear_content(cell)
+    end
+
+    private def clear_content(cell : Cell)
+      cell.symbol = " "
+      cell.continuation = false
     end
 
     private def index(x : Int, y : Int) : Int32
