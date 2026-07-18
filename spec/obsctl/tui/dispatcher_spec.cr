@@ -64,13 +64,25 @@ describe Obsctl::TUI::Dispatcher do
     sent.map(&.name).should eq(["toggle_stream", "toggle_record"])
   end
 
+  it "forwards reconnect aliases and guarded server shutdown" do
+    model, sent, dispatcher = dispatcher_fixture
+    ["/reconnect", "/connect", "/shutdown-server"].each do |command|
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette))
+      model.command_palette.input = command
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteSubmit))
+    end
+    sent.map(&.name).should eq(["reconnect_obs", "reconnect_obs", "shutdown_server"])
+  end
+
   it "handles help, themes, quit, retry, and settings locally" do
     model, _, dispatcher = dispatcher_fixture
-    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette))
-    model.command_palette.input = "/themes"
-    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteSubmit))
-    model.view.should eq(Obsctl::TUI::View::Settings)
-    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::CloseSettings))
+    ["/themes", "/theme", "/settings"].each do |command|
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette))
+      model.command_palette.input = command
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteSubmit))
+      model.view.should eq(Obsctl::TUI::View::Settings)
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::CloseSettings))
+    end
     dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::RetryConnect)).retry_subscription.should be_true
     dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::Quit)).quit.should be_true
   end

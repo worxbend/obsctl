@@ -151,6 +151,22 @@ describe Obsctl::TUI::Widgets::Scenes do
     buffer[10, 1].style.background.should eq(model.theme.highlight_background)
   end
 
+  it "decays a switched-scene flash across eight animation ticks" do
+    model = widget_model
+    model.scene_flash = {"Main", 10_u64}
+
+    colors = [10_u64, 14_u64, 18_u64].map do |frame|
+      model.anim.frame = frame
+      buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 64, 7))
+      Obsctl::TUI::Widgets::Scenes.render(buffer.area, buffer, model)
+      buffer[8, 1].style.foreground
+    end
+
+    colors[0].should eq(model.theme.accent)
+    colors[1].should eq(Obsctl::TUI::Anim.blend(model.theme.success, model.theme.accent, 0.5))
+    colors[2].should eq(model.theme.foreground)
+  end
+
   it "renders an empty panel without selecting a row" do
     model = Obsctl::TUI::Model.new
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 40, 4))
@@ -313,6 +329,19 @@ describe Obsctl::TUI::Widgets::Splash do
       Obsctl::TUI::Widgets::Splash.render(buffer.area, buffer, model, frame, 40_u64)
       rendered_text(buffer).should contain(message)
     end
+  end
+
+  it "alternates the LIVE identity badge between filled and outline phases" do
+    model = widget_model
+    filled = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 60, 12))
+    outline = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 60, 12))
+    Obsctl::TUI::Widgets::Splash.render(filled.area, filled, model, 0_u64, 40_u64)
+    Obsctl::TUI::Widgets::Splash.render(outline.area, outline, model, 2_u64, 40_u64)
+
+    filled_live = filled.cells.find { |cell| cell.symbol == "L" && cell.style.background }
+    outline_live = outline.cells.find { |cell| cell.symbol == "L" && cell.style.modifiers.bold? && cell.style.background == model.theme.background }
+    filled_live.should_not be_nil
+    outline_live.should_not be_nil
   end
 end
 

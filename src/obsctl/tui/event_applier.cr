@@ -123,10 +123,22 @@ module Obsctl
         inputs = payload["inputs"]?.try(&.as_a?) || [] of JSON::Any
         inputs.each do |input|
           name = input["name"]?.try(&.as_s?) || input["inputName"]?.try(&.as_s?)
-          level = number(input["level"]?)
+          level = number(input["level"]?) || meter_level(input["inputLevelsMul"]?)
           model.meter_levels[name] = level if name && level
         end
         false
+      end
+
+      # obs-websocket sends one [magnitude, peak, input peak] tuple per
+      # channel. Match the Rust adapter by displaying the loudest channel.
+      private def meter_level(data : JSON::Any?) : Float64?
+        channels = data.try(&.as_a?)
+        return nil unless channels
+        channels.reduce(0.0) do |maximum, channel|
+          magnitude = channel.as_a?.try(&.first?).try { |value| number(value) }
+          return nil unless magnitude && magnitude.finite? && magnitude >= 0.0
+          Math.max(maximum, magnitude)
+        end
       end
 
       private def string_array(data : JSON::Any?) : Array(String)

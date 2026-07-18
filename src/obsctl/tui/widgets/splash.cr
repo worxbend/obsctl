@@ -109,7 +109,18 @@ module Obsctl
           phase = (frame // 2 % 4).to_i
           icon = model.show_icons ? ["◉", "●", "◍", "○"][phase] : ["O", "o", "O", "."][phase]
           wings = model.show_icons ? [{"⟫", "⟪"}, {"›", "‹"}, {"·", "·"}, {"›", "‹"}][phase] : [{">", "<"}, {"-", "-"}, {".", "."}, {"-", "-"}][phase]
-          centered("#{wings[0]}   #{icon}  LIVE   #{wings[1]}", model.theme.danger, true)
+          pulse = Math.sin(frame.to_f64 * 0.35) * 0.5 + 0.5
+          color = Anim.blend(model.theme.danger, model.theme.warning, pulse * 0.35)
+          badge_style = if phase.even?
+                          CryTUI::Style.new(foreground: model.theme.background, background: color, modifiers: CryTUI::Modifier::Bold)
+                        else
+                          CryTUI::Style.new(foreground: color, modifiers: CryTUI::Modifier::Bold)
+                        end
+          CryTUI::Line.new([
+            CryTUI::Span.new("#{wings[0]}  ", CryTUI::Style.new(foreground: model.theme.muted)),
+            CryTUI::Span.new(" #{icon}  LIVE ", badge_style),
+            CryTUI::Span.new("  #{wings[1]}", CryTUI::Style.new(foreground: model.theme.muted)),
+          ], CryTUI::Alignment::Center)
         end
 
         private def progress_line(model, frame, total)
