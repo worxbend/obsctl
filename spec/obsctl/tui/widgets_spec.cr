@@ -275,6 +275,22 @@ describe Obsctl::TUI::Widgets::Splash do
     rendered_text(ascii).should contain("OBSCTL STARTUP")
     rendered_text(ascii).should contain("50%")
   end
+
+  it "renders the same staged boot vocabulary as the Rust splash" do
+    model = widget_model
+    expected = {
+       0_u64 => "loading control surfaces",
+      10_u64 => "warming animation engine",
+      20_u64 => "syncing OBS telemetry",
+      30_u64 => "painting command center",
+      40_u64 => "ready",
+    }
+    expected.each do |frame, message|
+      buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 60, 12))
+      Obsctl::TUI::Widgets::Splash.render(buffer.area, buffer, model, frame, 40_u64)
+      rendered_text(buffer).should contain(message)
+    end
+  end
 end
 
 describe Obsctl::TUI::Widgets::SceneMap do

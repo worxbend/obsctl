@@ -167,6 +167,14 @@ preserving exact message text and resource word boundaries. Profile and
 collection widgets/completion also read the snapshot directly, eliminating an
 earlier duplicate model cache that could diverge from daemon state.
 
+CryTUI blocks now model Ratatui's independent `TOP | RIGHT | BOTTOM | LEFT`
+border flags, including asymmetric inner rectangles and corner selection. This
+enables the Rust splash's thick left-only studio-link rail instead of faking it
+with a full box. The splash now shares the reference's staged boot messages,
+gradient segment progress/cursor, orbiting LIVE identity, exact signal slither
+trail, liquid-wave timing, and ASCII progress behavior. Subscription failures
+also restart the command-result reveal clock as the Rust runtime does.
+
 ## Delivery Sequence
 
 1. Harden core geometry, Unicode display width, layout allocation, styled text,

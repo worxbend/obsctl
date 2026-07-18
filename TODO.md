@@ -43,11 +43,15 @@ Critical rule:
   including modal precedence and Ctrl-navigation behavior.
 - [x] Add styled text/list primitives to CryTUI and port the first header,
   scenes, audio, connection, and command-palette rendering contracts.
+- [x] Add Ratatui-compatible independently selectable block borders and use a
+  left-only thick rail in the large staged startup splash.
 - [x] Port the complete Rust theme catalog, partial custom theme resolution,
   and typed runtime `ui` configuration without losing it on config dumps.
 - [x] Port the secondary split settings preview, responsive/dismissible startup
   splash, standalone scene-map widget, animation helpers, and atomic theme
   persistence.
+- [x] Match the Rust splash's staged boot vocabulary, segmented gradient
+  progress, live identity, signal slither, liquid wave, and ASCII progress.
 - [ ] Match Ratatui constraint degradation on narrow/short terminal layouts.
 - [x] Render the complete primary dashboard frame with Rust-compatible header,
   live bar, scenes/audio, profiles/collections, logs, and command palette areas.

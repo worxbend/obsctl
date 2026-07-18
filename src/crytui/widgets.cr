@@ -1,8 +1,11 @@
 module CryTUI
   module Widgets
+    @[Flags]
     enum Borders
-      None
-      All
+      Top
+      Right
+      Bottom
+      Left
     end
 
     struct BorderSet
@@ -33,25 +36,59 @@ module CryTUI
       end
 
       def inner(area : Rect) : Rect
-        @borders.all? ? area.inner(1) : area
+        left = @borders.left? ? 1 : 0
+        top = @borders.top? ? 1 : 0
+        right = @borders.right? ? 1 : 0
+        bottom = @borders.bottom? ? 1 : 0
+        Rect.new(
+          area.x + left,
+          area.y + top,
+          {area.width - left - right, 0}.max,
+          {area.height - top - bottom, 0}.max
+        )
       end
 
       def render(area : Rect, buffer : Buffer)
         return if area.empty?
         buffer.set_style(area, @style)
-        return unless @borders.all?
+        return if @borders.none?
         left, right, top, bottom = area.left, area.right - 1, area.top, area.bottom - 1
-        (left..right).each do |x|
-          top_symbol = x == left ? @border_set.top_left : (x == right ? @border_set.top_right : @border_set.horizontal)
-          bottom_symbol = x == left ? @border_set.bottom_left : (x == right ? @border_set.bottom_right : @border_set.horizontal)
-          buffer.set_string(x, top, top_symbol, @border_style)
-          buffer.set_string(x, bottom, bottom_symbol, @border_style) if bottom != top
+        if @borders.top?
+          (left..right).each do |x|
+            symbol = if x == left && @borders.left?
+                       @border_set.top_left
+                     elsif x == right && @borders.right?
+                       @border_set.top_right
+                     else
+                       @border_set.horizontal
+                     end
+            buffer.set_string(x, top, symbol, @border_style)
+          end
         end
-        (top + 1...bottom).each do |y|
-          buffer.set_string(left, y, @border_set.vertical, @border_style)
-          buffer.set_string(right, y, @border_set.vertical, @border_style) if right != left
+        if @borders.bottom? && bottom != top
+          (left..right).each do |x|
+            symbol = if x == left && @borders.left?
+                       @border_set.bottom_left
+                     elsif x == right && @borders.right?
+                       @border_set.bottom_right
+                     else
+                       @border_set.horizontal
+                     end
+            buffer.set_string(x, bottom, symbol, @border_style)
+          end
         end
-        buffer.set_string(left + 2, top, " #{@title} ", @border_style, area.width - 4) if @title && area.width >= 4
+        vertical_top = top + (@borders.top? ? 1 : 0)
+        vertical_bottom = bottom - (@borders.bottom? ? 1 : 0)
+        if vertical_top <= vertical_bottom
+          (vertical_top..vertical_bottom).each do |y|
+            buffer.set_string(left, y, @border_set.vertical, @border_style) if @borders.left?
+            buffer.set_string(right, y, @border_set.vertical, @border_style) if @borders.right? && right != left
+          end
+        end
+        if @title && area.width >= 4
+          title_x = left + (@borders.left? ? 2 : 1)
+          buffer.set_string(title_x, top, " #{@title} ", @border_style, {area.right - title_x, 0}.max)
+        end
       end
     end
 

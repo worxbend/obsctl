@@ -38,6 +38,20 @@ describe Obsctl::TUI::App do
     app.process(CryTUI::KeyEvent.character('q'), dispatcher).should be_true
   end
 
+  it "restarts the result reveal animation when a subscription disconnects" do
+    model = Obsctl::TUI::Model.new
+    model.anim.frame = 42_u64
+    app = Obsctl::TUI::App.new(model: model)
+    sender = ->(payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true) }
+    dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)
+
+    app.process(Obsctl::TUI::SubscriptionMessage.new(0, error: "daemon gone"), dispatcher)
+
+    model.connected_to_daemon.should be_false
+    model.last_result.should eq("daemon gone")
+    model.last_result_frame.should eq(42_u64)
+  end
+
   it "renders unavailable, dashboard, and settings views through CryTUI" do
     model = Obsctl::TUI::Model.new(advanced_ui: false)
     app = Obsctl::TUI::App.new(model: model)

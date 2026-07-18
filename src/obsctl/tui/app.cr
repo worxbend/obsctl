@@ -124,7 +124,7 @@ module Obsctl
             EventApplier.apply(@model, event)
           else
             @model.connected_to_daemon = false
-            @model.last_result = message.error || "server connection closed"
+            @model.set_last_result(message.error || "server connection closed")
           end
           false
         else
@@ -187,7 +187,7 @@ module Obsctl
       rescue ex : Domain::ObsctlError
         @subscription = nil
         @model.connected_to_daemon = false
-        @model.last_result = ex.message
+        @model.set_last_result(ex.message || "server connection failed")
       end
 
       private def spawn_input_pump
