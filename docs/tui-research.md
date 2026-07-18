@@ -130,6 +130,18 @@ can differ between Cassowary implementations where Ratatui itself has no
 stable/fair tie contract; required bounds and documented constraint priorities
 remain identical.
 
+A 2026-07-18 differential audit expanded this to 328 allocations over
+dashboard, mixed length/min/max/fill, percentages, ratios, positive spacing,
+and negative overlap. Determined cases agree cell-for-cell. Re-running the
+unchanged Ratatui probe in separate processes changed eight undersized
+dashboard results because cassowary-rs' hash-backed pivot selection chose a
+different valid basis for equal-strength ties. CryTUI therefore treats those
+specific vectors as intentionally unspecified, while testing the stable
+contract: segment bounds, ordering, required minima, priority classes, exact
+determined outputs, and Ratatui's negative-spacing overlap. The Kiwi constraint
+graph now mirrors Ratatui's area expressions, segment-only non-negativity,
+near-required leading spacer, and `Flex::Start` trailing grow.
+
 The primary dashboard now renders as a single frame using the same nested area
 contract as the Rust reference: fixed header/live/log/palette chrome, a flexible
 scenes/audio row, and a smaller profiles/collections row. The complete frame

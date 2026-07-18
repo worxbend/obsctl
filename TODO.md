@@ -31,7 +31,9 @@ Critical rule:
   test backend, and initial dashboard widget primitives.
 - [x] Add Unicode grapheme/display-width handling for combining text, CJK,
   flags, and ZWJ emoji without splitting wide cells at clipping boundaries.
-- [ ] Finish Ratatui-compatible layout allocation edge cases.
+- [x] Finish the Ratatui 0.29 layout subset used by obsctl, including exact
+  determined allocations, stable undersized invariants, and negative overlap;
+  document solver-dependent equal-strength ties.
 - [x] Complete the ANSI terminal layer: raw terminal lifecycle, live size and
   resize handling, PTY restoration specs, cell-diff output, styling,
   alternate-screen cleanup, and incremental key/paste parsing.
@@ -56,7 +58,9 @@ Critical rule:
   persistence.
 - [x] Match the Rust splash's staged boot vocabulary, segmented gradient
   progress, live identity, signal slither, liquid wave, and ASCII progress.
-- [ ] Match Ratatui constraint degradation on narrow/short terminal layouts.
+- [x] Validate narrow/short constraint degradation against a Ratatui 0.29
+  matrix and Ratatui cross-process reruns; preserve the stable priority/bounds
+  contract where cassowary-rs itself has no stable tie allocation.
 - [x] Render the complete primary dashboard frame with Rust-compatible header,
   live bar, scenes/audio, profiles/collections, logs, and command palette areas.
 - [x] Wire `/stream` and `/rec` from parser through thin IPC clients to

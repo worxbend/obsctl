@@ -48,6 +48,41 @@ describe CryTUI::Layout do
     columns.map { |column| {column.x, column.width} }.should eq([{0, 9}, {12, 8}])
   end
 
+  it "supports Ratatui-style negative spacing as segment overlap" do
+    columns = CryTUI::Layout.new(
+      constraints: [CryTUI::Constraint.length(6), CryTUI::Constraint.length(6), CryTUI::Constraint.min(1)],
+      spacing: -2
+    ).split(CryTUI::Rect.new(0, 0, 16, 1))
+
+    columns.map { |column| {column.x, column.width} }.should eq([{0, 6}, {4, 6}, {8, 8}])
+  end
+
+  it "matches Ratatui for a determined mixed percentage layout" do
+    columns = CryTUI::Layout.new(
+      constraints: [CryTUI::Constraint.percentage(60), CryTUI::Constraint.length(7), CryTUI::Constraint.min(4)]
+    ).split(CryTUI::Rect.new(0, 0, 20, 1))
+
+    columns.map { |column| {column.x, column.width} }.should eq([{0, 9}, {9, 7}, {16, 4}])
+  end
+
+  it "keeps every zero-spacing segment ordered and inside undersized areas" do
+    constraint_sets = [
+      [CryTUI::Constraint.length(4), CryTUI::Constraint.length(4), CryTUI::Constraint.min(6), CryTUI::Constraint.length(7), CryTUI::Constraint.length(4)],
+      [CryTUI::Constraint.length(5), CryTUI::Constraint.min(3), CryTUI::Constraint.max(4), CryTUI::Constraint.fill(2)],
+      [CryTUI::Constraint.min(8), CryTUI::Constraint.min(3), CryTUI::Constraint.length(5)],
+    ]
+    constraint_sets.each do |constraints|
+      (0..60).each do |width|
+        columns = CryTUI::Layout.new(constraints: constraints).split(CryTUI::Rect.new(0, 0, width, 1))
+        columns.each_cons(2) { |pair| pair[0].right.should eq(pair[1].x) }
+        columns.each do |column|
+          column.x.should be >= 0
+          column.right.should be <= width
+        end
+      end
+    end
+  end
+
   it "preserves high-priority minimums when the area is undersized" do
     rows = CryTUI::Layout.new(
       CryTUI::Direction::Vertical,

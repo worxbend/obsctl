@@ -134,19 +134,24 @@ module CryTUI
       solver = Kiwi::Solver.new
       constrain(solver, variables.first == 0, REQUIRED)
       constrain(solver, variables.last == scaled_total, REQUIRED)
+      area_size = variables.last - variables.first
       variables.each do |variable|
-        constrain(solver, variable >= 0, REQUIRED)
-        constrain(solver, variable <= scaled_total, REQUIRED)
+        constrain(solver, variable >= variables.first, REQUIRED)
+        constrain(solver, variable <= variables.last, REQUIRED)
       end
-      variables.each_cons(2) { |pair| constrain(solver, pair[0] <= pair[1], REQUIRED) }
+      # Ratatui only requires each segment to have a non-negative size.
+      # Spacers are constrained separately and may be negative for overlap.
+      variables.skip(1).each_slice(2) do |pair|
+        constrain(solver, pair[0] <= pair[1], REQUIRED) if pair.size == 2
+      end
 
-      # Flex::Start, Ratatui's default: no leading space, fixed internal
-      # spacing, and any unused room trails after the final segment.
-      constrain(solver, variables[1] == variables[0], REQUIRED)
+      # Ratatui 0.29 defaults to Flex::Start: its leading spacer is empty,
+      # internal spacers have the requested size, and unused room trails.
+      constrain(solver, variables[1] == variables[0], REQUIRED - 1.0)
       (1...count).each do |index|
-        constrain(solver, variables[index * 2 + 1] - variables[index * 2] == @spacing.clamp(0, Int32::MAX) * precision, REQUIRED / 10.0)
+        constrain(solver, variables[index * 2 + 1] - variables[index * 2] == @spacing * precision, REQUIRED / 10.0)
       end
-      constrain(solver, variables.last - variables[-2] == scaled_total, MEDIUM / 10.0)
+      constrain(solver, variables.last - variables[-2] == area_size, MEDIUM / 10.0)
 
       segments = @constraints.map_with_index { |_, index| {variables[index * 2 + 1], variables[index * 2 + 2]} }
       @constraints.each_with_index do |constraint, index|
@@ -155,19 +160,19 @@ module CryTUI
         case constraint.kind
         when .min?
           constrain(solver, size >= constraint.value * precision, STRONG * 100.0)
-          constrain(solver, size == scaled_total, MEDIUM)
+          constrain(solver, size == area_size, MEDIUM)
         when .max?
           constrain(solver, size <= constraint.value * precision, STRONG * 100.0)
           constrain(solver, size == constraint.value * precision, MEDIUM * 10.0)
         when .length?
           constrain(solver, size == constraint.value * precision, STRONG * 10.0)
         when .percentage?
-          constrain(solver, size == scaled_total * constraint.value / 100.0, STRONG)
+          constrain(solver, size == area_size * constraint.value / 100.0, STRONG)
         when .ratio?
           denominator = {constraint.denominator, 1}.max
-          constrain(solver, size == scaled_total * constraint.value / denominator, STRONG / 10.0)
+          constrain(solver, size == area_size * constraint.value / denominator, STRONG / 10.0)
         when .fill?
-          constrain(solver, size == scaled_total, MEDIUM)
+          constrain(solver, size == area_size, MEDIUM)
         end
       end
 
