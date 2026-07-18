@@ -54,6 +54,28 @@ describe CryTUI::Terminal do
   end
 end
 
+describe CryTUI::Widgets::Block do
+  it "renders and reserves independent border sides" do
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 8, 3))
+    block = CryTUI::Widgets::Block.new(
+      borders: CryTUI::Widgets::Borders::Left,
+      border_set: CryTUI::Widgets::BorderSet::THICK
+    )
+    block.render(buffer.area, buffer)
+
+    buffer.lines.should eq(["┃       ", "┃       ", "┃       "])
+    block.inner(buffer.area).should eq(CryTUI::Rect.new(1, 0, 7, 3))
+  end
+
+  it "draws corners only where adjacent sides meet" do
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 6, 3))
+    borders = CryTUI::Widgets::Borders::Top | CryTUI::Widgets::Borders::Left
+    CryTUI::Widgets::Block.new(borders: borders, border_set: CryTUI::Widgets::BorderSet::ROUNDED).render(buffer.area, buffer)
+
+    buffer.lines.should eq(["╭─────", "│     ", "│     "])
+  end
+end
+
 describe CryTUI::AnsiBackend do
   it "emits styled cell changes and skips wide-cell continuations" do
     io = IO::Memory.new
