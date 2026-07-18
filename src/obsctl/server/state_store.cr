@@ -176,6 +176,29 @@ module Obsctl
         publish_snapshot(next_snapshot) if next_snapshot
       end
 
+      def update_output(streaming : Bool? = nil, recording : Bool? = nil) : Nil
+        next_snapshot = @lock.synchronize do
+          current = @snapshot
+          return unless current.connected
+          next_snap = OBS::State::ObsSnapshot.new(
+            connected: current.connected,
+            obs_studio_version: current.obs_studio_version,
+            obs_websocket_version: current.obs_websocket_version,
+            current_scene: current.current_scene,
+            scenes: current.scenes,
+            audio_inputs: current.audio_inputs,
+            output: OBS::State::OutputState.new(
+              streaming: streaming.nil? ? current.output.streaming : streaming,
+              recording: recording.nil? ? current.output.recording : recording
+            ),
+            last_error: current.last_error
+          )
+          @snapshot = next_snap
+          next_snap
+        end
+        publish_snapshot(next_snapshot) if next_snapshot
+      end
+
       # Records that the supervisor is attempting to establish an OBS session.
       def mark_reconnect_attempt(at : Time = Time.utc) : Nil
         @lock.synchronize do

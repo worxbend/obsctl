@@ -23,6 +23,8 @@ Required commands:
 - `obsctl unmute <audio-alias|shortcut|obs-name>`
 - `obsctl toggle-mute <audio-alias|shortcut|obs-name>`
 - `obsctl vol|volume <audio-alias|shortcut|obs-name> <0-100>`
+- `obsctl stream`
+- `obsctl rec|record`
 - `obsctl dump-config`
 - `obsctl reload-config`
 - `obsctl validate-config`
@@ -39,6 +41,8 @@ Required commands:
 - `/unmute <audio-alias|shortcut|obs-name>`
 - `/toggle-mute <audio-alias|shortcut|obs-name>`
 - `/vol <audio-alias|shortcut|obs-name> <0-100>`
+- `/stream`
+- `/rec` or `/record`
 - `/dump-config`
 - `/reload-config`
 - `/status`
@@ -62,7 +66,7 @@ Non-interactive OBS control commands are IPC clients. They connect to the local 
 
 `--json` is available for scriptable commands: `status`, `obs-status`,
 `server-status`, `reconnect`, `shutdown-server`, `scene`, `mute`, `unmute`,
-`toggle-mute`, `vol`/`volume`, `dump-config`, `reload-config`, and
+`toggle-mute`, `vol`/`volume`, `stream`, `rec`/`record`, `dump-config`, `reload-config`, and
 `validate-config`. The flag can be placed before the command or after the
 command arguments:
 

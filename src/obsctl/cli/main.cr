@@ -162,6 +162,7 @@ module Obsctl
         case command
         when "status", "obs-status", "server-status", "reconnect", "shutdown-server",
              "scene", "mute", "unmute", "toggle-mute", "vol", "volume",
+             "stream", "rec", "record",
              "dump-config", "reload-config", "validate-config"
           true
         else

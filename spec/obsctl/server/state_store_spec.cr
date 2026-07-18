@@ -25,6 +25,20 @@ private def obs_snapshot(
 end
 
 describe Obsctl::Server::StateStore do
+  it "updates stream and record flags independently and publishes snapshots" do
+    updates = [] of JSON::Any
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })
+    state.update(obs_snapshot)
+    updates.clear
+    state.update_output(streaming: true)
+    state.update_output(recording: true)
+
+    state.snapshot.output.should eq(Obsctl::OBS::State::OutputState.new(true, true))
+    updates.size.should eq(2)
+    updates.last["output"]["streaming"].as_bool.should be_true
+    updates.last["output"]["recording"].as_bool.should be_true
+  end
+
   it "records startup failure as a failed connection attempt only" do
     state = Obsctl::Server::StateStore.new
     failed_at = Time.utc(2026, 6, 20, 12, 0, 0)

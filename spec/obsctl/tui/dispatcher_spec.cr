@@ -54,6 +54,16 @@ describe Obsctl::TUI::Dispatcher do
     model.command_palette.active.should be_false
   end
 
+  it "forwards stream and recording palette toggles" do
+    model, sent, dispatcher = dispatcher_fixture
+    ["/stream", "/rec"].each do |command|
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette))
+      model.command_palette.input = command
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteSubmit))
+    end
+    sent.map(&.name).should eq(["toggle_stream", "toggle_record"])
+  end
+
   it "handles help, themes, quit, retry, and settings locally" do
     model, _, dispatcher = dispatcher_fixture
     dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette))

@@ -29,6 +29,25 @@ describe Obsctl::OBS::Client do
       snapshot.audio_inputs[0].volume_mul.should eq(0.7)
       snapshot.audio_inputs[0].volume_percent.should eq(70)
       snapshot.audio_inputs[1].muted.should be_true
+      snapshot.output.streaming.should be_false
+      snapshot.output.recording.should be_false
+    ensure
+      client.try(&.close)
+      server.stop
+    end
+  end
+
+  it "queries and toggles stream and record outputs" do
+    server = Obsctl::SpecSupport::FakeObsServer.new.start
+    client = Obsctl::OBS::Client.new(server.config)
+    begin
+      client.connect
+      client.output_state.should eq(Obsctl::OBS::State::OutputState.new(false, false))
+      client.toggle_stream.should be_true
+      client.toggle_record.should be_true
+      server.streaming?.should be_true
+      server.recording?.should be_true
+      client.output_state.should eq(Obsctl::OBS::State::OutputState.new(true, true))
     ensure
       client.try(&.close)
       server.stop
