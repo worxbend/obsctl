@@ -2,6 +2,13 @@ require "../../spec_helper"
 require "../../../src/obsctl/tui/theme"
 
 describe Obsctl::TUI::Theme do
+  it "maps the TTY-safe palette to Ratatui ANSI colors" do
+    theme = Obsctl::TUI::Theme::MONO
+    theme.accent.should eq(CryTUI::Color.indexed(15))
+    theme.accent_alt.should eq(CryTUI::Color.indexed(7))
+    theme.muted.should eq(CryTUI::Color.indexed(8))
+  end
+
   it "exposes the complete Rust reference theme catalog in reference order" do
     themes = Obsctl::TUI::Theme::ALL
     themes.size.should eq(29)

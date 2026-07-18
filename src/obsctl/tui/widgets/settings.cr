@@ -11,9 +11,9 @@ module Obsctl
           theme = model.theme
           buffer.set_style(area, CryTUI::Style.new(background: theme.background, foreground: theme.foreground))
           title = if model.advanced_ui
-                    Anim.gradient_line("⚙ Settings // Appearance Lab // ↑↓ preview · Enter apply · Esc cancel", theme.accent, theme.accent_alt, model.anim.frame, true)
+                    Anim.gradient_line(" ⚙ Settings // Appearance Lab // ↑↓ preview · Enter apply · Esc cancel ", theme.accent, theme.accent_alt, model.anim.frame, true)
                   else
-                    CryTUI::Line.from("Settings // Appearance // arrows preview | Enter apply | Esc cancel", CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold))
+                    CryTUI::Line.from(" Settings // Appearance // arrows preview | Enter apply | Esc cancel ", CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold))
                   end
           outer = CryTUI::Widgets::Block.new(
             title: title,
@@ -41,7 +41,7 @@ module Obsctl
             CryTUI::Widgets::ListItem.new([line])
           end
           block = CryTUI::Widgets::Block.new(
-            title: "Themes // #{Theme::ALL.size.to_s.rjust(2, '0')} palettes",
+            title: " Themes // #{Theme::ALL.size.to_s.rjust(2, '0')} palettes ",
             border_style: CryTUI::Style.new(foreground: theme.border),
             border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
           )
@@ -53,7 +53,7 @@ module Obsctl
         private def render_preview(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           theme = model.theme
           block = CryTUI::Widgets::Block.new(
-            title: "Preview: #{theme.label}",
+            title: " Preview: #{theme.label} ",
             border_style: CryTUI::Style.new(foreground: theme.border_focus),
             border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
           )

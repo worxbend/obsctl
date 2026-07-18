@@ -47,14 +47,28 @@ describe CryTUI::Terminal do
     end
 
     backend.buffer.lines.should eq([
-      "+- Demo ---+",
-      "|hello     |",
-      "+----------+",
+      "┌Demo──────┐",
+      "│hello     │",
+      "└──────────┘",
     ])
   end
 end
 
 describe CryTUI::Widgets::Block do
+  it "renders an unpadded title even when no borders are selected" do
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 8, 2))
+    CryTUI::Widgets::Block.new(title: "Title", borders: CryTUI::Widgets::Borders::None).render(buffer.area, buffer)
+
+    buffer.lines.should eq(["Title   ", "        "])
+  end
+
+  it "clips long titles before the right border" do
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 8, 2))
+    CryTUI::Widgets::Block.new(title: "very long title").render(buffer.area, buffer)
+
+    buffer.lines.first.should eq("┌very l┐")
+  end
+
   it "preserves styled spans in line titles" do
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 10, 3))
     title = CryTUI::Line.new([
@@ -63,10 +77,10 @@ describe CryTUI::Widgets::Block do
     ])
     CryTUI::Widgets::Block.new(title: title).render(buffer.area, buffer)
 
-    buffer[3, 0].symbol.should eq("A")
-    buffer[3, 0].style.foreground.should eq(CryTUI::Color::RED)
-    buffer[4, 0].symbol.should eq("B")
-    buffer[4, 0].style.foreground.should eq(CryTUI::Color::BLUE)
+    buffer[1, 0].symbol.should eq("A")
+    buffer[1, 0].style.foreground.should eq(CryTUI::Color::RED)
+    buffer[2, 0].symbol.should eq("B")
+    buffer[2, 0].style.foreground.should eq(CryTUI::Color::BLUE)
   end
 
   it "renders and reserves independent border sides" do

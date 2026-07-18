@@ -26,7 +26,7 @@ module Obsctl
             style = scene.active ? CryTUI::Style.new(modifiers: CryTUI::Modifier::Bold) : CryTUI::Style.new
             CryTUI::Widgets::ListItem.new([CryTUI::Line.new(spans)], style)
           end
-          block = Chrome.panel(model.symbol("🎬", "S"), "Scenes", model.symbol("[s]  ↵ switch", "[s] Enter switch"), items.size, focused, model)
+          block = Chrome.panel(model.symbol("🎬", "S"), "Scenes", model.symbol("[s]  ↵ switch", "[s]  Enter switch"), items.size, focused, model)
           highlight = focused ? CryTUI::Style.new(foreground: theme.highlight_foreground, background: theme.highlight_background, modifiers: CryTUI::Modifier::Bold) : CryTUI::Style.new(modifiers: CryTUI::Modifier::Dim)
           state = CryTUI::Widgets::ListState.new(selected: items.empty? ? nil : model.scene_cursor)
           CryTUI::Widgets::List.new(items, highlight_style: highlight, block: block).render(area, buffer, state)

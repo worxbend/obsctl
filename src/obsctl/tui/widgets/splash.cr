@@ -39,9 +39,15 @@ module Obsctl
         private def render_compact(area, buffer, model, frame, total)
           theme = model.theme
           orbit = model.show_icons ? ["✦", "✧", "◆", "◇"][(frame // 3 % 4).to_i] : ["*", "+", "o", "."][(frame // 3 % 4).to_i]
+          pulse = (Math.sin(frame.to_f32 * 0.18_f32) * 0.5_f32 + 0.5_f32).clamp(0.0_f32, 1.0_f32)
+          title = CryTUI::Line.new([
+            CryTUI::Span.new(" #{orbit} ", CryTUI::Style.new(foreground: theme.warning)),
+            CryTUI::Span.new("INITIALIZING BROADCAST CONTROL", CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold)),
+            CryTUI::Span.new(" #{orbit} ", CryTUI::Style.new(foreground: theme.info)),
+          ])
           block = CryTUI::Widgets::Block.new(
-            title: "#{orbit} INITIALIZING BROADCAST CONTROL #{orbit}",
-            border_style: CryTUI::Style.new(foreground: Anim.blend(theme.accent, theme.accent_alt, model.anim.pulse(35_u64))),
+            title: title,
+            border_style: CryTUI::Style.new(foreground: Anim.blend(theme.accent, theme.accent_alt, pulse)),
             border_set: CryTUI::Widgets::BorderSet::ROUNDED
           )
           lines = [
@@ -61,7 +67,7 @@ module Obsctl
 
         private def render_ascii(area, buffer, model, frame, total)
           theme = model.theme
-          block = CryTUI::Widgets::Block.new(title: "OBSCTL STARTUP", border_style: CryTUI::Style.new(foreground: theme.accent), border_set: CryTUI::Widgets::BorderSet::ASCII)
+          block = CryTUI::Widgets::Block.new(title: " OBSCTL STARTUP ", border_style: CryTUI::Style.new(foreground: theme.accent), border_set: CryTUI::Widgets::BorderSet::ASCII)
           lines = ASCII_LOGO.map { |text| centered(text, theme.accent, true) }
           lines << centered(TAGLINE, theme.foreground)
           lines << centered("Scenes, audio, profiles, recording, and live telemetry.", theme.muted)
@@ -89,16 +95,16 @@ module Obsctl
           ]
           CryTUI::Widgets::StyledText.new(identity).render(rows[1], buffer)
           block = CryTUI::Widgets::Block.new(
-            title: "STUDIO LINK // SECURE SESSION",
+            title: CryTUI::Line.from(" STUDIO LINK // SECURE SESSION ", CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold)),
             borders: CryTUI::Widgets::Borders::Left,
             style: CryTUI::Style.new(background: Anim.blend(theme.background, theme.border, 0.34)),
-            border_style: CryTUI::Style.new(foreground: Anim.blend(theme.accent, theme.accent_alt, model.anim.pulse(35_u64))),
+            border_style: CryTUI::Style.new(foreground: Anim.blend(theme.accent, theme.accent_alt, splash_pulse(frame))),
             border_set: CryTUI::Widgets::BorderSet::THICK
           )
           lines = [
+            centered("SIGNAL #{slither(frame, 32)}", theme.accent),
+            centered("LIQUID #{liquid(frame, 32)}", theme.accent_alt),
             line(""),
-            centered("SIGNAL  #{slither(frame, 32)}", theme.accent),
-            centered("LIQUID  #{liquid(frame, 32)}", theme.accent_alt),
             progress_line(model, frame, total),
             centered(boot_message(frame, total, model.show_icons), theme.muted),
           ]
@@ -109,7 +115,7 @@ module Obsctl
           phase = (frame // 2 % 4).to_i
           icon = model.show_icons ? ["◉", "●", "◍", "○"][phase] : ["O", "o", "O", "."][phase]
           wings = model.show_icons ? [{"⟫", "⟪"}, {"›", "‹"}, {"·", "·"}, {"›", "‹"}][phase] : [{">", "<"}, {"-", "-"}, {".", "."}, {"-", "-"}][phase]
-          pulse = Math.sin(frame.to_f64 * 0.35) * 0.5 + 0.5
+          pulse = Math.sin(frame.to_f32 * 0.35_f32) * 0.5_f32 + 0.5_f32
           color = Anim.blend(model.theme.danger, model.theme.warning, pulse * 0.35)
           badge_style = if phase.even?
                           CryTUI::Style.new(foreground: model.theme.background, background: color, modifiers: CryTUI::Modifier::Bold)
@@ -129,7 +135,7 @@ module Obsctl
           spans = [CryTUI::Span.new("  ")]
           30.times do |index|
             if index < filled
-              color = Anim.blend(model.theme.accent, model.theme.accent_alt, index / 30.0)
+              color = Anim.blend(model.theme.accent, model.theme.accent_alt, index.to_f32 / 30.0_f32)
               spans << CryTUI::Span.new("█", CryTUI::Style.new(foreground: color))
             elsif index == filled
               spans << CryTUI::Span.new(frame.even? ? "▓" : "▒", CryTUI::Style.new(foreground: model.theme.info))
@@ -168,12 +174,17 @@ module Obsctl
         private def liquid(frame, width)
           bars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
           Array.new(width) do |index|
-            bars[((Math.sin(index * 0.62 + frame * 0.32) * 0.5 + 0.5) * 7).round.to_i.clamp(0, 7)]
+            phase = index.to_f32 * 0.62_f32 + frame.to_f32 * 0.32_f32
+            bars[((Math.sin(phase) * 0.5_f32 + 0.5_f32) * 7.0_f32).round.to_i.clamp(0, 7)]
           end.join
         end
 
-        private def progress(frame, total) : Float64
-          (frame.to_f64 / {total, 1_u64}.max).clamp(0.0, 1.0)
+        private def progress(frame, total) : Float32
+          (frame.to_f32 / {total, 1_u64}.max.to_f32).clamp(0.0_f32, 1.0_f32)
+        end
+
+        private def splash_pulse(frame) : Float32
+          (Math.sin(frame.to_f32 * 0.18_f32) * 0.5_f32 + 0.5_f32).clamp(0.0_f32, 1.0_f32)
         end
 
         private def center(area, width, height)

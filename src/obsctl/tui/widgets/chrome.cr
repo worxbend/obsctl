@@ -9,7 +9,7 @@ module Obsctl
         extend self
 
         def panel(icon : String, label : String, hint : String, count : Int32, focused : Bool, model : Model) : CryTUI::Widgets::Block
-          heading = "#{icon}  #{label} "
+          heading = " #{icon}  #{label} "
           spans = if model.advanced_ui
                     Anim.gradient_line(heading, model.theme.accent, model.theme.accent_alt, model.anim.frame, true).spans
                   else

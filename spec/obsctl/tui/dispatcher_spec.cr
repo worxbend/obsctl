@@ -74,6 +74,15 @@ describe Obsctl::TUI::Dispatcher do
     sent.map(&.name).should eq(["reconnect_obs", "reconnect_obs", "shutdown_server"])
   end
 
+  it "maps status to the Rust snapshot payload" do
+    model, sent, dispatcher = dispatcher_fixture
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette))
+    model.command_palette.input = "/status"
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteSubmit))
+
+    sent.last.name.should eq("get_snapshot")
+  end
+
   it "handles help, themes, quit, retry, and settings locally" do
     model, _, dispatcher = dispatcher_fixture
     ["/themes", "/theme", "/settings"].each do |command|
@@ -83,7 +92,9 @@ describe Obsctl::TUI::Dispatcher do
       model.view.should eq(Obsctl::TUI::View::Settings)
       dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::CloseSettings))
     end
-    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::RetryConnect)).retry_subscription.should be_true
+    retry = dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::RetryConnect))
+    retry.retry_subscription.should be_true
+    retry.message.should eq("Reconnected to daemon.")
     dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::Quit)).quit.should be_true
   end
 end

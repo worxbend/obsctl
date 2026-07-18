@@ -8,7 +8,7 @@ Top-level fields:
 - `server`: local daemon settings such as Unix socket path and remote shutdown policy
 - `connection`: OBS WebSocket connection and timeout settings
 - `reconnect`: daemon/TUI reconnect behavior
-- `ui`: refresh interval, palette prefix, icon flag, theme name
+- `ui`: refresh interval, palette prefix, icon flag, theme name, locale
 - `scenes`: configured scene aliases, shortcuts, groups, and stale markers
 - `audio.inputs`: configured audio aliases, shortcuts, kind, and stale markers
 - `keymap`: keyboard bindings for the TUI
@@ -41,6 +41,7 @@ ui:
   advanced_ui: true
   show_icons: true
   theme: default
+  locale: en
 ```
 
 The TUI accepts 29 built-in themes matching the Rust reference. Set `theme:
@@ -48,6 +49,11 @@ custom` and add any subset of `custom_theme` colors (`bg`, `accent`,
 `accent_alt`, `fg`, `muted`, `border`, `border_focus`, `success`, `warning`,
 `danger`, `info`, `highlight_bg`, and `highlight_fg`) as six-digit RGB hex.
 Missing or invalid custom values fall back to the default Claude palette.
+
+The TUI supports `en` and `uk` for the localized header and connection
+surface, matching the Rust reference. Set `ui.locale`, or override it for one
+process with `OBSCTL_LOCALE`; the environment value takes precedence and
+unsupported values fall back to English.
 
 Unknown top-level fields are rejected with a config error. This avoids silently dropping future fields when config files are rewritten. Nested unknown fields are currently ignored by the typed loader and are not preserved on write. Older configs with `connection.reconnect` are still accepted, but new writes use the top-level `reconnect` section.
 
