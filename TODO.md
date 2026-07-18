@@ -42,8 +42,10 @@ Critical rule:
   including modal precedence and Ctrl-navigation behavior.
 - [x] Add styled text/list primitives to CryTUI and port the first header,
   scenes, audio, connection, and command-palette rendering contracts.
-- [ ] Port the complete Rust theme catalog/custom theme resolution, secondary
-  settings/splash/scene-map widgets, narrow-screen layout, and animation helpers.
+- [x] Port the complete Rust theme catalog, partial custom theme resolution,
+  and typed runtime `ui` configuration without losing it on config dumps.
+- [ ] Port secondary settings/splash/scene-map widgets, narrow-screen layout,
+  and animation helpers.
 - [x] Render the complete primary dashboard frame with Rust-compatible header,
   live bar, scenes/audio, profiles/collections, logs, and command palette areas.
 - [x] Add the persistent state/events/logs subscription, correlated short-lived

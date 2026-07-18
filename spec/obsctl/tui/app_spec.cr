@@ -2,6 +2,22 @@ require "../../spec_helper"
 require "../../../src/obsctl/tui/app"
 
 describe Obsctl::TUI::App do
+  it "builds the runtime model from ui config" do
+    config = Obsctl::Config::Config.new(ui: Obsctl::Config::UiConfig.new(
+      theme: "custom",
+      show_icons: false,
+      advanced_ui: false,
+      custom_theme: Obsctl::Config::CustomThemeConfig.new(accent: "#010203")
+    ))
+
+    app = Obsctl::TUI::App.from_config(config)
+    app.model.theme.id.should eq("custom")
+    app.model.theme.accent.should eq(CryTUI::Color.rgb(1, 2, 3))
+    app.model.show_icons.should be_false
+    app.model.advanced_ui.should be_false
+    app.model.command_palette_prefix.should eq("/")
+  end
+
   it "applies subscription events, palette paste, and quit actions" do
     model = Obsctl::TUI::Model.new
     app = Obsctl::TUI::App.new(model: model)

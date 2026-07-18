@@ -35,7 +35,19 @@ reconnect:
   max_delay_ms: 10000
   multiplier: 1.8
   jitter_ms: 250
+ui:
+  refresh_interval_ms: 250
+  command_palette_prefix: "/"
+  advanced_ui: true
+  show_icons: true
+  theme: default
 ```
+
+The TUI accepts 29 built-in themes matching the Rust reference. Set `theme:
+custom` and add any subset of `custom_theme` colors (`bg`, `accent`,
+`accent_alt`, `fg`, `muted`, `border`, `border_focus`, `success`, `warning`,
+`danger`, `info`, `highlight_bg`, and `highlight_fg`) as six-digit RGB hex.
+Missing or invalid custom values fall back to the default Claude palette.
 
 Unknown top-level fields are rejected with a config error. This avoids silently dropping future fields when config files are rewritten. Nested unknown fields are currently ignored by the typed loader and are not preserved on write. Older configs with `connection.reconnect` are still accepted, but new writes use the top-level `reconnect` section.
 
@@ -43,4 +55,4 @@ Passwords should be provided through `connection.password_env`. By default this 
 
 Scene lookup priority is shortcut, alias, exact OBS name, case-insensitive alias, then case-insensitive OBS name. Ambiguous matches fail without executing an action.
 
-`dump-config` preserves existing aliases, shortcuts, groups, stale markers, and top-level daemon settings such as `server` and `reconnect`. Before writing, it reports duplicate aliases/shortcuts and alias/shortcut collisions with discovered OBS scene or audio names so a dump cannot save a config that would make later command lookup ambiguous.
+`dump-config` preserves existing aliases, shortcuts, groups, stale markers, and top-level daemon and appearance settings such as `server`, `reconnect`, and `ui`. Before writing, it reports duplicate aliases/shortcuts and alias/shortcut collisions with discovered OBS scene or audio names so a dump cannot save a config that would make later command lookup ambiguous.

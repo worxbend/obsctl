@@ -100,10 +100,11 @@ module Obsctl
       property theme : Theme
       property show_icons : Bool
       property advanced_ui : Bool
+      property command_palette_prefix : String
       property settings_cursor : Int32
       property theme_preview_origin : Theme?
 
-      def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true)
+      def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true, @command_palette_prefix = "/")
         @snapshot = nil
         @logs = [] of LogEntry
         @command_palette = CommandPaletteState.new

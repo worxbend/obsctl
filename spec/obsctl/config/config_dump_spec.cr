@@ -20,7 +20,8 @@ describe Obsctl::Config::ConfigDump do
       reconnect: Obsctl::Config::ReconnectConfig.new(
         enabled: false,
         max_delay_ms: 1500
-      )
+      ),
+      ui: Obsctl::Config::UiConfig.new(theme: "nord", show_icons: false)
     )
 
     merged = Obsctl::Config::ConfigDump.merge(config, ["Main Camera"], ["Mic/Aux"])
@@ -29,6 +30,8 @@ describe Obsctl::Config::ConfigDump do
     merged.server.allow_remote_shutdown.should be_true
     merged.reconnect.enabled.should be_false
     merged.reconnect.max_delay_ms.should eq(1500)
+    merged.ui.theme.should eq("nord")
+    merged.ui.show_icons.should be_false
   end
 
   it "reports duplicate aliases before writing a dumped config" do

@@ -48,6 +48,30 @@ module Obsctl
     # Collection of configured OBS audio inputs.
     record AudioConfig, inputs : Array(AudioInputConfig) = [] of AudioInputConfig
 
+    record CustomThemeConfig,
+      bg : String? = nil,
+      accent : String? = nil,
+      accent_alt : String? = nil,
+      fg : String? = nil,
+      muted : String? = nil,
+      border : String? = nil,
+      border_focus : String? = nil,
+      success : String? = nil,
+      warning : String? = nil,
+      danger : String? = nil,
+      info : String? = nil,
+      highlight_bg : String? = nil,
+      highlight_fg : String? = nil
+
+    record UiConfig,
+      refresh_interval_ms : Int32 = 250,
+      command_palette_prefix : String = "/",
+      advanced_ui : Bool = true,
+      show_icons : Bool = true,
+      theme : String = "default",
+      custom_theme : CustomThemeConfig? = nil,
+      locale : String? = nil
+
     # Parsed obsctl configuration with canonical top-level server and reconnect sections.
     class Config
       ALLOWED_TOP_LEVEL_KEYS = Set{
@@ -57,6 +81,7 @@ module Obsctl
         "reconnect",
         "scenes",
         "audio",
+        "ui",
       }
 
       property version : Int32
@@ -65,6 +90,7 @@ module Obsctl
       property reconnect : ReconnectConfig
       property scenes : Array(SceneConfig)
       property audio : AudioConfig
+      property ui : UiConfig
 
       # Builds a config object, migrating legacy `connection.reconnect` into the
       # canonical top-level `reconnect` field when present.
@@ -75,6 +101,7 @@ module Obsctl
         @reconnect : ReconnectConfig = ReconnectConfig.new,
         @scenes : Array(SceneConfig) = [] of SceneConfig,
         @audio : AudioConfig = AudioConfig.new,
+        @ui : UiConfig = UiConfig.new,
       )
         if legacy_reconnect = @connection.reconnect
           @reconnect = legacy_reconnect
@@ -97,6 +124,7 @@ module Obsctl
         reconnect = parse_reconnect(root["reconnect"]?, root["connection"]?)
         scenes = parse_scenes(root["scenes"]?)
         audio = parse_audio(root["audio"]?)
+        ui = parse_ui(root["ui"]?)
         new(
           version: root["version"]?.try(&.as_i).try(&.to_i32) || 1,
           server: server,
@@ -104,6 +132,7 @@ module Obsctl
           reconnect: reconnect,
           scenes: scenes,
           audio: audio,
+          ui: ui,
         )
       end
 
@@ -172,6 +201,33 @@ module Obsctl
                   end
                 end
               end
+            end
+            yaml.scalar "ui"
+            yaml.mapping do
+              yaml.scalar "refresh_interval_ms"; yaml.scalar @ui.refresh_interval_ms
+              yaml.scalar "command_palette_prefix"; yaml.scalar @ui.command_palette_prefix
+              yaml.scalar "advanced_ui"; yaml.scalar @ui.advanced_ui
+              yaml.scalar "show_icons"; yaml.scalar @ui.show_icons
+              yaml.scalar "theme"; yaml.scalar @ui.theme
+              if custom = @ui.custom_theme
+                yaml.scalar "custom_theme"
+                yaml.mapping do
+                  write_optional(yaml, "bg", custom.bg)
+                  write_optional(yaml, "accent", custom.accent)
+                  write_optional(yaml, "accent_alt", custom.accent_alt)
+                  write_optional(yaml, "fg", custom.fg)
+                  write_optional(yaml, "muted", custom.muted)
+                  write_optional(yaml, "border", custom.border)
+                  write_optional(yaml, "border_focus", custom.border_focus)
+                  write_optional(yaml, "success", custom.success)
+                  write_optional(yaml, "warning", custom.warning)
+                  write_optional(yaml, "danger", custom.danger)
+                  write_optional(yaml, "info", custom.info)
+                  write_optional(yaml, "highlight_bg", custom.highlight_bg)
+                  write_optional(yaml, "highlight_fg", custom.highlight_fg)
+                end
+              end
+              write_optional(yaml, "locale", @ui.locale)
             end
           end
         end
@@ -273,6 +329,33 @@ module Obsctl
           )
         end
         AudioConfig.new(inputs)
+      end
+
+      private def self.parse_ui(value : YAML::Any?) : UiConfig
+        hash = value.try(&.as_h?) || {} of YAML::Any => YAML::Any
+        UiConfig.new(
+          refresh_interval_ms: int(hash, "refresh_interval_ms", 250),
+          command_palette_prefix: string(hash, "command_palette_prefix", "/"),
+          advanced_ui: bool(hash, "advanced_ui", true),
+          show_icons: bool(hash, "show_icons", true),
+          theme: string(hash, "theme", "default"),
+          custom_theme: parse_custom_theme(hash["custom_theme"]?),
+          locale: string_or_nil(hash, "locale")
+        )
+      end
+
+      private def self.parse_custom_theme(value : YAML::Any?) : CustomThemeConfig?
+        return nil unless value
+        hash = value.as_h
+        CustomThemeConfig.new(
+          bg: string_or_nil(hash, "bg"), accent: string_or_nil(hash, "accent"),
+          accent_alt: string_or_nil(hash, "accent_alt"), fg: string_or_nil(hash, "fg"),
+          muted: string_or_nil(hash, "muted"), border: string_or_nil(hash, "border"),
+          border_focus: string_or_nil(hash, "border_focus"), success: string_or_nil(hash, "success"),
+          warning: string_or_nil(hash, "warning"), danger: string_or_nil(hash, "danger"),
+          info: string_or_nil(hash, "info"), highlight_bg: string_or_nil(hash, "highlight_bg"),
+          highlight_fg: string_or_nil(hash, "highlight_fg")
+        )
       end
 
       private def self.array(value : YAML::Any?) : Array(YAML::Any)
