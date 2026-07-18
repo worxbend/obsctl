@@ -3217,3 +3217,18 @@ M  AGENT_LOG.md
   focused Ameba reports only the touched files' existing complexity, naming,
   and `not_nil!` backlog outside the new methods.
 - Debug/release builds and the complete 408-example suite pass.
+
+## 2026-07-19 — Rebuild the OSS README
+
+- Replaced the implementation-heavy README with a dev-advocate-oriented
+  project landing page featuring a centered hero, release/platform badges,
+  terminal preview, feature matrix, clear quick start, and purposeful emoji.
+- Added concise TUI keymaps, CLI/JSON examples, Mermaid architecture, config
+  guidance, user-service operation, troubleshooting, development workflow,
+  documentation routing, and contributor expectations.
+- Audited commands, paths, protocol claims, version requirements, theme count,
+  and runtime behavior against current source and existing project docs.
+- Validation: all local README links resolve, help output matches documented
+  global options, format/build pass, and the complete 408-example suite passes.
+  Repository-wide Ameba still reports its pre-existing backlog (264 findings
+  across 160 Crystal files); the documentation-only change adds no lint scope.
