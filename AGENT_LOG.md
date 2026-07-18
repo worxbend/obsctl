@@ -3092,3 +3092,16 @@ M  AGENT_LOG.md
 - Added a real CLI PTY test against a fake local daemon proving topic
   subscription, interactive `q`, client socket closure, alternate-screen exit,
   and cursor restoration.
+
+## 2026-07-18 — Complete the Rust TUI parity audit
+
+- Compared every `obsctl-rs/src/tui` module and public command path with the
+  Crystal implementation and closed the remaining observable differences.
+- Added case-insensitive, control-safe, length-bounded command parsing; theme
+  aliases; guarded shutdown/connect forwarding; decaying scene flash color;
+  and the alternating filled/outlined splash LIVE badge.
+- Made meter events consume real obs-websocket `inputLevelsMul` channel tuples
+  as well as normalized IPC payloads, using the loudest channel magnitude like
+  the Rust adapter.
+- Added focused parser, dispatcher, event, and memory-buffer rendering
+  contracts for each repaired path.

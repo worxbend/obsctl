@@ -38,4 +38,19 @@ describe Obsctl::Domain::CommandParser do
     parser.parse(%(/collection "Gaming Collection")).as(Obsctl::Domain::SetSceneCollectionCommand).target.should eq("Gaming Collection")
     parser.parse(%(/scene-collection Podcast)).should be_a(Obsctl::Domain::SetSceneCollectionCommand)
   end
+
+  it "parses command names case-insensitively" do
+    parser.parse(%(/SCENE "Main Camera")).as(Obsctl::Domain::SetSceneCommand).target.should eq("Main Camera")
+    parser.parse("/MUTE mic").should be_a(Obsctl::Domain::MuteCommand)
+  end
+
+  it "rejects unsafe or oversized target tokens" do
+    expect_raises(Obsctl::Domain::CommandParseError, /control characters/) { parser.parse("/scene main\u0000cam") }
+    long_target = "a" * (Obsctl::Domain::CommandParser::MAX_TARGET_TOKEN_LENGTH + 1)
+    expect_raises(Obsctl::Domain::CommandParseError, /at most 256/) { parser.parse("/scene #{long_target}") }
+  end
+
+  it "rejects quoted volume percentages like the Rust parser" do
+    expect_raises(Obsctl::Domain::CommandParseError, /must not be quoted/) { parser.parse(%(/vol mic "50")) }
+  end
 end

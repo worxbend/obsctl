@@ -50,7 +50,8 @@ Critical rule:
 - [x] Support styled `Line` block titles in CryTUI and restore animated
   gradients, count badges, and semantic hints across application chrome.
 - [x] Match Rust audio-meter state semantics and success-to-info level
-  gradients, including a neutral presentation for unknown mute state.
+  gradients, including a neutral presentation for unknown mute state and raw
+  obs-websocket `inputLevelsMul` normalization.
 - [x] Port the complete Rust theme catalog, partial custom theme resolution,
   and typed runtime `ui` configuration without losing it on config dumps.
 - [x] Port the secondary split settings preview, responsive/dismissible startup
@@ -83,6 +84,9 @@ Critical rule:
   restoration.
 - [x] Port the primary dashboard widgets and their TestBackend-style rendering
   contracts.
+- [x] Complete the final Rust parity audit for case-insensitive and bounded
+  palette commands, connect/shutdown forwarding, theme aliases, decaying scene
+  flashes, and the pulsing filled/outlined splash LIVE badge.
 - [x] Wire `obsctl` / `obsctl tui` as Unix IPC clients with the unavailable
   screen and command palette.
 
@@ -813,11 +817,10 @@ Implemented:
     older daemon responses that omit it
   - `obs-status`, `reconnect`, and guarded `shutdown-server` are thin IPC client commands
 - TUI:
-  - currently a simple ANSI dashboard with raw key input and a command palette state machine
+  - complete keyboard-first CryTUI dashboard with raw key input, command
+    palette, responsive panels, settings preview, splash, animation, telemetry,
+    and incremental cell-diff rendering
   - normal mode subscribes to the local server over IPC instead of creating an OBS WebSocket connection
-  - not yet a full termisu dashboard
-  - `termisu` is available as a Crystal shard, but its upstream README marks it as pre-1.0 and not battle-tested
-  - not yet btop/btm-style keyboard-first layout
   - refreshes on a timer and uses row-level ANSI diff rendering after the first paint
   - compact recent-log panel displays server log-topic messages
 - OBS client:
@@ -1133,7 +1136,6 @@ Partial:
 
 Remaining:
 
-- termisu renderer backend
 - theme file
 - packaging
 - demo config
@@ -1235,5 +1237,6 @@ the portable fixture root.
    include the finalized status telemetry field.
 2. Run `make contract-rs-compat` separately in a prepared dual-repo workspace
    when `../obsctl-rs` is available with compatible contract fixtures.
-3. Return to demo config, packaging polish, and optional `termisu` backend
-   evaluation once the stabilized contract gates stay green.
+3. Return to demo config, theme-file loading, packaging polish, and lint wiring
+   once the stabilized contract gates stay green. CryTUI is now the selected
+   renderer; a parallel `termisu` backend is no longer planned.

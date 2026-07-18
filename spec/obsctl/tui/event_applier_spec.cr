@@ -74,6 +74,25 @@ describe Obsctl::TUI::EventApplier do
     model.meter_levels["Mic"].should eq(0.75)
   end
 
+  it "normalizes raw obs-websocket meter channels" do
+    model = Obsctl::TUI::Model.new
+    data = JSON.parse({
+      event_type: "InputVolumeMeters",
+      event_data: {
+        inputs: [
+          {inputName: "Mic", inputLevelsMul: [[0.2, 0.3, 0.4], [0.8, 0.9, 1.0]]},
+          {inputName: "Silent", inputLevelsMul: [] of Array(Float64)},
+        ],
+      },
+    }.to_json)
+
+    redraw = Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("events", data))
+
+    redraw.should be_false
+    model.meter_levels["Mic"].should eq(0.8)
+    model.meter_levels["Silent"].should eq(0.0)
+  end
+
   it "ignores malformed snapshots without losing the previous state" do
     model = Obsctl::TUI::Model.new
     Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("state", state_payload))

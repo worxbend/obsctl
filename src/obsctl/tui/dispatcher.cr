@@ -115,7 +115,7 @@ module Obsctl
       private def dispatch_palette(input : String) : ActionOutcome
         normalized = input.strip.downcase
         return ActionOutcome.new(quit: true) if normalized == "/quit" || normalized == "/exit"
-        if normalized == "/themes"
+        if {"/themes", "/theme", "/settings"}.includes?(normalized)
           return handle(Action.new(ActionKind::OpenSettings))
         end
         if normalized == "/help"
@@ -129,11 +129,13 @@ module Obsctl
 
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
         case command
-        when Domain::StatusCommand             then IPC::CommandPayload.new("status")
-        when Domain::ObsStatusCommand          then IPC::CommandPayload.new("get_obs_status")
-        when Domain::ServerStatusCommand       then IPC::CommandPayload.new("get_server_status")
-        when Domain::ValidateConfigCommand     then IPC::CommandPayload.new("validate_config")
-        when Domain::ReconnectCommand          then IPC::CommandPayload.new("reconnect_obs")
+        when Domain::StatusCommand         then IPC::CommandPayload.new("status")
+        when Domain::ObsStatusCommand      then IPC::CommandPayload.new("get_obs_status")
+        when Domain::ServerStatusCommand   then IPC::CommandPayload.new("get_server_status")
+        when Domain::ValidateConfigCommand then IPC::CommandPayload.new("validate_config")
+        when Domain::ReconnectCommand, Domain::ConnectCommand
+          IPC::CommandPayload.new("reconnect_obs")
+        when Domain::ShutdownServerCommand     then IPC::CommandPayload.new("shutdown_server")
         when Domain::DumpConfigCommand         then IPC::CommandPayload.new("dump_config")
         when Domain::ReloadConfigCommand       then IPC::CommandPayload.new("reload_config")
         when Domain::SetSceneCommand           then IPC::CommandPayload.new("set_scene", command.target)
