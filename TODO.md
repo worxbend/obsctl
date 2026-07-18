@@ -44,8 +44,10 @@ Critical rule:
   scenes, audio, connection, and command-palette rendering contracts.
 - [x] Port the complete Rust theme catalog, partial custom theme resolution,
   and typed runtime `ui` configuration without losing it on config dumps.
-- [ ] Port secondary settings/splash/scene-map widgets, narrow-screen layout,
-  and animation helpers.
+- [x] Port the secondary split settings preview, responsive/dismissible startup
+  splash, standalone scene-map widget, animation helpers, and atomic theme
+  persistence.
+- [ ] Match Ratatui constraint degradation on narrow/short terminal layouts.
 - [x] Render the complete primary dashboard frame with Rust-compatible header,
   live bar, scenes/audio, profiles/collections, logs, and command palette areas.
 - [x] Add the persistent state/events/logs subscription, correlated short-lived

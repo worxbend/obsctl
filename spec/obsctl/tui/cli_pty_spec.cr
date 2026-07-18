@@ -23,7 +23,12 @@ describe "obsctl TUI CLI PTY" do
       session.write_message(Obsctl::IPC::Response.new(request.id, true, JSON.parse(%({"message":"subscribed"}))))
       state = JSON.parse(%({"connected":true,"obs_studio_version":"30.1.0","obs_websocket_version":"5.0.0","current_scene":"Main","scenes":[{"name":"Main","active":true}],"audio_inputs":[{"name":"Mic","muted":false,"volume_percent":80}],"output":{"streaming":false,"recording":false},"last_error":null,"updated_at":"2026-07-18T12:00:00Z"}))
       session.write_message(Obsctl::IPC::Event.new("state", state))
-      session.socket.gets
+      begin
+        session.socket.gets
+      rescue IO::Error
+        # An immediate post-splash quit may reset while the pushed state is
+        # still buffered; either EOF or reset proves the client closed it.
+      end
       session.close
       done.send(nil)
     ensure
@@ -33,7 +38,8 @@ describe "obsctl TUI CLI PTY" do
     ready.receive
     output = IO::Memory.new
     error = IO::Memory.new
-    input = IO::Memory.new("q")
+    # The first key dismisses the startup splash; the second quits the dashboard.
+    input = IO::Memory.new("xq")
     source = File.expand_path("../../../src/obsctl.cr", __DIR__)
     command = "crystal run #{Process.quote(source)} -- tui"
     status = Process.run("script", ["--quiet", "--return", "--command", command, "/dev/null"], input: input, output: output, error: error)

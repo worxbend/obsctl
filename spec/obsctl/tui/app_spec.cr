@@ -53,6 +53,9 @@ describe Obsctl::TUI::App do
 
     model.view = Obsctl::TUI::View::Settings
     app.render(terminal)
-    backend.buffer.lines.join("\n").should contain("THEME SETTINGS")
+    settings = backend.buffer.lines.join("\n")
+    settings.should contain("Settings // Appearance")
+    settings.should contain("Themes // 29 palettes")
+    settings.should contain("Preview: Claude")
   end
 end

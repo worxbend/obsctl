@@ -6,6 +6,8 @@ require "./event_applier"
 require "./widgets/dashboard"
 require "./widgets/connection"
 require "./widgets/settings"
+require "./widgets/splash"
+require "./theme_persistence"
 
 module Obsctl
   module TUI
@@ -19,10 +21,12 @@ module Obsctl
     class App
       DEFAULT_REFRESH = 100.milliseconds
       ESCAPE_DELAY    = 25.milliseconds
+      SPLASH_DURATION = 2.seconds
+      SPLASH_FRAME    = 50.milliseconds
 
       getter model : Model
 
-      def self.from_config(config : Config::Config, socket_path : String = IPC::SocketPath.resolve, input : IO::FileDescriptor = STDIN, output : IO = STDOUT) : self
+      def self.from_config(config : Config::Config, socket_path : String = IPC::SocketPath.resolve, input : IO::FileDescriptor = STDIN, output : IO = STDOUT, config_path : String? = nil) : self
         custom = config.ui.custom_theme.try do |theme|
           CustomThemeSpec.new(
             background: theme.bg, accent: theme.accent, accent_alt: theme.accent_alt,
@@ -44,7 +48,8 @@ module Obsctl
           input: input,
           output: output,
           refresh: config.ui.refresh_interval_ms.clamp(10, 60_000).milliseconds,
-          model: model
+          model: model,
+          config_path: config_path
         )
       end
 
@@ -54,6 +59,7 @@ module Obsctl
         @output : IO = STDOUT,
         @refresh : Time::Span = DEFAULT_REFRESH,
         @model = Model.new,
+        @config_path : String? = nil,
       )
         @messages = Channel(AppMessage).new(128)
         @subscription = nil.as(EventSession?)
@@ -64,12 +70,17 @@ module Obsctl
       def run : Int32
         backend = CryTUI::AnsiBackend.for_terminal(@output, @input)
         terminal = CryTUI::Terminal.new(backend)
-        command_client = CommandClient.new(@socket_path)
-        dispatcher = Dispatcher.new(@model, ->(payload : IPC::CommandPayload) { command_client.send(payload) })
-        connect_subscription
         terminal.run(@input) do
           @running = true
           spawn_input_pump
+          run_splash(terminal)
+          command_client = CommandClient.new(@socket_path)
+          dispatcher = Dispatcher.new(
+            @model,
+            ->(payload : IPC::CommandPayload) { command_client.send(payload) },
+            ->(theme : Theme) { ThemePersistence.save(@config_path, theme) }
+          )
+          connect_subscription
           loop do
             render(terminal)
             should_quit = false
@@ -138,6 +149,24 @@ module Obsctl
         @model.set_last_result(outcome.message.not_nil!) if outcome.message
         connect_subscription if outcome.retry_subscription
         outcome.quit
+      end
+
+      private def run_splash(terminal : CryTUI::Terminal) : Nil
+        total = (SPLASH_DURATION.total_milliseconds / SPLASH_FRAME.total_milliseconds).to_u64
+        frame = 0_u64
+        loop do
+          terminal.draw { |draw| Widgets::Splash.render(draw.area, draw.buffer, @model, frame, total) }
+          break if frame >= total
+          dismissed = false
+          select
+          when message = @messages.receive
+            dismissed = message.is_a?(CryTUI::InputEvent)
+          when timeout(SPLASH_FRAME)
+            frame &+= 1
+            @model.anim.tick
+          end
+          break if dismissed
+        end
       end
 
       private def connect_subscription

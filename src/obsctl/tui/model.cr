@@ -1,6 +1,7 @@
 require "../obs/state/obs_snapshot"
 require "../runtime/logger"
 require "./theme"
+require "./anim"
 
 module Obsctl
   module TUI
@@ -40,6 +41,18 @@ module Obsctl
 
       def tick
         @frame &+= 1
+      end
+
+      def pulse(period_ticks : UInt64) : Float64
+        period = {period_ticks, 1_u64}.max
+        phase = (@frame % period).to_f64 / period
+        Math.sin(phase * Math::TAU) * 0.5 + 0.5
+      end
+
+      def spinner(frames : Indexable(String), ticks_per_frame : UInt64 = 1_u64) : String
+        return "" if frames.empty?
+        step = {ticks_per_frame, 1_u64}.max
+        frames[((@frame // step) % frames.size).to_i]
       end
     end
 
