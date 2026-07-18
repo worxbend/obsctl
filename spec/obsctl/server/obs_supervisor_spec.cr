@@ -85,6 +85,30 @@ private class FailedAttemptBeforeDelayStateStore < Obsctl::Server::StateStore
 end
 
 describe Obsctl::Server::ObsSupervisor do
+  it "keeps a challenged OBS connection open when no password is configured" do
+    previous = ENV.delete("OBSCTL_SPEC_MISSING_PASSWORD")
+    obs = Obsctl::SpecSupport::FakeObsServer.new(authentication: true).start
+    config = obs.config
+    config.connection = Obsctl::Config::ConnectionConfig.new(
+      host: obs.host,
+      port: obs.port,
+      password_env: "OBSCTL_SPEC_MISSING_PASSWORD",
+      request_timeout_ms: 500
+    )
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(config, state)
+
+    supervisor.start
+    wait_for_supervisor { state.snapshot.connected }
+    obs.assert_no_identify_or_connection_attempt(150.milliseconds)
+    obs.connection_attempt_count.should eq(1)
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    ENV["OBSCTL_SPEC_MISSING_PASSWORD"] = previous
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
   it "periodically publishes statistics, durations, and derived stream bitrate" do
     obs = Obsctl::SpecSupport::FakeObsServer.new(
       streaming: true,

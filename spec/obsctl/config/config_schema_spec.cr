@@ -81,6 +81,18 @@ describe Obsctl::Config::ConfigSchema do
     Obsctl::Config::ConfigSchema.warnings(config).should be_empty
   end
 
+  it "accepts a missing password environment variable for passwordless OBS" do
+    env_name = "OBSCTL_SPEC_MISSING_PASSWORD"
+    previous = ENV.delete(env_name)
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(password_env: env_name)
+    )
+
+    Obsctl::Config::ConfigSchema.validate!(config)
+  ensure
+    ENV["OBSCTL_SPEC_MISSING_PASSWORD"] = previous
+  end
+
   it "rejects refresh intervals that would busy-loop the TUI" do
     config = Obsctl::Config::Config.new(
       connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),

@@ -354,7 +354,6 @@ module Obsctl
 
         if auth = data["authentication"]?
           password = password_from_config
-          raise Domain::AuthenticationFailed.new("OBS requires authentication but no password is configured") unless password
           salt = auth["salt"].as_s
           challenge = auth["challenge"].as_s
           identify_data["authentication"] = JSON::Any.new(Auth.authentication(password, salt, challenge))
@@ -372,12 +371,13 @@ module Obsctl
         raise Domain::AuthenticationFailed.new unless parsed["op"].as_i == 2
       end
 
-      private def password_from_config : String?
+      private def password_from_config : String
         if env_name = @config.connection.password_env
-          value = ENV[env_name]?
-          return value unless value.try(&.empty?)
+          if value = ENV[env_name]?
+            return value unless value.empty?
+          end
         end
-        @config.connection.password
+        @config.connection.password || ""
       end
 
       private def read_system_frame : String

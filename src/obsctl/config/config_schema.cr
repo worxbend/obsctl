@@ -13,11 +13,6 @@ module Obsctl
         unless 1 <= config.connection.port <= 65_535
           raise Domain::ConfigInvalid.new("port must be from 1 to 65535")
         end
-        if env = config.connection.password_env
-          unless env.empty? || ENV.has_key?(env)
-            raise Domain::ConfigInvalid.new("password env var is missing: #{env}")
-          end
-        end
         if socket_path = config.server.socket_path
           raise Domain::ConfigInvalid.new("server.socket_path cannot be blank") if socket_path.blank?
         end
