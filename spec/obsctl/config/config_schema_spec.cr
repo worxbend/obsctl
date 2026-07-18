@@ -67,4 +67,15 @@ describe Obsctl::Config::ConfigSchema do
 
     Obsctl::Config::ConfigSchema.warnings(config).should be_empty
   end
+
+  it "rejects refresh intervals that would busy-loop the TUI" do
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),
+      ui: Obsctl::Config::UiConfig.new(refresh_interval_ms: 0)
+    )
+
+    expect_raises(Obsctl::Domain::ConfigInvalid, /ui.refresh_interval_ms/) do
+      Obsctl::Config::ConfigSchema.validate!(config)
+    end
+  end
 end

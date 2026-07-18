@@ -78,7 +78,11 @@ module Obsctl
           if command.nil? || command == "tui"
             raise Domain::CommandParseError.new("wrong argument count for tui") unless command_args.empty?
             socket_path = client_socket_path(options.config_path)
-            return tui_runner ? tui_runner.call(socket_path) : TUI::App.new(socket_path: socket_path, output: stdout).run
+            return tui_runner.call(socket_path) if tui_runner
+            # The thin TUI needs local appearance/socket settings, but must not
+            # require the daemon's OBS password environment to be present.
+            config = File.exists?(options.config_path) ? Config::Config.from_yaml(File.read(options.config_path)) : Config::Config.default
+            return TUI::App.from_config(config, socket_path: socket_path, output: stdout).run
           end
 
           palette_line = cli_to_palette(command, command_args)

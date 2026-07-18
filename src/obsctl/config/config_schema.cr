@@ -39,6 +39,10 @@ module Obsctl
         if config.reconnect.jitter_ms < 0
           raise Domain::ConfigInvalid.new("reconnect.jitter_ms cannot be negative")
         end
+        unless 10 <= config.ui.refresh_interval_ms <= 60_000
+          raise Domain::ConfigInvalid.new("ui.refresh_interval_ms must be from 10 to 60000")
+        end
+        raise Domain::ConfigInvalid.new("ui.command_palette_prefix cannot be empty") if config.ui.command_palette_prefix.empty?
 
         duplicates(config.scenes.compact_map(&.alias), "duplicate scene alias")
         duplicates(config.scenes.compact_map(&.shortcut), "duplicate scene shortcut")
