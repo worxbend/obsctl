@@ -12,6 +12,13 @@ private def tui_snapshot
   )
 end
 
+private def telemetry_snapshot(cpu : Float64, bitrate : Float64)
+  tui_snapshot.copy_with(
+    stats: Obsctl::OBS::State::ObsStats.new(cpu_usage_percent: cpu),
+    stream_bitrate_kbps: bitrate
+  )
+end
+
 describe Obsctl::TUI::FocusPanel do
   it "navigates the four-panel grid and stops at edges" do
     Obsctl::TUI::FocusPanel::Scenes.right.should eq(Obsctl::TUI::FocusPanel::Audio)
@@ -39,6 +46,17 @@ describe Obsctl::TUI::Model do
     210.times { |index| model.push_log(Obsctl::TUI::LogEntry.new(Obsctl::Runtime::LogLevel::Info, "line #{index}")) }
     model.logs.size.should eq(200)
     model.logs.first.message.should eq("line 10")
+  end
+
+  it "caps rolling CPU and bitrate telemetry at 32 samples" do
+    model = Obsctl::TUI::Model.new
+    40.times do |sample|
+      model.snapshot = telemetry_snapshot(sample.to_f64, sample.to_f64 * 100)
+      model.record_metric_sample
+    end
+    model.cpu_history.size.should eq(32)
+    model.cpu_history.first.should eq(8.0)
+    model.bitrate_history.last.should eq(3900.0)
   end
 
   it "reveals command results by Unicode grapheme" do

@@ -74,6 +74,16 @@ module Obsctl
           @supervisor.with_client(&.set_scene(scene.name))
           refresh_snapshot
           object({"message" => "scene set: #{scene.name}"})
+        when "set_profile"
+          target = required_target(command)
+          @supervisor.with_client(&.set_profile(target))
+          refresh_snapshot
+          object({"message" => "profile set: #{target}"})
+        when "set_scene_collection"
+          target = required_target(command)
+          @supervisor.with_client(&.set_scene_collection(target))
+          refresh_snapshot
+          object({"message" => "scene collection set: #{target}"})
         when "mute"
           set_mute(command, true)
         when "unmute"

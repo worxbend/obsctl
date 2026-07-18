@@ -53,6 +53,12 @@ module Obsctl
         when "set-scene", "scene"
           expect_count(tokens, 2)
           SetSceneCommand.new(tokens[1])
+        when "set-profile", "profile"
+          expect_count(tokens, 2)
+          SetProfileCommand.new(tokens[1])
+        when "set-collection", "collection", "scene-collection"
+          expect_count(tokens, 2)
+          SetSceneCollectionCommand.new(tokens[1])
         when "mute"
           expect_count(tokens, 2)
           MuteCommand.new(tokens[1])

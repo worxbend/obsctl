@@ -297,6 +297,28 @@ describe Obsctl::Server::CommandExecutor do
     end
   end
 
+  it "switches profiles and scene collections through the server-owned OBS client" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state)
+    begin
+      supervisor.start
+      next_command_executor_websocket_connection_id(obs)
+      obs.next_identify(2.seconds).should_not be_nil
+      wait_for_command_executor_supervisor { state.snapshot.connected }
+      executor = default_executor(obs.config, supervisor: supervisor, state: state)
+      profile = executor.execute(command_request(Obsctl::IPC::CommandPayload.new("set_profile", "Streaming")))
+      collection = executor.execute(command_request(Obsctl::IPC::CommandPayload.new("set_scene_collection", "Gaming")))
+      profile.result.not_nil!["message"].as_s.should eq("profile set: Streaming")
+      collection.result.not_nil!["message"].as_s.should eq("scene collection set: Gaming")
+      state.snapshot.current_profile.should eq("Streaming")
+      state.snapshot.current_scene_collection.should eq("Gaming")
+    ensure
+      supervisor.try(&.stop)
+      obs.try(&.stop)
+    end
+  end
+
   it "accepts reconnect only when the supervisor is alive" do
     state = Obsctl::Server::StateStore.new
     supervisor = ReconnectSupervisor.new(state, true)
