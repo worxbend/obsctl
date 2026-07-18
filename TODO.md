@@ -38,7 +38,10 @@ Critical rule:
 - [x] Port the first Rust TUI model and IPC event-applier slice: panel focus,
   cursors, palette completion state, rolling logs, result reveal, snapshots,
   profiles/collections compatibility fields, scene flashes, and meters.
-- [ ] Port completion generation and map CryTUI key events to typed TUI actions.
+- [x] Port completion generation and map CryTUI key events to typed TUI actions,
+  including modal precedence and Ctrl-navigation behavior.
+- [ ] Add styled text/list primitives to CryTUI and port the first header,
+  scenes, audio, connection, and command-palette rendering contracts.
 - [ ] Port the dashboard widgets and their TestBackend rendering contracts.
 - [ ] Wire `obsctl` / `obsctl tui` as Unix IPC clients with the unavailable
   screen and command palette.

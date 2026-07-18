@@ -3038,3 +3038,15 @@ M  AGENT_LOG.md
   messages, including malformed-payload preservation.
 - Extended Crystal state-event JSON with output streaming/recording state so
   the TUI can remain a thin IPC client.
+
+## 2026-07-18 — Port TUI completion and typed input actions
+
+- Ported the Rust dynamic completion contract for commands, scene/audio names
+  and aliases, profiles, and scene collections, including case-insensitive
+  matching, exact-first sorting, and preservation of the typed command casing.
+- Added typed obsctl TUI actions over generic CryTUI key events.
+- Matched modal key precedence: palette input intercepts global bindings,
+  settings closes without quitting, and Ctrl pane movement takes priority over
+  audio volume controls.
+- Covered Unicode palette characters, F2, Ctrl+vim/arrows, panel activation,
+  completion cycling, and resource completion with focused specs.
