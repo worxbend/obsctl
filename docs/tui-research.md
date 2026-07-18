@@ -117,6 +117,14 @@ background-fill exercise also exposed and fixed an important buffer semantic:
 writing a symbol patches the cell style instead of discarding an already
 painted background, matching Ratatui's layered rendering behavior.
 
+The runtime path is now executable rather than only renderable. `obsctl` and
+`obsctl tui` create a raw CryTUI terminal, establish a persistent local IPC
+subscription, apply pushed events, send correlated commands over short-lived
+connections, and restore the terminal on quit. A PTY end-to-end spec launches
+the real Crystal entrypoint against a fake Unix-socket daemon, verifies the
+three-topic subscription, supplies `q`, observes the subscription close, and
+asserts alternate-screen/cursor restoration sequences.
+
 ## Delivery Sequence
 
 1. Harden core geometry, Unicode display width, layout allocation, styled text,

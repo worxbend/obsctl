@@ -64,6 +64,17 @@ private def parse_single_json(stdout : String) : JSON::Any
 end
 
 describe Obsctl::CLI::Main do
+  it "starts the TUI for both the default and explicit tui commands" do
+    paths = [] of String
+    runner = ->(path : String) { paths << path; 17 }
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+
+    Obsctl::CLI::Main.run([] of String, nil, stdout, stderr, runner).should eq(17)
+    Obsctl::CLI::Main.run(["tui"], nil, stdout, stderr, runner).should eq(17)
+    paths.size.should eq(2)
+  end
+
   it "returns config error for missing config when command requires config" do
     path = "/tmp/obsctl-missing-#{Random.rand(1_000_000)}.yml"
     Obsctl::CLI::Main.run(["--config", path, "validate-config"]).should eq(2)
