@@ -30,6 +30,23 @@ describe Obsctl::TUI::FocusPanel do
 end
 
 describe Obsctl::TUI::Model do
+  it "previews audio volume without waiting for a server snapshot" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+      connected: true,
+      obs_studio_version: nil,
+      obs_websocket_version: nil,
+      current_scene: nil,
+      scenes: [] of Obsctl::OBS::State::SceneState,
+      audio_inputs: [Obsctl::OBS::State::AudioState.new("Mic", volume_percent: 50)]
+    )
+
+    model.preview_audio_volume("Mic", 65)
+
+    model.audio_inputs.first.volume_percent.should eq(65)
+    model.audio_inputs.first.volume_mul.should eq(0.65)
+  end
+
   it "clamps and moves focused list cursors" do
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot
