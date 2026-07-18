@@ -91,4 +91,12 @@ describe Obsctl::Config::ConfigSchema do
       Obsctl::Config::ConfigSchema.validate!(config)
     end
   end
+
+  it "warns when a configured TUI locale falls back to English" do
+    config = Obsctl::Config::Config.new(ui: Obsctl::Config::UiConfig.new(locale: "fr"))
+
+    Obsctl::Config::ConfigSchema.warnings(config).should contain(
+      "ui.locale 'fr' is not supported (supported: en, uk); falling back to en"
+    )
+  end
 end

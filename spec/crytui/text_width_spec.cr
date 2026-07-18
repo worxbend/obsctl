@@ -10,4 +10,10 @@ describe CryTUI::TextWidth do
     CryTUI::TextWidth.width("👩‍💻").should eq(2)
     CryTUI::TextWidth.width("🇺🇦").should eq(2)
   end
+
+  it "matches Ratatui for ambiguous TUI symbols and emoji presentation" do
+    CryTUI::TextWidth.width("▶◇🎚⚠✓").should eq(5)
+    CryTUI::TextWidth.width("⚡🔊").should eq(4)
+    CryTUI::TextWidth.width("▶️").should eq(2)
+  end
 end

@@ -20,6 +20,7 @@ module CryTUI
       end
 
       ASCII   = new("+", "+", "+", "+", "-", "|")
+      PLAIN   = new("┌", "┐", "└", "┘", "─", "│")
       ROUNDED = new("╭", "╮", "╰", "╯", "─", "│")
       THICK   = new("┏", "┓", "┗", "┛", "━", "┃")
       DOUBLE  = new("╔", "╗", "╚", "╝", "═", "║")
@@ -32,7 +33,7 @@ module CryTUI
       getter border_style : Style
       getter border_set : BorderSet
 
-      def initialize(@title : String | Line | Nil = nil, @borders = Borders::All, @style = Style.new, @border_style = Style.new, @border_set = BorderSet::ASCII)
+      def initialize(@title : String | Line | Nil = nil, @borders = Borders::All, @style = Style.new, @border_style = Style.new, @border_set = BorderSet::PLAIN)
       end
 
       def inner(area : Rect) : Rect
@@ -51,7 +52,6 @@ module CryTUI
       def render(area : Rect, buffer : Buffer)
         return if area.empty?
         buffer.set_style(area, @style)
-        return if @borders.none?
         left, right, top, bottom = area.left, area.right - 1, area.top, area.bottom - 1
         if @borders.top?
           (left..right).each do |x|
@@ -86,14 +86,18 @@ module CryTUI
           end
         end
         if (title = @title) && area.width >= 4
-          title_x = left + (@borders.left? ? 2 : 1)
+          # Ratatui writes titles directly after the left border and does not
+          # synthesize padding. Callers include any desired surrounding spaces
+          # in the title itself.
+          title_x = left + (@borders.left? ? 1 : 0)
           title_line = case title
                        when Line
-                         Line.new([Span.new(" ", @border_style)] + title.spans + [Span.new(" ", @border_style)], style: title.style)
+                         title
                        else
-                         Line.from(" #{title} ", @border_style)
+                         Line.from(title, @border_style)
                        end
-          title_line.render(buffer, Rect.new(title_x, top, {area.right - title_x, 0}.max, 1), @border_style)
+          title_right = area.right - (@borders.right? ? 1 : 0)
+          title_line.render(buffer, Rect.new(title_x, top, {title_right - title_x, 0}.max, 1), @border_style)
         end
       end
     end

@@ -16,8 +16,17 @@ module Obsctl
                          else
                            theme.border
                          end
-          title = model.advanced_ui ? Anim.gradient_line("◉ LIVE TELEMETRY", theme.danger, theme.warning, model.anim.frame, true) : CryTUI::Line.from("LIVE TELEMETRY", CryTUI::Style.new(foreground: theme.danger, modifiers: CryTUI::Modifier::Bold))
+          title = model.advanced_ui ? Anim.gradient_line(" ◉ LIVE TELEMETRY ", theme.danger, theme.warning, model.anim.frame, true) : CryTUI::Line.from(" LIVE TELEMETRY ", CryTUI::Style.new(foreground: theme.danger, modifiers: CryTUI::Modifier::Bold))
           block = CryTUI::Widgets::Block.new(title: title, border_style: CryTUI::Style.new(foreground: border_color), border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII)
+          if {area.height - 2, 0}.max < 2
+            compact = CryTUI::Line.new([
+              badge("LIVE", model.streaming?, model.stream_duration_ms, pulse, model), CryTUI::Span.new("  "),
+              badge("REC", model.recording?, model.record_duration_ms, pulse, model), separator(model),
+              compact_metrics(model),
+            ])
+            CryTUI::Widgets::StyledText.new([compact], block: block).render(area, buffer)
+            return
+          end
           first = CryTUI::Line.new([
             badge("LIVE", model.streaming?, model.stream_duration_ms, pulse, model), CryTUI::Span.new("  "),
             badge("REC", model.recording?, model.record_duration_ms, pulse, model), separator(model),
@@ -25,6 +34,17 @@ module Obsctl
           ])
           second = metrics_line(model)
           CryTUI::Widgets::StyledText.new([first, second], block: block).render(area, buffer)
+        end
+
+        private def compact_metrics(model : Model) : CryTUI::Span
+          if stats = model.stats
+            bitrate = model.stream_bitrate_kbps.try { |value| "#{value.round.to_i}kbps" } || "--kbps"
+            text = "CPU #{stats.cpu_usage_percent.round(1)}%  FPS #{stats.active_fps.round(1)}  MEM #{stats.memory_usage_mb.round.to_i}MB  #{bitrate}"
+            CryTUI::Span.new(text, CryTUI::Style.new(foreground: model.theme.info))
+          else
+            text = model.advanced_ui ? "telemetry waiting…" : "telemetry waiting..."
+            CryTUI::Span.new(text, CryTUI::Style.new(foreground: model.theme.muted))
+          end
         end
 
         private def badge(label : String, active : Bool, duration_ms : Int64?, pulse : Float64, model : Model) : CryTUI::Span

@@ -16,7 +16,9 @@ module Obsctl
       event : IPC::Event? = nil,
       error : String? = nil
 
-    alias AppMessage = CryTUI::InputEvent | SubscriptionMessage
+    record InputClosed
+
+    alias AppMessage = CryTUI::InputEvent | SubscriptionMessage | InputClosed
 
     class App
       DEFAULT_REFRESH = 100.milliseconds
@@ -25,6 +27,7 @@ module Obsctl
       SPLASH_FRAME    = 50.milliseconds
 
       getter model : Model
+      getter refresh : Time::Span
 
       def self.from_config(config : Config::Config, socket_path : String = IPC::SocketPath.resolve, input : IO::FileDescriptor = STDIN, output : IO = STDOUT, config_path : String? = nil) : self
         custom = config.ui.custom_theme.try do |theme|
@@ -41,13 +44,14 @@ module Obsctl
           theme: Theme.resolve(config.ui.theme, custom),
           show_icons: config.ui.show_icons,
           advanced_ui: config.ui.advanced_ui,
-          command_palette_prefix: prefix
+          command_palette_prefix: prefix,
+          locale: Localization.resolve(config.ui.locale)
         )
         new(
           socket_path: socket_path,
           input: input,
           output: output,
-          refresh: config.ui.refresh_interval_ms.clamp(10, 60_000).milliseconds,
+          refresh: {config.ui.refresh_interval_ms, 50}.max.milliseconds,
           model: model,
           config_path: config_path
         )
@@ -65,6 +69,7 @@ module Obsctl
         @subscription = nil.as(EventSession?)
         @subscription_generation = 0
         @running = false
+        @exit_code = 0
       end
 
       def run : Int32
@@ -72,8 +77,10 @@ module Obsctl
         terminal = CryTUI::Terminal.new(backend)
         terminal.run(@input) do
           @running = true
+          @exit_code = 0
           spawn_input_pump
           run_splash(terminal)
+          next unless @exit_code == 0
           command_client = CommandClient.new(@socket_path)
           dispatcher = Dispatcher.new(
             @model,
@@ -83,13 +90,13 @@ module Obsctl
           connect_subscription
           loop do
             render(terminal)
-            should_quit = false
-            select
+            should_quit = select
             when message = @messages.receive
-              should_quit = process(message, dispatcher)
+              process(message, dispatcher)
             when timeout(@refresh)
               @model.anim.tick
               terminal.refresh_size
+              false
             end
             break if should_quit
           end
@@ -97,7 +104,7 @@ module Obsctl
           @running = false
           @subscription.try(&.close)
         end
-        0
+        @exit_code
       rescue ex : IO::Error
         @output.puts "obsctl TUI failed: #{ex.message}"
         1
@@ -127,6 +134,9 @@ module Obsctl
             @model.set_last_result(message.error || "server connection closed")
           end
           false
+        when InputClosed
+          @exit_code = 1
+          true
         else
           false
         end
@@ -146,8 +156,10 @@ module Obsctl
       end
 
       private def apply_outcome(outcome : ActionOutcome) : Bool
-        @model.set_last_result(outcome.message.not_nil!) if outcome.message
-        connect_subscription if outcome.retry_subscription
+        if message = outcome.message
+          @model.set_last_result(message)
+        end
+        connect_subscription(retry: true) if outcome.retry_subscription
         outcome.quit
       end
 
@@ -160,7 +172,12 @@ module Obsctl
           dismissed = false
           select
           when message = @messages.receive
-            dismissed = message.is_a?(CryTUI::InputEvent)
+            if message.is_a?(InputClosed)
+              @exit_code = 1
+              dismissed = true
+            else
+              dismissed = message.is_a?(CryTUI::InputEvent)
+            end
           when timeout(SPLASH_FRAME)
             frame &+= 1
             @model.anim.tick
@@ -169,7 +186,7 @@ module Obsctl
         end
       end
 
-      private def connect_subscription
+      private def connect_subscription(retry = false)
         @subscription_generation += 1
         generation = @subscription_generation
         @subscription.try(&.close)
@@ -187,7 +204,8 @@ module Obsctl
       rescue ex : Domain::ObsctlError
         @subscription = nil
         @model.connected_to_daemon = false
-        @model.set_last_result(ex.message || "server connection failed")
+        message = ex.message || "server connection failed"
+        @model.set_last_result(retry ? "Retry failed: #{message}" : message)
       end
 
       private def spawn_input_pump
@@ -203,7 +221,9 @@ module Obsctl
               end
             end
           end
+          @messages.send(InputClosed.new) if @running
         rescue IO::Error
+          @messages.send(InputClosed.new) if @running
         end
       end
     end

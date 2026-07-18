@@ -71,6 +71,15 @@ describe Obsctl::TUI::Widgets::LiveBar do
     Obsctl::TUI::Widgets::LiveBar.render(buffer.area, buffer, model)
     rendered_text(buffer).should contain("waiting for OBS metrics")
   end
+
+  it "uses compact telemetry when only one inner row is available" do
+    model = widget_model
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 100, 3))
+
+    Obsctl::TUI::Widgets::LiveBar.render(buffer.area, buffer, model)
+
+    rendered_text(buffer).should contain("telemetry waiting…")
+  end
 end
 
 describe Obsctl::TUI::Widgets::Logs do
@@ -113,8 +122,8 @@ describe Obsctl::TUI::Widgets::Header do
 
     text.should contain("OBSCTL // BROADCAST COMMAND CENTER")
     text.should contain("obsctl")
-    text.should contain("daemon connected")
-    text.should contain("OBS: 30.1.0")
+    text.should contain("daemon: connected")
+    text.should contain("OBS: connected (v30.1.0)")
     text.should contain("scene: Main")
     text.should contain("profile: Default")
   end
@@ -129,11 +138,23 @@ describe Obsctl::TUI::Widgets::Header do
     title_colors.size.should be > 2
   end
 
+  it "uses the rich bullet and simplified ASCII header separators" do
+    model = widget_model
+    rich = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 80, 4))
+    Obsctl::TUI::Widgets::Header.render(rich.area, rich, model)
+    rendered_text(rich).should contain("console  •  frame")
+
+    model.advanced_ui = false
+    simple = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 80, 4))
+    Obsctl::TUI::Widgets::Header.render(simple.area, simple, model)
+    rendered_text(simple).should contain("console  |  frame")
+  end
+
   it "renders disconnected state without a snapshot" do
     model = Obsctl::TUI::Model.new(advanced_ui: false)
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 70, 4))
     Obsctl::TUI::Widgets::Header.render(buffer.area, buffer, model)
-    rendered_text(buffer).should contain("daemon disconnected")
+    rendered_text(buffer).should contain("daemon: disconnected")
   end
 end
 
@@ -222,7 +243,7 @@ describe Obsctl::TUI::Widgets::Connection do
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 72, 14))
     Obsctl::TUI::Widgets::Connection.render_unavailable(buffer.area, buffer, model)
     text = rendered_text(buffer)
-    text.should contain("SERVER UNAVAILABLE")
+    text.should contain("obsctl — daemon unavailable")
     text.should contain("connection refused")
     text.should contain("obsctl server --headless")
     text.should contain("systemctl --user enable --now obsctl.service")
@@ -301,7 +322,7 @@ describe Obsctl::TUI::Widgets::Splash do
     model = widget_model
     large = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 100, 20))
     Obsctl::TUI::Widgets::Splash.render(large.area, large, model, 20_u64, 40_u64)
-    rendered_text(large).should contain("STUDIO LINK // SECURE SESSION")
+    rendered_text(large).should contain("STUDIO LINK")
     rendered_text(large).should contain("Broadcast control, without breaking flow.")
 
     compact = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 60, 12))

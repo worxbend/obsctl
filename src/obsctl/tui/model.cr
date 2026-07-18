@@ -2,6 +2,7 @@ require "../obs/state/obs_snapshot"
 require "../runtime/logger"
 require "./theme"
 require "./anim"
+require "./localization"
 
 module Obsctl
   module TUI
@@ -43,10 +44,10 @@ module Obsctl
         @frame &+= 1
       end
 
-      def pulse(period_ticks : UInt64) : Float64
+      def pulse(period_ticks : UInt64) : Float32
         period = {period_ticks, 1_u64}.max
-        phase = (@frame % period).to_f64 / period
-        Math.sin(phase * Math::TAU) * 0.5 + 0.5
+        phase = (@frame % period).to_f32 / period.to_f32
+        Math.sin(phase * Math::TAU.to_f32) * 0.5_f32 + 0.5_f32
       end
 
       def spinner(frames : Indexable(String), ticks_per_frame : UInt64 = 1_u64) : String
@@ -112,10 +113,11 @@ module Obsctl
       property show_icons : Bool
       property advanced_ui : Bool
       property command_palette_prefix : String
+      property locale : String
       property settings_cursor : Int32
       property theme_preview_origin : Theme?
 
-      def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true, @command_palette_prefix = "/")
+      def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true, @command_palette_prefix = "/", @locale = "en")
         @snapshot = nil
         @logs = [] of LogEntry
         @command_palette = CommandPaletteState.new

@@ -14,7 +14,7 @@ module Obsctl
         raise CommandParseError.new("empty command") if tokens.empty?
 
         command = sanitize_command(tokens[0])
-        command = command[1..] if command.starts_with?("/")
+        command = command.lstrip('/')
         command = command.downcase
 
         case command
@@ -135,7 +135,11 @@ module Obsctl
 
           case char
           when '\\'
-            escaped = true
+            if in_quote
+              escaped = true
+            else
+              current += char
+            end
           when '"'
             in_quote = !in_quote
           when ' ', '\t'

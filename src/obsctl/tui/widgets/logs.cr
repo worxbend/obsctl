@@ -86,11 +86,15 @@ module Obsctl
           model.snapshot.try do |snapshot|
             snapshot.scenes.each do |scene|
               resources << {scene.name, ResourceKind::Scene}
-              resources << {scene.alias.not_nil!, ResourceKind::Scene} if scene.alias
+              if alias_name = scene.alias
+                resources << {alias_name, ResourceKind::Scene}
+              end
             end
             snapshot.audio_inputs.each do |input|
               resources << {input.name, ResourceKind::Audio}
-              resources << {input.alias.not_nil!, ResourceKind::Audio} if input.alias
+              if alias_name = input.alias
+                resources << {alias_name, ResourceKind::Audio}
+              end
             end
           end
           model.profiles.each { |name| resources << {name, ResourceKind::Profile} }

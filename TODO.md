@@ -87,6 +87,16 @@ Critical rule:
 - [x] Complete the final Rust parity audit for case-insensitive and bounded
   palette commands, connect/shutdown forwarding, theme aliases, decaying scene
   flashes, and the pulsing filled/outlined splash LIVE badge.
+- [x] Differentially render populated Rust Ratatui and Crystal CryTUI frames at
+  120x40, 80x24, 40x12, and simplified 120x34; repair block-title/default
+  border semantics, Unicode 15.1 terminal widths, compact telemetry, exact
+  copy, clipping, and Mono ANSI colors until determined frames match exactly.
+- [x] Apply the already parsed `ui.locale` and `OBSCTL_LOCALE` precedence to
+  the TUI, with Rust-compatible English/Ukrainian header and connection copy
+  and English fallback for unsupported locales.
+- [x] Match remaining runtime edges: 50ms refresh floor, terminal EOF/error
+  exit, retry result copy, `/status` snapshot routing, repeated slash stripping,
+  and literal backslashes outside quoted command tokens.
 - [x] Wire `obsctl` / `obsctl tui` as Unix IPC clients with the unavailable
   screen and command palette.
 
