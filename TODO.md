@@ -41,6 +41,9 @@ Critical rule:
 - [x] Complete the ANSI terminal layer: raw terminal lifecycle, live size and
   resize handling, PTY restoration specs, cell-diff output, styling,
   alternate-screen cleanup, and incremental key/paste parsing.
+- [x] Make every CryTUI draw synchronize live terminal geometry, clear stale
+  physical cells, invalidate the diff buffer, and reflow through repeated
+  shrink/expand cycles without wrapping or scrolling artifacts.
 - [x] Port the first Rust TUI model and IPC event-applier slice: panel focus,
   cursors, palette completion state, rolling logs, result reveal, snapshots,
   authoritative profiles/collections, CPU/FPS statistics, output durations,
