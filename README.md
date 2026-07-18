@@ -1,166 +1,402 @@
-# obsctl-cr
+<div align="center">
 
-The TUI is being built on an in-tree immediate-mode Crystal library named
-`CryTUI`. Its architecture and the Ratatui/Crystal library evaluation are
-documented in [docs/tui-research.md](docs/tui-research.md).
+# 📡 obsctl
 
-`obsctl-cr` is a Crystal 1.20 CLI/TUI for controlling OBS Studio through obs-websocket 5.x.
+### Your OBS control room—right inside the terminal.
 
-## Build
+**A fast Crystal TUI, automation-friendly CLI, and resilient local daemon for OBS Studio.**
 
-```sh
-make build
+[![Release](https://img.shields.io/github/v/release/worxbend/obsctl?display_name=tag&sort=semver&style=flat-square)](https://github.com/worxbend/obsctl/releases)
+[![Crystal](https://img.shields.io/badge/Crystal-%E2%89%A5%201.20.2-000000?style=flat-square&logo=crystal)](https://crystal-lang.org/)
+[![obs-websocket](https://img.shields.io/badge/obs--websocket-5.x-302E31?style=flat-square&logo=obsstudio)](https://github.com/obsproject/obs-websocket)
+[![License](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](shard.yml)
+
+[Get started](#-quick-start) · [Explore the TUI](#-the-control-room) · [Automate with the CLI](#-cli--automation) · [Read the docs](#-documentation)
+
+</div>
+
+---
+
+`obsctl` gives streamers, operators, and automation scripts one dependable
+control surface for OBS Studio. Use the responsive terminal dashboard while
+you are live, run precise one-shot commands from scripts, or keep the local
+daemon running as a user service.
+
+```text
+╭─ OBSCTL // BROADCAST COMMAND CENTER ─────────────────────────────╮
+│ ● daemon: connected   ● OBS: connected   scene: Main Camera      │
+├─ LIVE TELEMETRY ─────────────────────────────────────────────────┤
+│ CPU  3.2%    FPS 60.0    MEM 742MB    NET 5842kbps               │
+├─ Scenes ────────────────┬─ Audio Matrix ─────────────────────────┤
+│ ▶ Main Camera           │ ● Mic/Aux          72%  ███████░░░     │
+│   Screen Share          │ ○ Desktop Audio    48%  █████░░░░░     │
+╰─────────────────────────┴────────────────────────────────────────╯
 ```
 
-The release binary target is `bin/obsctl`.
+## ✨ Why obsctl?
 
-## Quick Start
+| | Capability | What it gives you |
+| --- | --- | --- |
+| 🎛️ | **Live terminal dashboard** | Scenes, audio, profiles, collections, output state, telemetry, logs, and a command palette in one responsive view. |
+| ⚡ | **Fast interactions** | Optimistic UI updates, debounced volume changes, incremental rendering, and safe terminal resize reflow. |
+| 🧠 | **One OBS connection** | A local daemon owns the WebSocket, eliminating competing CLI/TUI connections and centralizing reconnect behavior. |
+| 🤖 | **Automation-ready CLI** | Stable commands, JSON envelopes, canonical error codes, and meaningful exit statuses for scripts and CI. |
+| 🔁 | **Resilient operation** | Bounded reconnect backoff, explicit reconnect control, state subscriptions, and secret-safe diagnostics. |
+| 🎨 | **Made for humans** | 29 built-in themes, custom colors, Unicode and ASCII modes, English/Ukrainian UI surfaces, and keyboard-first navigation. |
+| 🧱 | **Built on CryTUI** | An in-tree immediate-mode Crystal TUI library inspired by Ratatui and tested with memory, ANSI, and real PTY backends. |
 
-```sh
-bin/obsctl init
-export OBS_WEBSOCKET_PASSWORD='your password'
-bin/obsctl validate-config
-bin/obsctl server --headless
-bin/obsctl dump-config
-bin/obsctl scene 1
-bin/obsctl
+## 🚀 Quick start
+
+### Prerequisites
+
+- Linux
+- OBS Studio with **obs-websocket 5.x** enabled
+- Crystal **1.20.2+** and Shards when building from source
+- A UTF-8 terminal; a Nerd Font is recommended for the richest icon set
+
+### 1. Build
+
+```bash
+git clone https://github.com/worxbend/obsctl.git
+cd obsctl
+shards install
+make release
+install -Dm755 bin/obsctl ~/.local/bin/obsctl
 ```
 
-Default config path on Linux is `~/.config/obsctl/config.yml`. Override with `--config` or `OBSCTL_CONFIG`.
+The release binary is written to `bin/obsctl`. Prebuilt Linux AMD64 archives
+are also available on the [Releases page](https://github.com/worxbend/obsctl/releases).
 
-Use `connection.password_env` for OBS WebSocket passwords. If that environment
-variable is absent or empty, obsctl connects using an empty password.
-Plaintext `connection.password` is supported as a fallback; `validate-config`
-warns about plaintext passwords without printing the secret value.
+### 2. Initialize
 
-Use `--log-level debug|info|warn|error` with `obsctl server` to control server
-log verbosity. Logs are written to `~/.local/state/obsctl/obsctl.log` and are
-also mirrored to stderr while the server process is running. Password and
-authentication fields are redacted from both sinks.
+```bash
+obsctl init
+obsctl validate-config
+```
 
-## Commands
+The default configuration lives at `~/.config/obsctl/config.yml`. Override it
+with `--config PATH` or `OBSCTL_CONFIG`.
 
-Scriptable commands:
+If OBS authentication is enabled, export its password before starting the
+server:
 
-```sh
-obsctl server
+```bash
+export OBS_WEBSOCKET_PASSWORD='your OBS WebSocket password'
+```
+
+No password? No problem—when the variable is absent, `obsctl` attempts the
+connection with an empty password.
+
+### 3. Start the daemon and TUI
+
+In one terminal:
+
+```bash
 obsctl server --headless
+```
+
+In another:
+
+```bash
+obsctl
+```
+
+Once connected, import live scene and audio names while preserving your local
+settings:
+
+```bash
+obsctl dump-config
+```
+
+> [!TIP]
+> Scene and audio names discovered from OBS work immediately. Running
+> `dump-config` is useful for adding memorable aliases and shortcuts, but it is
+> not required before using the TUI.
+
+## 🎛️ The control room
+
+The TUI is a thin local client: it subscribes to daemon state, OBS events, and
+logs, then renders them through CryTUI. It does **not** open another OBS
+WebSocket connection.
+
+### Keyboard map
+
+| Key | Action |
+| --- | --- |
+| `s` / `a` / `p` / `c` | Focus scenes, audio, profiles, or collections |
+| `↑` `↓` or `j` `k` | Move within the focused panel |
+| `Ctrl` + arrows or `Ctrl-h/j/k/l` | Move between panels |
+| `Enter` | Activate the focused scene, profile, or collection |
+| `m` | Toggle the focused audio input mute state |
+| `←` `→` or `h` `l` | Lower or raise focused input volume |
+| `/` or `:` | Open the command palette |
+| `Tab` / `Shift-Tab` | Cycle command completions |
+| `Ctrl-T` or `F2` | Open the appearance lab |
+| `r` / `D` / `R` | Reload config, dump config, or reconnect OBS |
+| `q` or `Ctrl-C` | Quit |
+
+Rapid volume keypresses update the display immediately and coalesce into one
+OBS command 120 ms after input stops. Terminal shrinking and expansion trigger
+a full safe repaint; normal frames return to cell-level incremental updates.
+
+### Command palette
+
+Press `/` and use the same grammar as the CLI:
+
+```text
+/scene "Main Camera"
+/mute Mic/Aux
+/vol "Desktop Audio" 65
+/profile Streaming
+/collection Gaming
+/stream
+/rec
+/status
+/reconnect
+```
+
+## 🧰 CLI & automation
+
+The daemon-backed CLI is designed to be pleasant interactively and predictable
+inside scripts.
+
+```bash
+# Status
 obsctl status
 obsctl obs-status
 obsctl server-status
-obsctl reconnect
-obsctl shutdown-server
-obsctl scene <alias-or-name>
-obsctl mute <alias-or-name>
-obsctl unmute <alias-or-name>
-obsctl toggle-mute <alias-or-name>
-obsctl vol|volume <alias-or-name> <0-100>
+
+# Scenes and audio
+obsctl scene main
+obsctl mute mic
+obsctl unmute mic
+obsctl toggle-mute mic
+obsctl volume "Desktop Audio" 70
+
+# Studio and output controls
 obsctl stream
-obsctl rec|record
+obsctl record
+obsctl reconnect
+
+# Configuration and lifecycle
+obsctl validate-config
 obsctl dump-config
 obsctl reload-config
-obsctl validate-config
-obsctl service install
-obsctl service start|stop|restart|status|uninstall
+obsctl shutdown-server
 ```
 
-Except for `init`, `validate-config`, `server`, and `service`, scriptable OBS-control commands are thin IPC clients. Start `obsctl server --headless` first; if the server is missing, commands print startup/service instructions and exit `3`. `shutdown-server` is disabled unless `server.allow_remote_shutdown: true` is set.
+Aliases, shortcuts, exact OBS names, and case-insensitive names are supported.
+Quote names containing spaces.
 
-`obsctl status` reports combined local daemon and OBS status. Its JSON result
-has a `server` object with daemon fields and an `obs` object with the OBS
-snapshot.
+### JSON mode
 
-`obsctl obs-status` reports only the OBS snapshot: connection state, current
-scene, scenes, and audio inputs.
+Add `--json` before or after a scriptable command:
 
-`obsctl server-status` reports only the local daemon status: PID, uptime,
-socket path, subscribed client count, OBS connection state, explicit
-reconnecting state, reconnect timestamps, last error, and
-`dropped_reconnect_diagnostic_logs`. `last_disconnected_at` is set only after an
-established OBS session disconnects;
-`last_connection_failed_at` records the most recent failed OBS connection
-attempt. It is historical telemetry, not just the current disconnected episode,
-and a later successful connection does not clear it. `obsctl reconnect` success
-means the running supervisor accepted a generation-scoped reconnect request, or
-already has a prompt OBS connection attempt in progress; it does not mean OBS is
-already connected. Accepted explicit requests are durable across the next retry
-boundary, so a request made after a failed connection attempt but before retry
-sleep starts is still acted on promptly. The public `last_error` remains
-`OBS reconnect requested` until the next connection succeeds or fails. Once an
-accepted request has updated supervisor state and any detached OBS client has
-been closed, subscriber state/log delivery failures are best-effort diagnostics:
-the server logs them with secret redaction, and the command still succeeds. If
-the supervisor has already exited, for example after startup failure with
-`reconnect.enabled: false`, `obsctl reconnect` returns `OBS_UNAVAILABLE` with a
-message telling the operator to restart the server or enable reconnect.
-`dropped_reconnect_diagnostic_logs` is process-local runtime telemetry and
-resets when the daemon process restarts. It counts only dropped secondary
-reconnect diagnostic `logs` topic deliveries from the bounded best-effort
-fanout. Primary runtime logging remains the durable diagnostic sink, and
-ordinary state, event, and log subscriber drops are not counted by this field.
-The public value is a JSON-safe non-negative integer; values above
-`Int64::MAX` are saturated to `Int64::MAX`. Human status output shows the
-integer reported by the daemon, including `0`, and shows `-` when talking to an
-older daemon that omits the field. JSON output preserves the daemon payload and
-does not synthesize the missing field.
+```bash
+obsctl --json status
+obsctl scene main --json
+```
 
-`obsctl service install` writes `~/.config/systemd/user/obsctl.service` using the current executable path and runs `systemctl --user daemon-reload`. Service start/stop/restart/status/uninstall commands wrap `systemctl --user` and do not require `sudo`.
+Every JSON invocation writes exactly one envelope to stdout:
 
-The TUI is also a local IPC client in normal mode. It subscribes to server state, OBS event, and log updates, and sends palette commands through the server using the same grammar with a leading slash, for example `/scene main`, `/mute mic`, `/vol mic 70`, `/validate-config`, and `/reconnect`. The current ANSI dashboard is split into connection, scenes, scene map, audio, recent logs, and command palette panels. It discovers the live terminal size on every frame, clears stale physical cells when the window shrinks or expands, and reflows all panels to the new geometry. After each full resize repaint, the renderer resumes updating only changed cells. In a terminal, `/` or `:` opens the command palette, `Esc` cancels editing, `Enter` submits, `q` quits from the dashboard, `r` reloads config, and `D` dumps config through the server.
+```json
+{
+  "ok": true,
+  "result": {"message": "scene set: Main Camera"},
+  "error": null,
+  "exit_code": 0
+}
+```
 
-Focused audio volume keys update the displayed percentage immediately. Rapid
-repeated changes are coalesced per input, and the final level is sent to OBS
-120ms after the last keypress instead of blocking on one request per key.
+Failures use canonical error codes and matching process exit statuses, making
+them straightforward to handle in shell scripts and other tools. See the
+[command reference](docs/commands.md) for the full grammar, supported JSON
+commands, error codes, and status schema.
 
-`dump-config` is performed by the local server, which owns the OBS connection, reads scenes and audio inputs, and writes a generated config. Existing config files are backed up before dump writes. The dump keeps top-level daemon settings such as `server` and `reconnect`, and it refuses to write if aliases or shortcuts would become ambiguous with discovered OBS names.
+## 🏗️ Architecture
 
-Config files reject unknown top-level fields so future settings are not silently lost during rewrites.
+```mermaid
+flowchart LR
+    OBS["🎥 OBS Studio<br/>obs-websocket 5.x"]
+    D["🧠 obsctl server<br/>single connection owner"]
+    T["🎛️ CryTUI dashboard"]
+    C["⚙️ CLI / scripts"]
+    S["🛠️ systemd --user"]
 
-## Troubleshooting
+    OBS <-->|WebSocket| D
+    D <-->|Unix socket IPC| T
+    D <-->|Unix socket IPC| C
+    S -. supervises .-> D
+```
 
-If OBS was unavailable when the server started and `reconnect.enabled: false` is
-configured, the OBS supervisor exits after that failed startup attempt. Local IPC
-commands such as `obsctl status` and `obsctl server-status` continue to work,
-but `obsctl reconnect` cannot schedule a reconnect from a stopped supervisor.
-Restart `obsctl server --headless` after OBS is available, or enable reconnect
-in the config and restart the service. With reconnect enabled, the supervisor
-stays alive while OBS is unavailable; `obsctl reconnect` is accepted as a
-durable request for the running generation, or succeeds because an OBS
-connection attempt is already running or will run promptly.
+The daemon is the authoritative state owner. This boundary provides:
 
-## Validation
+- exactly one OBS WebSocket connection per user session;
+- shared state and event delivery across every local client;
+- centralized reconnect, validation, logging, and secret handling;
+- short-lived CLI processes without repeated OBS handshakes.
 
-Default Crystal validation is single-repo and deterministic. It runs the local
-contract suite without requiring a sibling Rust checkout:
+The Unix socket lives under `$XDG_RUNTIME_DIR/obsctl/` when an XDG runtime
+directory is available, with a user-specific `/tmp/obsctl-$UID/` fallback.
+Control remains local—there is no network-facing obsctl API.
 
-```sh
+## 🔧 Configuration
+
+A minimal configuration looks like this:
+
+```yaml
+version: 1
+
+connection:
+  host: 127.0.0.1
+  port: 4455
+  password_env: OBS_WEBSOCKET_PASSWORD
+
+reconnect:
+  enabled: true
+  endless: true
+
+ui:
+  theme: default
+  advanced_ui: true
+  show_icons: true
+  locale: en
+
+scenes:
+  - name: Main Camera
+    alias: main
+    shortcut: "1"
+
+audio:
+  inputs:
+    - name: Mic/Aux
+      alias: mic
+      shortcut: m
+```
+
+Important behavior:
+
+- secrets belong in environment variables; plaintext password values produce a
+  secret-safe warning;
+- unknown top-level fields are rejected instead of being silently discarded;
+- config rewrites are atomic and preserve backups;
+- `dump-config` refuses to create ambiguous aliases or shortcuts;
+- `OBSCTL_LOCALE` overrides `ui.locale`; supported UI locales are `en` and `uk`;
+- custom themes can override any subset of the semantic color palette.
+
+See the complete [configuration reference](docs/config.md).
+
+## 🛠️ Run as a user service
+
+No root daemon is required. Install a `systemd --user` unit using the current
+binary path:
+
+```bash
+obsctl service install
+obsctl service start
+obsctl service status
+```
+
+Other lifecycle commands:
+
+```bash
+obsctl service stop
+obsctl service restart
+obsctl service uninstall
+```
+
+The generated unit lives at `~/.config/systemd/user/obsctl.service`.
+
+## 🩺 Troubleshooting
+
+### Show connection and retry diagnostics
+
+```bash
+obsctl --log-level debug server --headless
+```
+
+Server logs are mirrored to stderr and persisted at
+`~/.local/state/obsctl/obsctl.log`. Passwords and generated authentication
+strings are redacted from both sinks. WebSocket resets include the close code,
+reason, reconnect attempt, and next delay.
+
+### The CLI says the server is unavailable
+
+Start it directly:
+
+```bash
+obsctl server --headless
+```
+
+Or install/start the user service. Thin client commands exit with status `3`
+when the daemon or OBS connection is unavailable.
+
+### OBS was offline during startup
+
+Reconnect is enabled by default. Check `obsctl server-status`, then request an
+immediate attempt with `obsctl reconnect`. If `reconnect.enabled: false`,
+restart the server after OBS becomes available.
+
+## 🧑‍💻 Development
+
+```bash
+shards install
 make format
-CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make test
-CRYSTAL_CACHE_DIR=/tmp/obsctl-crystal-cache make build
+make test
+make build
+make release
 make lint
 ```
 
-Optional `obsctl-rs` golden-fixture compatibility is skipped by default when
-`../obsctl-rs` is absent or when that sibling does not contain a recognized
-contract fixture root. Run the strict dual-repo check explicitly with:
+The local test suite is deterministic and does not require OBS Studio. It uses
+a fake obs-websocket server, Unix-socket integration tests, memory rendering,
+ANSI assertions, and real PTY lifecycle probes.
 
-```sh
+Optional cross-implementation fixture verification against a sibling
+`../obsctl-rs` checkout:
+
+```bash
 make contract-rs-compat
 ```
 
-Strict mode sets `OBSCTL_STRICT_OBSCTL_RS_COMPAT=1` and fails on a missing
-sibling repository, missing fixture root, missing counterpart files in either
-repository, or content differences. `OBSCTL_SKIP_OBSCTL_RS_COMPAT=1` remains an
-explicit override for skipping the optional compatibility check.
+Strict compatibility mode requires a recognized fixture root in both
+repositories. See [docs/protocol.md](docs/protocol.md) for the contract model.
 
-The GitHub Actions strict compatibility workflow is intentionally not a
-push/pull-request gate while `obsctl-rs` lacks compatible fixtures. It runs by
-manual `workflow_dispatch` and on the scheduled cadence, with the Rust
-repository owner, name, and ref supplied by workflow inputs or repository
-variables.
+## 📚 Documentation
 
-Rust-side contract fixtures should live under one recognized root:
-`spec/fixtures/contracts/`, `tests/fixtures/contracts/`, or
-`fixtures/contracts/`. The selected root should mirror `cli/human/`,
-`cli/json/`, and `ipc/`; current status fixtures should include
-`dropped_reconnect_diagnostic_logs` wherever daemon status is present.
+| Guide | Contents |
+| --- | --- |
+| [Commands](docs/commands.md) | Complete CLI/palette grammar, JSON envelopes, errors, and status semantics |
+| [Configuration](docs/config.md) | Connection, reconnect, UI, theme, alias, and persistence settings |
+| [Protocol](docs/protocol.md) | IPC framing, subscriptions, state contracts, and compatibility fixtures |
+| [CryTUI research](docs/tui-research.md) | Ratatui analysis, Crystal library evaluation, rendering architecture, and parity evidence |
+
+## 🤝 Contributing
+
+Issues, focused bug reports, documentation improvements, and pull requests are
+welcome. For behavior changes, include a regression test at the narrowest
+useful layer and run the development checks above before opening a PR.
+
+Useful reports include:
+
+- your OBS Studio and obs-websocket versions;
+- terminal name, dimensions, font, and `$TERM` for rendering issues;
+- sanitized `obsctl.log` excerpts for connection problems;
+- the exact command, expected result, and actual result.
+
+Please never include OBS passwords or generated authentication strings.
+
+## 📜 License
+
+`obsctl` is released under the MIT license.
+
+---
+
+<div align="center">
+
+Built with 💎 Crystal, terminal escape sequences, and an unreasonable love for
+reliable broadcast controls.
+
+**If obsctl improves your control room, consider starring the repository. ⭐**
+
+</div>
