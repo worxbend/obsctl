@@ -25,10 +25,10 @@ private def widget_model
     audio_inputs: [
       Obsctl::OBS::State::AudioState.new("Mic", alias: "mic", muted: false, volume_percent: 80),
       Obsctl::OBS::State::AudioState.new("Desktop", muted: true, volume_percent: 0),
-    ]
+    ],
+    profiles: ["Default"],
+    current_profile: "Default"
   )
-  model.profiles = ["Default"]
-  model.current_profile = "Default"
   model.meter_levels["Mic"] = 0.1
   model
 end
@@ -70,6 +70,37 @@ describe Obsctl::TUI::Widgets::LiveBar do
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 90, 4))
     Obsctl::TUI::Widgets::LiveBar.render(buffer.area, buffer, model)
     rendered_text(buffer).should contain("waiting for OBS metrics")
+  end
+end
+
+describe Obsctl::TUI::Widgets::Logs do
+  it "semantically highlights resources, commands, statuses, and numbers" do
+    model = widget_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(profiles: ["Streaming"], scene_collections: ["Podcast"])
+    message = "scene Main switched -> profile Streaming via /scene in 42ms; OBS connected"
+    spans = Obsctl::TUI::Widgets::Logs.highlight_message(message, model)
+    spans.map(&.content).join.should eq(message)
+
+    spans.find(&.content.==("Main")).not_nil!.style.foreground.should eq(model.theme.accent)
+    spans.find(&.content.==("Streaming")).not_nil!.style.foreground.should eq(model.theme.warning)
+    spans.find(&.content.==("switched")).not_nil!.style.foreground.should eq(model.theme.success)
+    spans.find(&.content.==("/scene")).not_nil!.style.foreground.should eq(model.theme.accent)
+    spans.find(&.content.==("42ms")).not_nil!.style.foreground.should eq(model.theme.info)
+    spans.find(&.content.==("OBS")).not_nil!.style.foreground.should eq(model.theme.accent_alt)
+  end
+
+  it "highlights quoted resources and respects resource word boundaries" do
+    model = widget_model
+    spans = Obsctl::TUI::Widgets::Logs.highlight_message(
+      "failed on 'Main'; Mainframe timeout on Desktop",
+      model
+    )
+
+    spans.find(&.content.==("failed")).not_nil!.style.foreground.should eq(model.theme.danger)
+    spans.find(&.content.==("'Main'")).not_nil!.style.foreground.should eq(model.theme.accent)
+    spans.find(&.content.==("Mainframe")).not_nil!.style.foreground.should eq(model.theme.foreground)
+    spans.find(&.content.==("timeout")).not_nil!.style.foreground.should eq(model.theme.danger)
+    spans.find(&.content.==("Desktop")).not_nil!.style.foreground.should eq(model.theme.info)
   end
 end
 
@@ -196,8 +227,7 @@ end
 describe Obsctl::TUI::Widgets::Dashboard do
   it "renders the complete primary dashboard into one frame" do
     model = widget_model
-    model.scene_collections = ["Podcast", "Gaming"]
-    model.current_scene_collection = "Podcast"
+    model.snapshot = model.snapshot.not_nil!.copy_with(scene_collections: ["Podcast", "Gaming"], current_scene_collection: "Podcast")
     model.logs << Obsctl::TUI::LogEntry.new(Obsctl::Runtime::LogLevel::Warn, "reconnect attempt", "obs_reconnect", Time.utc(2026, 7, 18, 12, 34, 56))
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 40))
     Obsctl::TUI::Widgets::Dashboard.render(buffer.area, buffer, model)

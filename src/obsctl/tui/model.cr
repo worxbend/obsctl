@@ -102,10 +102,6 @@ module Obsctl
       property audio_cursor : Int32
       property profile_cursor : Int32
       property collection_cursor : Int32
-      property profiles : Array(String)
-      property current_profile : String?
-      property scene_collections : Array(String)
-      property current_scene_collection : String?
       property meter_levels : Hash(String, Float64)
       property cpu_history : Array(Float64)
       property bitrate_history : Array(Float64)
@@ -131,10 +127,6 @@ module Obsctl
         @audio_cursor = 0
         @profile_cursor = 0
         @collection_cursor = 0
-        @profiles = [] of String
-        @current_profile = nil
-        @scene_collections = [] of String
-        @current_scene_collection = nil
         @meter_levels = {} of String => Float64
         @cpu_history = [] of Float64
         @bitrate_history = [] of Float64
@@ -159,6 +151,22 @@ module Obsctl
 
       def audio_inputs : Array(OBS::State::AudioState)
         @snapshot.try(&.audio_inputs) || [] of OBS::State::AudioState
+      end
+
+      def profiles : Array(String)
+        @snapshot.try(&.profiles) || [] of String
+      end
+
+      def current_profile : String?
+        @snapshot.try(&.current_profile)
+      end
+
+      def scene_collections : Array(String)
+        @snapshot.try(&.scene_collections) || [] of String
+      end
+
+      def current_scene_collection : String?
+        @snapshot.try(&.current_scene_collection)
       end
 
       def current_scene : String?
@@ -235,16 +243,16 @@ module Obsctl
         case @focus
         when .scenes?      then @scene_cursor = {@scene_cursor + 1, scenes.size - 1}.min.clamp(0, Int32::MAX)
         when .audio?       then @audio_cursor = {@audio_cursor + 1, audio_inputs.size - 1}.min.clamp(0, Int32::MAX)
-        when .profiles?    then @profile_cursor = {@profile_cursor + 1, @profiles.size - 1}.min.clamp(0, Int32::MAX)
-        when .collections? then @collection_cursor = {@collection_cursor + 1, @scene_collections.size - 1}.min.clamp(0, Int32::MAX)
+        when .profiles?    then @profile_cursor = {@profile_cursor + 1, profiles.size - 1}.min.clamp(0, Int32::MAX)
+        when .collections? then @collection_cursor = {@collection_cursor + 1, scene_collections.size - 1}.min.clamp(0, Int32::MAX)
         end
       end
 
       def clamp_cursors
         @scene_cursor = @scene_cursor.clamp(0, {scenes.size - 1, 0}.max)
         @audio_cursor = @audio_cursor.clamp(0, {audio_inputs.size - 1, 0}.max)
-        @profile_cursor = @profile_cursor.clamp(0, {@profiles.size - 1, 0}.max)
-        @collection_cursor = @collection_cursor.clamp(0, {@scene_collections.size - 1, 0}.max)
+        @profile_cursor = @profile_cursor.clamp(0, {profiles.size - 1, 0}.max)
+        @collection_cursor = @collection_cursor.clamp(0, {scene_collections.size - 1, 0}.max)
       end
 
       def focused_scene : OBS::State::SceneState?

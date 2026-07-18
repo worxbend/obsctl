@@ -22,7 +22,6 @@ module Obsctl
           end
           model.snapshot = snapshot
           model.connected_to_daemon = true
-          apply_extended_state(model, data)
           model.record_metric_sample
           model.clamp_cursors
           true
@@ -100,13 +99,6 @@ module Obsctl
         )
       rescue TypeCastError | KeyError | Time::Format::Error
         nil
-      end
-
-      private def apply_extended_state(model : Model, data : JSON::Any)
-        model.profiles = string_array(data["profiles"]?)
-        model.current_profile = data["current_profile"]?.try(&.as_s?)
-        model.scene_collections = string_array(data["scene_collections"]?)
-        model.current_scene_collection = data["current_scene_collection"]?.try(&.as_s?)
       end
 
       private def parse_log(data : JSON::Any) : LogEntry?

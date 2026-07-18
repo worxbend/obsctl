@@ -17,8 +17,10 @@ private def completion_model
       Obsctl::OBS::State::AudioState.new("Music", alias: "m-bg"),
     ]
   )
-  model.profiles = ["Default", "Streaming"]
-  model.scene_collections = ["Podcast", "Gaming"]
+  model.snapshot = model.snapshot.not_nil!.copy_with(
+    profiles: ["Default", "Streaming"],
+    scene_collections: ["Podcast", "Gaming"]
+  )
   model
 end
 
