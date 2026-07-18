@@ -59,6 +59,10 @@ Critical rule:
   from consecutive active `outputBytes` samples, and publish rolling metrics.
 - [x] Preserve Rust-compatible scene `hidden` configuration through config
   dumps and snapshots, and exclude hidden scenes from TUI navigation.
+- [x] Port semantic daemon-log rendering for known resources, quoted values,
+  commands, arrows, status keywords, and numeric telemetry tokens.
+- [x] Remove duplicate client-side profile/collection state; TUI navigation,
+  completion, and widgets now read the authoritative snapshot directly.
 - [x] Add the persistent state/events/logs subscription, correlated short-lived
   command client, typed dispatcher, raw input/render loop, retry handling, and
   `obsctl` / `obsctl tui` CLI entrypoints.
