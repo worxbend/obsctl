@@ -173,6 +173,11 @@ to report the real last connection failure instead of `OBS reconnect requested`:
 
 `obsctl` and `obsctl tui` run the ANSI TUI as an IPC client in normal mode. The TUI subscribes to server state snapshots, OBS events, and server log topics, then forwards palette commands to the same server-owned command executor used by scriptable CLI commands. The dashboard renders connection, scenes, grouped scene map, audio, recent logs, and command palette panels. Rendering is bounded to the current `COLUMNS`/`LINES` terminal size when those environment values are available, so long scene/audio names and large collections do not overflow the viewport. After the initial full paint, the ANSI backend emits row-level diffs for changed content instead of clearing the whole screen every refresh.
 
+Startup first shows the responsive animated identity screen for two seconds;
+any key dismisses it. `Ctrl-T` or `F2` opens the appearance lab, arrow keys (or
+`j`/`k`) preview themes, Enter applies and atomically persists the selection,
+and Esc restores the theme that was active when the lab opened.
+
 The daemon-first boundary is enforced as a project contract: normal CLI source
 and the normal TUI client path must not require or instantiate the OBS
 WebSocket client implementation. Server-side `command_executor` is the
@@ -194,3 +199,5 @@ TUI keyboard input:
 - `q` exits from the dashboard.
 - `r` sends `/reload-config` from the dashboard.
 - `D` sends `/dump-config` from the dashboard.
+- `Ctrl-T` or `F2` opens theme settings; arrows or `j`/`k` preview, Enter
+  persists, and Esc cancels the preview.

@@ -12,8 +12,9 @@ module Obsctl
 
     class Dispatcher
       alias Sender = Proc(IPC::CommandPayload, IPC::Response)
+      alias ThemePersister = Proc(Theme, String)
 
-      def initialize(@model : Model, @sender : Sender)
+      def initialize(@model : Model, @sender : Sender, @theme_persister : ThemePersister? = nil)
       end
 
       def handle(action : Action) : ActionOutcome
@@ -104,7 +105,8 @@ module Obsctl
         when .apply_settings_theme?
           @model.theme_preview_origin = nil
           @model.view = View::Main
-          ActionOutcome.new(message: "theme set: #{@model.theme.id}")
+          message = @theme_persister.try(&.call(@model.theme)) || "theme set: #{@model.theme.id}"
+          ActionOutcome.new(message: message)
         else
           ActionOutcome.new
         end

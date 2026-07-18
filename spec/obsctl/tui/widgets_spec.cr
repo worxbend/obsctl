@@ -5,6 +5,9 @@ require "../../../src/obsctl/tui/widgets/audio"
 require "../../../src/obsctl/tui/widgets/connection"
 require "../../../src/obsctl/tui/widgets/command_palette"
 require "../../../src/obsctl/tui/widgets/dashboard"
+require "../../../src/obsctl/tui/widgets/settings"
+require "../../../src/obsctl/tui/widgets/splash"
+require "../../../src/obsctl/tui/widgets/scene_map"
 
 private def widget_model
   model = Obsctl::TUI::Model.new(theme: Obsctl::TUI::Theme::NORD)
@@ -168,5 +171,55 @@ describe Obsctl::TUI::Widgets::Dashboard do
     end
     text.should contain("reconnect attempt")
     buffer[119, 39].style.background.should eq(model.theme.background)
+  end
+end
+
+describe Obsctl::TUI::Widgets::Settings do
+  it "renders a scrollable palette list and semantic live preview" do
+    model = widget_model
+    model.settings_cursor = Obsctl::TUI::Theme::ALL.size - 1
+    model.theme = Obsctl::TUI::Theme::MONO
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 100, 18))
+    Obsctl::TUI::Widgets::Settings.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+
+    text.should contain("Themes // 29 palettes")
+    text.should contain("Mono (TTY-safe)")
+    text.should contain("Preview: Mono (TTY-safe)")
+    text.should contain("SCENE ACTIVE")
+  end
+end
+
+describe Obsctl::TUI::Widgets::Splash do
+  it "renders responsive rich, compact, and ASCII startup identities" do
+    model = widget_model
+    large = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 100, 20))
+    Obsctl::TUI::Widgets::Splash.render(large.area, large, model, 20_u64, 40_u64)
+    rendered_text(large).should contain("STUDIO LINK // SECURE SESSION")
+    rendered_text(large).should contain("Broadcast control, without breaking flow.")
+
+    compact = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 60, 12))
+    Obsctl::TUI::Widgets::Splash.render(compact.area, compact, model, 20_u64, 40_u64)
+    rendered_text(compact).should contain("INITIALIZING BROADCAST CONTROL")
+
+    ascii_model = Obsctl::TUI::Model.new(advanced_ui: false, show_icons: false)
+    ascii = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 70, 15))
+    Obsctl::TUI::Widgets::Splash.render(ascii.area, ascii, ascii_model, 20_u64, 40_u64)
+    rendered_text(ascii).should contain("OBSCTL STARTUP")
+    rendered_text(ascii).should contain("50%")
+  end
+end
+
+describe Obsctl::TUI::Widgets::SceneMap do
+  it "sorts groups, separates ungrouped scenes, and marks the active scene" do
+    model = widget_model
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 50, 12))
+    Obsctl::TUI::Widgets::SceneMap.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+    text.should contain("Scene Map")
+    text.should contain("[Studio]")
+    text.should contain("[ungrouped]")
+    text.should contain("▶ Main")
+    text.index("[Studio]").not_nil!.should be < text.index("[ungrouped]").not_nil!
   end
 end
