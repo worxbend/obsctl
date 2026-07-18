@@ -194,6 +194,45 @@ headings and highlighted count badges across settings, header, live telemetry,
 connection, and every shared dashboard panel while retaining string-title
 compatibility for simpler widgets.
 
+A later cell-level probe caught two assumptions that text-presence tests could
+not: Ratatui starts an unpadded title immediately after the left border and its
+default border set is plain Unicode, while the initial CryTUI implementation
+added implicit title padding and defaulted to ASCII. CryTUI now follows the
+Ratatui contract, renders titles even with `Borders::NONE`, clips before an
+enabled right border, and lets application titles carry their intentional
+spaces. The scene-map widget consequently uses the same plain border set as
+the reference rather than inheriting rounded application chrome.
+
+The same probe exposed that Unicode's broad `Extended_Pictographic` property
+is not a terminal-width table. Ratatui 0.29 uses `unicode-width` 0.2 / Unicode
+15.1: `▶`, `🎚`, and `⚠` occupy one cell, while `⚡`, `🔊`, flags, CJK, and
+emoji-presentation sequences occupy two. CryTUI now uses the corresponding
+W/F and default emoji-presentation ranges, with variation-selector/keycap
+handling, instead of treating every pictograph as wide.
+
+With identical populated models, temporary independent Ratatui TestBackend and
+CryTUI Buffer probes produced byte-identical dashboard symbols at 120×40,
+80×24, rich 40×12, and simplified 120×34 when the undersized Cassowary run
+selected the same valid basis. Repeated 40×12 Ratatui processes alternated
+between valid equal-strength bases, confirming the already documented
+undersized exception; all determined representative frames matched exactly.
+The audit also restored Rust's compact one-inner-row telemetry path, exact
+English dashboard copy/hints, right-border title clipping, and Ratatui's ANSI
+`White`/`Gray`/`DarkGray` mapping in the Mono theme.
+
+The completion inventory also found that Crystal already round-tripped
+`ui.locale` but did not apply it. The TUI now resolves `OBSCTL_LOCALE` over the
+configured value, supports the same `en`/`uk` set with English fallback, and
+ports the Rust header and connection vocabulary—including dynamic OBS version,
+scene/profile, error, retry, and unavailable-state strings.
+
+Runtime parity was audited separately from pixels. Crystal now applies Rust's
+50 ms minimum refresh interval, exits with status 1 when terminal input reaches
+EOF/errors instead of leaving an orphan ticker loop, reports retry
+success/failure with the same vocabulary, and sends `/status` as the reference
+snapshot request. Command tokenization also strips repeated leading slashes and
+preserves backslashes outside quotes like the Rust parser.
+
 The audio panel now also distinguishes OBS's three mute states instead of
 presenting unknown state as unmuted, and its dB-scaled filled cells blend from
 success to info before crossing the warning/danger thresholds used by Rust.

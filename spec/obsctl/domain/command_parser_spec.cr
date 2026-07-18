@@ -44,6 +44,12 @@ describe Obsctl::Domain::CommandParser do
     parser.parse("/MUTE mic").should be_a(Obsctl::Domain::MuteCommand)
   end
 
+  it "matches Rust slash stripping and preserves backslashes outside quotes" do
+    parser.parse("///HELP").should be_a(Obsctl::Domain::HelpCommand)
+    command = parser.parse(%q(scene Camera\One)).as(Obsctl::Domain::SetSceneCommand)
+    command.target.should eq(%q(Camera\One))
+  end
+
   it "rejects unsafe or oversized target tokens" do
     expect_raises(Obsctl::Domain::CommandParseError, /control characters/) { parser.parse("/scene main\u0000cam") }
     long_target = "a" * (Obsctl::Domain::CommandParser::MAX_TARGET_TOKEN_LENGTH + 1)

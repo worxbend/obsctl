@@ -18,6 +18,16 @@ describe Obsctl::TUI::App do
     app.model.command_palette_prefix.should eq("/")
   end
 
+  it "applies the configured TUI locale" do
+    config = Obsctl::Config::Config.new(ui: Obsctl::Config::UiConfig.new(locale: "uk"))
+    Obsctl::TUI::App.from_config(config).model.locale.should eq("uk")
+  end
+
+  it "clamps the runtime refresh to Rust's 50ms floor" do
+    config = Obsctl::Config::Config.new(ui: Obsctl::Config::UiConfig.new(refresh_interval_ms: 10))
+    Obsctl::TUI::App.from_config(config).refresh.should eq(50.milliseconds)
+  end
+
   it "applies subscription events, palette paste, and quit actions" do
     model = Obsctl::TUI::Model.new
     app = Obsctl::TUI::App.new(model: model)
@@ -52,6 +62,15 @@ describe Obsctl::TUI::App do
     model.last_result_frame.should eq(42_u64)
   end
 
+  it "quits when terminal input closes instead of ticking forever" do
+    model = Obsctl::TUI::Model.new
+    app = Obsctl::TUI::App.new(model: model)
+    sender = ->(payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true) }
+    dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)
+
+    app.process(Obsctl::TUI::InputClosed.new, dispatcher).should be_true
+  end
+
   it "renders unavailable, dashboard, and settings views through CryTUI" do
     model = Obsctl::TUI::Model.new(advanced_ui: false)
     app = Obsctl::TUI::App.new(model: model)
@@ -59,7 +78,7 @@ describe Obsctl::TUI::App do
     terminal = CryTUI::Terminal.new(backend)
 
     app.render(terminal)
-    backend.buffer.lines.join("\n").should contain("SERVER UNAVAILABLE")
+    backend.buffer.lines.join("\n").should contain("obsctl - daemon unavailable")
 
     model.connected_to_daemon = true
     app.render(terminal)

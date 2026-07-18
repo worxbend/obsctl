@@ -15,15 +15,17 @@ module CryTUI
     private def initialize(@kind, @red = 0_u8, @green = 0_u8, @blue = 0_u8, @index = 0_u8)
     end
 
-    RESET   = new(ColorKind::Reset)
-    BLACK   = indexed(0)
-    RED     = indexed(1)
-    GREEN   = indexed(2)
-    YELLOW  = indexed(3)
-    BLUE    = indexed(4)
-    MAGENTA = indexed(5)
-    CYAN    = indexed(6)
-    WHITE   = indexed(7)
+    RESET     = new(ColorKind::Reset)
+    BLACK     = indexed(0)
+    RED       = indexed(1)
+    GREEN     = indexed(2)
+    YELLOW    = indexed(3)
+    BLUE      = indexed(4)
+    MAGENTA   = indexed(5)
+    CYAN      = indexed(6)
+    GRAY      = indexed(7)
+    DARK_GRAY = indexed(8)
+    WHITE     = indexed(15)
 
     def self.indexed(index : Int) : Color
       new(ColorKind::Indexed, index: index.clamp(0, 255).to_u8)

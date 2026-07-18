@@ -3105,3 +3105,28 @@ M  AGENT_LOG.md
   the Rust adapter.
 - Added focused parser, dispatcher, event, and memory-buffer rendering
   contracts for each repaired path.
+
+## 2026-07-18 — Differentially verify Ratatui and CryTUI frames
+
+- Rendered identical populated models through Ratatui TestBackend and CryTUI
+  Buffer at rich 120x40, 80x24, 40x12, and simplified 120x34 sizes; determined
+  frames reached byte-identical symbol output.
+- Corrected CryTUI Block to use Ratatui's plain default border, unpadded title
+  origin, borderless titles, and right-border clipping, then restored explicit
+  application-title spacing.
+- Replaced broad pictographic-width guesses with Ratatui/unicode-width 0.2's
+  Unicode 15.1 wide/default-emoji ranges so symbols such as `▶`, `🎚`, and `⚠`
+  remain narrow while actual emoji, flags, and CJK remain wide.
+- Restored compact one-row telemetry, exact reference status/hint copy, the
+  scene-map border, and Ratatui's White/Gray/DarkGray Mono palette mapping.
+- Closed the previously inert `ui.locale` path: TUI model construction now
+  honors `OBSCTL_LOCALE` precedence and renders the Rust English/Ukrainian
+  header and connection vocabulary with unsupported-locale fallback.
+- Matched runtime edges missed by rendering: 50ms refresh floor, non-zero
+  terminal EOF/error exit, retry result messaging, `/status` snapshot routing,
+  and Rust-compatible slash/backslash command tokenization.
+- Validation: format, debug build, release build, and the complete 394-example
+  suite pass, including PTY restoration. Focused lint on the new localization
+  and edited app/theme/log surfaces is clean. The repository-wide Ameba target
+  still reports its pre-existing 256-finding backlog; strict sibling contract
+  mode still lacks the separately planned Rust fixture root.

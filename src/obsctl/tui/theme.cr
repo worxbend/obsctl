@@ -61,7 +61,7 @@ module Obsctl
       SYNTHWAVE_84     = palette("synthwave-84", "Synthwave '84", %w(262335 FF7EDB 36F9F6 FFFFFF 848BBD 495495 FF7EDB 72F1B8 FEDE5D FE4450 03EDF9 FF7EDB 262335))
       MATRIX           = palette("matrix", "Matrix", %w(050B05 00FF41 00CC33 D8FFD8 397D39 0F3D0F 00FF41 00FF41 CFFF04 FF3B30 39FF14 00FF41 050B05))
       ZENBURN          = palette("zenburn", "Zenburn", %w(3F3F3F DCA3A3 8CD0D3 DCDCCC 7F9F7F 5F5F5F DCA3A3 7F9F7F F0DFAF CC9393 8CD0D3 DCA3A3 3F3F3F))
-      MONO             = new("mono", "Mono (TTY-safe)", CryTUI::Color::RESET, CryTUI::Color::WHITE, CryTUI::Color.indexed(8), CryTUI::Color::WHITE, CryTUI::Color.indexed(8), CryTUI::Color.indexed(8), CryTUI::Color::WHITE, CryTUI::Color::GREEN, CryTUI::Color::YELLOW, CryTUI::Color::RED, CryTUI::Color::CYAN, CryTUI::Color::WHITE, CryTUI::Color::BLACK)
+      MONO             = new("mono", "Mono (TTY-safe)", CryTUI::Color::RESET, CryTUI::Color::WHITE, CryTUI::Color::GRAY, CryTUI::Color::WHITE, CryTUI::Color::DARK_GRAY, CryTUI::Color::DARK_GRAY, CryTUI::Color::WHITE, CryTUI::Color::GREEN, CryTUI::Color::YELLOW, CryTUI::Color::RED, CryTUI::Color::CYAN, CryTUI::Color::WHITE, CryTUI::Color::BLACK)
 
       ALL = [CLAUDE, CODEX, BTOP, NORD, DRACULA, GRUVBOX, SOLARIZED_DARK, MONOKAI, ONE_DARK, TOKYO_NIGHT, CATPPUCCIN_MOCHA, ROSE_PINE, KANAGAWA_WAVE, EVERFOREST_DARK, AYU_MIRAGE, GITHUB_DARK, SOLARIZED_LIGHT, CATPPUCCIN_LATTE, GITHUB_LIGHT, ROSE_PINE_DAWN, NIGHT_OWL, MATERIAL_OCEAN, HORIZON, ICEBERG, MOONFLY, SYNTHWAVE_84, MATRIX, ZENBURN, MONO]
 
@@ -99,7 +99,7 @@ module Obsctl
       end
 
       private def self.palette(id : String, label : String, colors : Array(String)) : Theme
-        parsed = colors.map { |color| parse_hex(color).not_nil! }
+        parsed = colors.map { |color| parse_hex(color) || raise "invalid built-in theme color: #{color}" }
         new(
           id, label,
           parsed[0], parsed[1], parsed[2], parsed[3], parsed[4], parsed[5], parsed[6],

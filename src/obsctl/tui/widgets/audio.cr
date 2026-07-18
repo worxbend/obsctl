@@ -31,7 +31,7 @@ module Obsctl
             end
             CryTUI::Widgets::ListItem.new(lines)
           end
-          block = Chrome.panel(model.symbol("🎚", "A"), "Audio Matrix", model.symbol("[a]  m mute  ←/→ gain", "[a] m mute </> gain"), items.size, focused, model)
+          block = Chrome.panel(model.symbol("🎚", "A"), "Audio Matrix", model.symbol("[a]  m mute  ←/→ gain", "[a]  m mute  </> gain"), items.size, focused, model)
           highlight = focused ? CryTUI::Style.new(foreground: theme.highlight_foreground, background: theme.highlight_background, modifiers: CryTUI::Modifier::Bold) : CryTUI::Style.new(modifiers: CryTUI::Modifier::Dim)
           state = CryTUI::Widgets::ListState.new(selected: items.empty? ? nil : model.audio_cursor)
           CryTUI::Widgets::List.new(items, highlight_style: highlight, block: block).render(area, buffer, state)

@@ -47,7 +47,7 @@ module Obsctl
         when .dump_config?
           command(IPC::CommandPayload.new("dump_config"))
         when .retry_connect?
-          ActionOutcome.new(retry_subscription: true)
+          ActionOutcome.new(retry_subscription: true, message: "Reconnected to daemon.")
         when .focus_scenes?
           @model.focus = FocusPanel::Scenes; ActionOutcome.new
         when .focus_audio?
@@ -129,7 +129,7 @@ module Obsctl
 
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
         case command
-        when Domain::StatusCommand         then IPC::CommandPayload.new("status")
+        when Domain::StatusCommand         then IPC::CommandPayload.new("get_snapshot")
         when Domain::ObsStatusCommand      then IPC::CommandPayload.new("get_obs_status")
         when Domain::ServerStatusCommand   then IPC::CommandPayload.new("get_server_status")
         when Domain::ValidateConfigCommand then IPC::CommandPayload.new("validate_config")
