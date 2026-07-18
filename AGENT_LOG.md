@@ -3203,3 +3203,17 @@ M  AGENT_LOG.md
   an input while the configured audio list is completely empty.
 - Validation: format, debug/release builds, the focused 37-example command/
   dispatcher suite, and the complete 406-example suite pass.
+
+## 2026-07-19 — Coalesce rapid TUI volume changes
+
+- Identified the lag as synchronous per-key IPC plus a full multi-request OBS
+  snapshot refresh after every `SetInputVolume`.
+- Added immediate optimistic percentage/multiplier updates and a per-device
+  120ms trailing-edge debounce, keeping keyboard rendering responsive while
+  sending only the final value in a burst.
+- Replaced the daemon's full post-volume snapshot with a targeted authoritative
+  audio-state update and publication after OBS accepts the command.
+- Validation: the focused 42-example model/dispatcher/executor suite passes;
+  focused Ameba reports only the touched files' existing complexity, naming,
+  and `not_nil!` backlog outside the new methods.
+- Debug/release builds and the complete 408-example suite pass.

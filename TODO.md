@@ -22,6 +22,8 @@ Critical rule:
   stderr as well as the persistent state log.
 - Live OBS scene and audio resources remain actionable before they are written
   into config; profile and collection lists use their real OBS wire shapes.
+- Rapid TUI volume changes render optimistically and coalesce into one trailing
+  OBS request, followed by a targeted daemon state publication.
 
 ### TUI / CryTUI Progress
 

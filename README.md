@@ -108,6 +108,10 @@ does not synthesize the missing field.
 
 The TUI is also a local IPC client in normal mode. It subscribes to server state, OBS event, and log updates, and sends palette commands through the server using the same grammar with a leading slash, for example `/scene main`, `/mute mic`, `/vol mic 70`, `/validate-config`, and `/reconnect`. The current ANSI dashboard is split into connection, scenes, scene map, audio, recent logs, and command palette panels. It discovers the live terminal size on every frame, clears stale physical cells when the window shrinks or expands, and reflows all panels to the new geometry. After each full resize repaint, the renderer resumes updating only changed cells. In a terminal, `/` or `:` opens the command palette, `Esc` cancels editing, `Enter` submits, `q` quits from the dashboard, `r` reloads config, and `D` dumps config through the server.
 
+Focused audio volume keys update the displayed percentage immediately. Rapid
+repeated changes are coalesced per input, and the final level is sent to OBS
+120ms after the last keypress instead of blocking on one request per key.
+
 `dump-config` is performed by the local server, which owns the OBS connection, reads scenes and audio inputs, and writes a generated config. Existing config files are backed up before dump writes. The dump keeps top-level daemon settings such as `server` and `reconnect`, and it refuses to write if aliases or shortcuts would become ambiguous with discovered OBS names.
 
 Config files reject unknown top-level fields so future settings are not silently lost during rewrites.

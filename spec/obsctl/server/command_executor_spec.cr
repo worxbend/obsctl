@@ -330,6 +330,7 @@ describe Obsctl::Server::CommandExecutor do
       obs.next_identify(2.seconds).should_not be_nil
       wait_for_command_executor_supervisor { state.snapshot.connected }
       executor = default_executor(config, supervisor: supervisor, state: state)
+      requests_before = obs.request_count
 
       response = executor.execute(
         command_request(Obsctl::IPC::CommandPayload.new("set_volume", "Desktop Audio", 35))
@@ -337,6 +338,7 @@ describe Obsctl::Server::CommandExecutor do
 
       response.ok.should be_true
       response.result.not_nil!["message"].as_s.should eq("volume set: Desktop Audio 35%")
+      obs.request_count.should eq(requests_before + 1)
       obs.input("Desktop Audio").not_nil!.volume_mul.should eq(0.35)
       state.snapshot.audio_inputs.find(&.name.==("Desktop Audio")).not_nil!.volume_percent.should eq(35)
     ensure

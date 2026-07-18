@@ -215,6 +215,23 @@ module Obsctl
         end
       end
 
+      # Applies an optimistic volume value so rapid keyboard changes render
+      # immediately while the debounced OBS command is still pending.
+      def preview_audio_volume(input_name : String, percent : Int32) : Nil
+        snapshot = @snapshot
+        return unless snapshot
+
+        bounded = percent.clamp(0, 100)
+        inputs = snapshot.audio_inputs.map do |input|
+          next input unless input.name == input_name
+          input.copy_with(
+            volume_mul: bounded.to_f64 / 100.0,
+            volume_percent: bounded
+          )
+        end
+        @snapshot = snapshot.copy_with(audio_inputs: inputs)
+      end
+
       def push_log(entry : LogEntry)
         @logs << entry
         @logs.shift(@logs.size - MAX_LOG_ENTRIES) if @logs.size > MAX_LOG_ENTRIES
