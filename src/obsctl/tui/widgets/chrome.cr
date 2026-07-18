@@ -1,0 +1,26 @@
+require "../../../crytui"
+require "../model"
+
+module Obsctl
+  module TUI
+    module Widgets
+      module Chrome
+        extend self
+
+        def panel(icon : String, label : String, hint : String, count : Int32, focused : Bool, model : Model) : CryTUI::Widgets::Block
+          title = "#{icon}  #{label}  #{count.to_s.rjust(2, '0')}"
+          title += "  #{hint}" unless hint.empty?
+          CryTUI::Widgets::Block.new(
+            title: title,
+            border_style: CryTUI::Style.new(foreground: focused ? model.theme.border_focus : model.theme.border),
+            border_set: model.advanced_ui ? (focused ? CryTUI::Widgets::BorderSet::THICK : CryTUI::Widgets::BorderSet::ROUNDED) : CryTUI::Widgets::BorderSet::ASCII
+          )
+        end
+
+        def status_dot(active : Bool, fancy : Bool) : String
+          active ? (fancy ? "●" : "*") : (fancy ? "○" : "-")
+        end
+      end
+    end
+  end
+end

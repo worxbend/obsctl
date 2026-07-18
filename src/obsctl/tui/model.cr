@@ -1,5 +1,6 @@
 require "../obs/state/obs_snapshot"
 require "../runtime/logger"
+require "./theme"
 
 module Obsctl
   module TUI
@@ -96,8 +97,11 @@ module Obsctl
       property anim : AnimClock
       property scene_flash : Tuple(String, UInt64)?
       property view : View
+      property theme : Theme
+      property show_icons : Bool
+      property advanced_ui : Bool
 
-      def initialize
+      def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true)
         @snapshot = nil
         @logs = [] of LogEntry
         @command_palette = CommandPaletteState.new
@@ -117,6 +121,14 @@ module Obsctl
         @anim = AnimClock.new
         @scene_flash = nil
         @view = View::Main
+      end
+
+      def rich_ui? : Bool
+        @show_icons && @advanced_ui
+      end
+
+      def symbol(rich : String, fallback : String) : String
+        rich_ui? ? rich : fallback
       end
 
       def scenes : Array(OBS::State::SceneState)
