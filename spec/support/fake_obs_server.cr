@@ -48,6 +48,10 @@ module Obsctl
         @request_timeout_ms : Int32 = 500,
         @streaming : Bool = false,
         @recording : Bool = false,
+        @profiles : Array(String) = ["Default", "Streaming"],
+        @current_profile : String = "Default",
+        @scene_collections : Array(String) = ["Podcast", "Gaming"],
+        @current_scene_collection : String = "Podcast",
       )
         @host = "127.0.0.1"
         @server = HTTP::Server.new([websocket_handler])
@@ -112,6 +116,14 @@ module Obsctl
 
       def recording? : Bool
         @mutex.synchronize { @recording }
+      end
+
+      def current_profile : String
+        @mutex.synchronize { @current_profile }
+      end
+
+      def current_scene_collection : String
+        @mutex.synchronize { @current_scene_collection }
       end
 
       def identify_data : JSON::Any?
@@ -548,15 +560,53 @@ module Obsctl
               comment = "input not found"
             end
           when "GetStreamStatus"
-            response_data = JSON.parse({"outputActive" => @streaming}.to_json)
+            response_data = JSON.parse({"outputActive" => @streaming, "outputDuration" => (@streaming ? 12_000 : 0)}.to_json)
           when "GetRecordStatus"
-            response_data = JSON.parse({"outputActive" => @recording}.to_json)
+            response_data = JSON.parse({"outputActive" => @recording, "outputDuration" => (@recording ? 3_000 : 0)}.to_json)
           when "ToggleStream"
             @streaming = !@streaming
             response_data = JSON.parse({"outputActive" => @streaming}.to_json)
           when "ToggleRecord"
             @recording = !@recording
             response_data = JSON.parse({"outputActive" => @recording}.to_json)
+          when "GetProfileList"
+            response_data = JSON.parse({
+              "currentProfileName" => @current_profile,
+              "profiles"           => @profiles.map { |name| {"profileName" => name} },
+            }.to_json)
+          when "SetCurrentProfile"
+            name = data.try(&.["profileName"]?.try(&.as_s?)) || ""
+            if @profiles.includes?(name)
+              @current_profile = name
+            else
+              result = false
+              comment = "profile not found"
+            end
+          when "GetSceneCollectionList"
+            response_data = JSON.parse({
+              "currentSceneCollectionName" => @current_scene_collection,
+              "sceneCollections"           => @scene_collections,
+            }.to_json)
+          when "SetCurrentSceneCollection"
+            name = data.try(&.["sceneCollectionName"]?.try(&.as_s?)) || ""
+            if @scene_collections.includes?(name)
+              @current_scene_collection = name
+            else
+              result = false
+              comment = "scene collection not found"
+            end
+          when "GetStats"
+            response_data = JSON.parse({
+              "cpuUsage"               => 12.5,
+              "memoryUsage"            => 512.0,
+              "availableDiskSpace"     => 100_000.0,
+              "activeFps"              => 59.94,
+              "averageFrameRenderTime" => 3.2,
+              "renderSkippedFrames"    => 4,
+              "renderTotalFrames"      => 10_000,
+              "outputSkippedFrames"    => 1,
+              "outputTotalFrames"      => 9_999,
+            }.to_json)
           else
             result = false
             comment = "unsupported request: #{request_type}"

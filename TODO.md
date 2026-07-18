@@ -37,7 +37,8 @@ Critical rule:
   alternate-screen cleanup, and incremental key/paste parsing.
 - [x] Port the first Rust TUI model and IPC event-applier slice: panel focus,
   cursors, palette completion state, rolling logs, result reveal, snapshots,
-  profiles/collections compatibility fields, scene flashes, and meters.
+  authoritative profiles/collections, CPU/FPS statistics, output durations,
+  rolling metric histories, scene flashes, and meters.
 - [x] Port completion generation and map CryTUI key events to typed TUI actions,
   including modal precedence and Ctrl-navigation behavior.
 - [x] Add styled text/list primitives to CryTUI and port the first header,
@@ -52,6 +53,9 @@ Critical rule:
   live bar, scenes/audio, profiles/collections, logs, and command palette areas.
 - [x] Wire `/stream` and `/rec` from parser through thin IPC clients to
   server-owned OBS output requests, snapshots, events, and the live bar.
+- [x] Wire profile and scene-collection switching through CLI/TUI IPC commands,
+  server-owned OBS requests, refreshed snapshots, and OBS change events.
+- [ ] Poll OBS output byte counters and publish derived stream bitrate.
 - [x] Add the persistent state/events/logs subscription, correlated short-lived
   command client, typed dispatcher, raw input/render loop, retry handling, and
   `obsctl` / `obsctl tui` CLI entrypoints.
@@ -116,6 +120,9 @@ CLI client mode:
   returns `OBS_UNAVAILABLE` instead of claiming that a reconnect was requested.
 - `obsctl shutdown-server`: asks the server to stop; disabled unless `server.allow_remote_shutdown` is true.
 - `obsctl scene <alias|shortcut|obs-name>`: sends scene-change request to server.
+- `obsctl profile <name>`: switches the active OBS profile through the server.
+- `obsctl collection <name>`: switches the active OBS scene collection through
+  the server.
 - `obsctl mute <audio-target>`: sends mute request to server.
 - `obsctl unmute <audio-target>`: sends unmute request to server.
 - `obsctl toggle-mute <audio-target>`: sends toggle mute request to server.

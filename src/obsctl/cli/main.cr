@@ -162,6 +162,7 @@ module Obsctl
         case command
         when "status", "obs-status", "server-status", "reconnect", "shutdown-server",
              "scene", "mute", "unmute", "toggle-mute", "vol", "volume",
+             "profile", "collection", "scene-collection",
              "stream", "rec", "record",
              "dump-config", "reload-config", "validate-config"
           true
@@ -179,6 +180,10 @@ module Obsctl
         case command
         when "scene"
           "/scene #{quote_arg(args[0]?)}"
+        when "profile"
+          "/profile #{quote_arg(args[0]?)}"
+        when "collection", "scene-collection"
+          "/collection #{quote_arg(args[0]?)}"
         when "mute"
           "/mute #{quote_arg(args[0]?)}"
         when "unmute"

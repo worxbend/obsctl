@@ -31,6 +31,29 @@ describe Obsctl::OBS::Client do
       snapshot.audio_inputs[1].muted.should be_true
       snapshot.output.streaming.should be_false
       snapshot.output.recording.should be_false
+      snapshot.profiles.should eq(["Default", "Streaming"])
+      snapshot.current_profile.should eq("Default")
+      snapshot.scene_collections.should eq(["Podcast", "Gaming"])
+      snapshot.current_scene_collection.should eq("Podcast")
+      snapshot.stats.try(&.cpu_usage_percent).should eq(12.5)
+      snapshot.stats.try(&.active_fps).should eq(59.94)
+    ensure
+      client.try(&.close)
+      server.stop
+    end
+  end
+
+  it "queries and switches profiles and scene collections" do
+    server = Obsctl::SpecSupport::FakeObsServer.new.start
+    client = Obsctl::OBS::Client.new(server.config)
+    begin
+      client.connect
+      client.profiles.should eq({current: "Default", names: ["Default", "Streaming"]})
+      client.scene_collections.should eq({current: "Podcast", names: ["Podcast", "Gaming"]})
+      client.set_profile("Streaming")
+      client.set_scene_collection("Gaming")
+      server.current_profile.should eq("Streaming")
+      server.current_scene_collection.should eq("Gaming")
     ensure
       client.try(&.close)
       server.stop

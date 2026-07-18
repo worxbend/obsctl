@@ -146,6 +146,13 @@ the real Crystal entrypoint against a fake Unix-socket daemon, verifies the
 three-topic subscription, supplies `q`, observes the subscription close, and
 asserts alternate-screen/cursor restoration sequences.
 
+The daemon snapshot now carries the Rust model's studio and telemetry state:
+profile names/current profile, scene collections/current collection, OBS
+CPU/memory/disk/FPS/frame statistics, and active stream/record durations.
+Profile and collection selection are real server-owned OBS commands rather
+than client-only compatibility fields. The remaining telemetry gap is the
+Rust supervisor's periodic `outputBytes` delta calculation for bitrate.
+
 ## Delivery Sequence
 
 1. Harden core geometry, Unicode display width, layout allocation, styled text,

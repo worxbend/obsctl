@@ -129,21 +129,23 @@ module Obsctl
 
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
         case command
-        when Domain::StatusCommand         then IPC::CommandPayload.new("status")
-        when Domain::ObsStatusCommand      then IPC::CommandPayload.new("get_obs_status")
-        when Domain::ServerStatusCommand   then IPC::CommandPayload.new("get_server_status")
-        when Domain::ValidateConfigCommand then IPC::CommandPayload.new("validate_config")
-        when Domain::ReconnectCommand      then IPC::CommandPayload.new("reconnect_obs")
-        when Domain::DumpConfigCommand     then IPC::CommandPayload.new("dump_config")
-        when Domain::ReloadConfigCommand   then IPC::CommandPayload.new("reload_config")
-        when Domain::SetSceneCommand       then IPC::CommandPayload.new("set_scene", command.target)
-        when Domain::MuteCommand           then IPC::CommandPayload.new("mute", command.target)
-        when Domain::UnmuteCommand         then IPC::CommandPayload.new("unmute", command.target)
-        when Domain::ToggleMuteCommand     then IPC::CommandPayload.new("toggle_mute", command.target)
-        when Domain::VolumeCommand         then IPC::CommandPayload.new("set_volume", command.target, command.percent)
-        when Domain::ToggleStreamCommand   then IPC::CommandPayload.new("toggle_stream")
-        when Domain::ToggleRecordCommand   then IPC::CommandPayload.new("toggle_record")
-        else                                    raise Domain::CommandParseError.new("unsupported TUI command")
+        when Domain::StatusCommand             then IPC::CommandPayload.new("status")
+        when Domain::ObsStatusCommand          then IPC::CommandPayload.new("get_obs_status")
+        when Domain::ServerStatusCommand       then IPC::CommandPayload.new("get_server_status")
+        when Domain::ValidateConfigCommand     then IPC::CommandPayload.new("validate_config")
+        when Domain::ReconnectCommand          then IPC::CommandPayload.new("reconnect_obs")
+        when Domain::DumpConfigCommand         then IPC::CommandPayload.new("dump_config")
+        when Domain::ReloadConfigCommand       then IPC::CommandPayload.new("reload_config")
+        when Domain::SetSceneCommand           then IPC::CommandPayload.new("set_scene", command.target)
+        when Domain::SetProfileCommand         then IPC::CommandPayload.new("set_profile", command.target)
+        when Domain::SetSceneCollectionCommand then IPC::CommandPayload.new("set_scene_collection", command.target)
+        when Domain::MuteCommand               then IPC::CommandPayload.new("mute", command.target)
+        when Domain::UnmuteCommand             then IPC::CommandPayload.new("unmute", command.target)
+        when Domain::ToggleMuteCommand         then IPC::CommandPayload.new("toggle_mute", command.target)
+        when Domain::VolumeCommand             then IPC::CommandPayload.new("set_volume", command.target, command.percent)
+        when Domain::ToggleStreamCommand       then IPC::CommandPayload.new("toggle_stream")
+        when Domain::ToggleRecordCommand       then IPC::CommandPayload.new("toggle_record")
+        else                                        raise Domain::CommandParseError.new("unsupported TUI command")
         end
       end
 
