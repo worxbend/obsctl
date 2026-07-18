@@ -7,7 +7,8 @@ module Obsctl
         alias : String? = nil,
         shortcut : String? = nil,
         group : String? = nil,
-        active : Bool = false
+        active : Bool = false,
+        hidden : Bool = false
     end
   end
 end

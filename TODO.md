@@ -55,7 +55,10 @@ Critical rule:
   server-owned OBS output requests, snapshots, events, and the live bar.
 - [x] Wire profile and scene-collection switching through CLI/TUI IPC commands,
   server-owned OBS requests, refreshed snapshots, and OBS change events.
-- [ ] Poll OBS output byte counters and publish derived stream bitrate.
+- [x] Poll OBS statistics/output counters on the daemon, derive stream bitrate
+  from consecutive active `outputBytes` samples, and publish rolling metrics.
+- [x] Preserve Rust-compatible scene `hidden` configuration through config
+  dumps and snapshots, and exclude hidden scenes from TUI navigation.
 - [x] Add the persistent state/events/logs subscription, correlated short-lived
   command client, typed dispatcher, raw input/render loop, retry handling, and
   `obsctl` / `obsctl tui` CLI entrypoints.

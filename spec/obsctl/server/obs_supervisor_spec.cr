@@ -85,6 +85,35 @@ private class FailedAttemptBeforeDelayStateStore < Obsctl::Server::StateStore
 end
 
 describe Obsctl::Server::ObsSupervisor do
+  it "periodically publishes statistics, durations, and derived stream bitrate" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new(
+      streaming: true,
+      recording: true,
+      stream_bytes_per_status: 100_000_i64
+    ).start
+    updates = [] of JSON::Any
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state, stats_poll_interval: 20.milliseconds)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor do
+      snapshot = state.snapshot
+      snapshot.connected && !snapshot.stream_bitrate_kbps.nil?
+    end
+
+    snapshot = state.snapshot
+    snapshot.stats.try(&.cpu_usage_percent).should eq(12.5)
+    snapshot.stream_bitrate_kbps.not_nil!.should be > 0.0
+    snapshot.stream_duration_ms.should eq(12_000_i64)
+    snapshot.record_duration_ms.should eq(3_000_i64)
+    updates.any? { |payload| !payload["stream_bitrate_kbps"]?.try(&.raw.nil?) }.should be_true
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
   it "reports alive while the supervisor loop is running" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     state = Obsctl::Server::StateStore.new

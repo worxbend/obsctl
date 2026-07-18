@@ -1,6 +1,19 @@
 require "../../spec_helper"
 
 describe Obsctl::Config::ConfigSchema do
+  it "round-trips hidden scene visibility metadata" do
+    config = Obsctl::Config::Config.from_yaml(<<-YAML)
+      version: 1
+      scenes:
+        - name: Utility
+          hidden: true
+      YAML
+
+    config.scenes.first.hidden.should be_true
+    reparsed = Obsctl::Config::Config.from_yaml(config.to_yaml)
+    reparsed.scenes.first.hidden.should be_true
+  end
+
   it "rejects duplicate scene aliases" do
     config = Obsctl::Config::Config.new(
       connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),

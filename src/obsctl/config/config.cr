@@ -35,7 +35,8 @@ module Obsctl
       alias : String? = nil,
       shortcut : String? = nil,
       group : String? = nil,
-      stale : Bool = false
+      stale : Bool = false,
+      hidden : Bool = false
 
     # User configuration for one OBS audio input and its local aliases.
     record AudioInputConfig,
@@ -182,6 +183,9 @@ module Obsctl
                   if scene.stale
                     yaml.scalar "stale"; yaml.scalar true
                   end
+                  if scene.hidden
+                    yaml.scalar "hidden"; yaml.scalar true
+                  end
                 end
               end
             end
@@ -311,7 +315,8 @@ module Obsctl
             alias: string_or_nil(hash, "alias"),
             shortcut: string_or_nil(hash, "shortcut"),
             group: string_or_nil(hash, "group"),
-            stale: bool(hash, "stale", false)
+            stale: bool(hash, "stale", false),
+            hidden: bool(hash, "hidden", false)
           )
         end
       end
