@@ -12,6 +12,7 @@ require "./requests/version"
 require "./requests/scenes"
 require "./requests/audio"
 require "./requests/outputs"
+require "./requests/studio"
 require "./state/obs_snapshot"
 require "../config/config"
 require "../domain/errors"
@@ -181,12 +182,7 @@ module Obsctl
       end
 
       def output_state : State::OutputState
-        stream = request(Requests::Outputs::GET_STREAM_STATUS).response_data || JSON.parse("{}")
-        record = request(Requests::Outputs::GET_RECORD_STATUS).response_data || JSON.parse("{}")
-        State::OutputState.new(
-          streaming: stream["outputActive"]?.try(&.as_bool?),
-          recording: record["outputActive"]?.try(&.as_bool?)
-        )
+        output_details[:state]
       end
 
       def toggle_stream : Bool?
@@ -197,6 +193,31 @@ module Obsctl
       def toggle_record : Bool?
         data = request(Requests::Outputs::TOGGLE_RECORD).response_data || JSON.parse("{}")
         data["outputActive"]?.try(&.as_bool?)
+      end
+
+      def profiles : NamedTuple(current: String?, names: Array(String))
+        data = request(Requests::Studio::GET_PROFILE_LIST).response_data || JSON.parse("{}")
+        names = data["profiles"]?.try(&.as_a?).try(&.compact_map { |profile| profile["profileName"]?.try(&.as_s?) }) || [] of String
+        {current: data["currentProfileName"]?.try(&.as_s?), names: names}
+      end
+
+      def set_profile(name : String) : Nil
+        request(Requests::Studio::SET_CURRENT_PROFILE, Requests::Studio.profile(name))
+      end
+
+      def scene_collections : NamedTuple(current: String?, names: Array(String))
+        data = request(Requests::Studio::GET_SCENE_COLLECTION_LIST).response_data || JSON.parse("{}")
+        names = data["sceneCollections"]?.try(&.as_a?).try(&.compact_map(&.as_s?)) || [] of String
+        {current: data["currentSceneCollectionName"]?.try(&.as_s?), names: names}
+      end
+
+      def set_scene_collection(name : String) : Nil
+        request(Requests::Studio::SET_SCENE_COLLECTION, Requests::Studio.scene_collection(name))
+      end
+
+      def stats : State::ObsStats
+        data = request(Requests::Studio::GET_STATS).response_data || JSON.parse("{}")
+        State::ObsStats.from_response(data)
       end
 
       # Fetches only the scene list and current scene for targeted state updates.
@@ -261,6 +282,9 @@ module Obsctl
             volume_percent: volume[:percent]
           )
         end
+        profile_data = profiles
+        collection_data = scene_collections
+        output = output_details
         State::ObsSnapshot.new(
           connected: true,
           obs_studio_version: version_data["obsVersion"]?.try(&.as_s),
@@ -268,8 +292,28 @@ module Obsctl
           current_scene: current,
           scenes: scenes,
           audio_inputs: audio,
-          output: output_state
+          output: output[:state],
+          profiles: profile_data[:names],
+          current_profile: profile_data[:current],
+          scene_collections: collection_data[:names],
+          current_scene_collection: collection_data[:current],
+          stats: stats,
+          stream_duration_ms: output[:stream_duration_ms],
+          record_duration_ms: output[:record_duration_ms]
         )
+      end
+
+      private def output_details
+        stream = request(Requests::Outputs::GET_STREAM_STATUS).response_data || JSON.parse("{}")
+        record = request(Requests::Outputs::GET_RECORD_STATUS).response_data || JSON.parse("{}")
+        {
+          state: State::OutputState.new(
+            streaming: stream["outputActive"]?.try(&.as_bool?),
+            recording: record["outputActive"]?.try(&.as_bool?)
+          ),
+          stream_duration_ms: stream["outputActive"]?.try(&.as_bool?) == true ? stream["outputDuration"]?.try(&.as_i64?) : nil,
+          record_duration_ms: record["outputActive"]?.try(&.as_bool?) == true ? record["outputDuration"]?.try(&.as_i64?) : nil,
+        }
       end
 
       private def identify(hello_frame : String) : Nil

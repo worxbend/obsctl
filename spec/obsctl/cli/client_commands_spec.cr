@@ -27,6 +27,17 @@ describe Obsctl::CLI::ClientCommands do
     record.request_payload.not_nil!.command.not_nil!.name.should eq("toggle_record")
   end
 
+  it "routes profile and collection selections with targets" do
+    response = Obsctl::IPC::Response.new("req-000001", true, JSON.parse(%({"message":"ok"})))
+    profile = FakeClientCommandsUnixClient.new(response)
+    Obsctl::CLI::ClientCommands.new(profile).request(Obsctl::Domain::SetProfileCommand.new("Streaming"))
+    profile.request_payload.not_nil!.command.not_nil!.should eq(Obsctl::IPC::CommandPayload.new("set_profile", "Streaming"))
+
+    collection = FakeClientCommandsUnixClient.new(response)
+    Obsctl::CLI::ClientCommands.new(collection).request(Obsctl::Domain::SetSceneCollectionCommand.new("Gaming"))
+    collection.request_payload.not_nil!.command.not_nil!.should eq(Obsctl::IPC::CommandPayload.new("set_scene_collection", "Gaming"))
+  end
+
   it "sends distinct IPC commands for combined, OBS-only, and daemon-only status" do
     response = Obsctl::IPC::Response.new("req-000001", true, JSON.parse(%({"message":"ok"})))
 

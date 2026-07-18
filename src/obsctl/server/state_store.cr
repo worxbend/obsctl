@@ -55,16 +55,7 @@ module Obsctl
               group: scene.group, active: scene.name == scene_name
             )
           end
-          next_snap = OBS::State::ObsSnapshot.new(
-            connected: current.connected,
-            obs_studio_version: current.obs_studio_version,
-            obs_websocket_version: current.obs_websocket_version,
-            current_scene: scene_name,
-            scenes: scenes,
-            audio_inputs: current.audio_inputs,
-            output: current.output,
-            last_error: current.last_error
-          )
+          next_snap = current.copy_with(current_scene: scene_name, scenes: scenes, updated_at: Time.utc)
           @snapshot = next_snap
           next_snap
         end
@@ -85,16 +76,7 @@ module Obsctl
               volume_db: inp.volume_db, volume_percent: inp.volume_percent
             )
           end
-          next_snap = OBS::State::ObsSnapshot.new(
-            connected: current.connected,
-            obs_studio_version: current.obs_studio_version,
-            obs_websocket_version: current.obs_websocket_version,
-            current_scene: current.current_scene,
-            scenes: current.scenes,
-            audio_inputs: inputs,
-            output: current.output,
-            last_error: current.last_error
-          )
+          next_snap = current.copy_with(audio_inputs: inputs, updated_at: Time.utc)
           @snapshot = next_snap
           next_snap
         end
@@ -116,16 +98,7 @@ module Obsctl
               volume_db: volume_db, volume_percent: percent
             )
           end
-          next_snap = OBS::State::ObsSnapshot.new(
-            connected: current.connected,
-            obs_studio_version: current.obs_studio_version,
-            obs_websocket_version: current.obs_websocket_version,
-            current_scene: current.current_scene,
-            scenes: current.scenes,
-            audio_inputs: inputs,
-            output: current.output,
-            last_error: current.last_error
-          )
+          next_snap = current.copy_with(audio_inputs: inputs, updated_at: Time.utc)
           @snapshot = next_snap
           next_snap
         end
@@ -138,16 +111,7 @@ module Obsctl
           current = @snapshot
           return unless current.connected
 
-          next_snap = OBS::State::ObsSnapshot.new(
-            connected: current.connected,
-            obs_studio_version: current.obs_studio_version,
-            obs_websocket_version: current.obs_websocket_version,
-            current_scene: current_scene,
-            scenes: scenes,
-            audio_inputs: current.audio_inputs,
-            output: current.output,
-            last_error: current.last_error
-          )
+          next_snap = current.copy_with(current_scene: current_scene, scenes: scenes, updated_at: Time.utc)
           @snapshot = next_snap
           next_snap
         end
@@ -160,16 +124,7 @@ module Obsctl
           current = @snapshot
           return unless current.connected
 
-          next_snap = OBS::State::ObsSnapshot.new(
-            connected: current.connected,
-            obs_studio_version: current.obs_studio_version,
-            obs_websocket_version: current.obs_websocket_version,
-            current_scene: current.current_scene,
-            scenes: current.scenes,
-            audio_inputs: audio_inputs,
-            output: current.output,
-            last_error: current.last_error
-          )
+          next_snap = current.copy_with(audio_inputs: audio_inputs, updated_at: Time.utc)
           @snapshot = next_snap
           next_snap
         end
@@ -180,18 +135,12 @@ module Obsctl
         next_snapshot = @lock.synchronize do
           current = @snapshot
           return unless current.connected
-          next_snap = OBS::State::ObsSnapshot.new(
-            connected: current.connected,
-            obs_studio_version: current.obs_studio_version,
-            obs_websocket_version: current.obs_websocket_version,
-            current_scene: current.current_scene,
-            scenes: current.scenes,
-            audio_inputs: current.audio_inputs,
+          next_snap = current.copy_with(
             output: OBS::State::OutputState.new(
               streaming: streaming.nil? ? current.output.streaming : streaming,
               recording: recording.nil? ? current.output.recording : recording
             ),
-            last_error: current.last_error
+            updated_at: Time.utc
           )
           @snapshot = next_snap
           next_snap
@@ -269,17 +218,7 @@ module Obsctl
         next_snapshot = nil
         @lock.synchronize do
           current = @snapshot
-          next_snapshot = OBS::State::ObsSnapshot.new(
-            connected: false,
-            obs_studio_version: current.obs_studio_version,
-            obs_websocket_version: current.obs_websocket_version,
-            current_scene: current.current_scene,
-            scenes: current.scenes,
-            audio_inputs: current.audio_inputs,
-            output: current.output,
-            last_error: error,
-            updated_at: at
-          )
+          next_snapshot = current.copy_with(connected: false, last_error: error, updated_at: at)
           was_connected = current.connected
           @telemetry = ServerTelemetry.new(
             reconnecting: reconnecting,
@@ -329,9 +268,32 @@ module Obsctl
             streaming: snapshot.output.streaming,
             recording: snapshot.output.recording,
           },
-          last_error: snapshot.last_error,
-          updated_at: snapshot.updated_at.to_rfc3339,
+          profiles:                 snapshot.profiles,
+          current_profile:          snapshot.current_profile,
+          scene_collections:        snapshot.scene_collections,
+          current_scene_collection: snapshot.current_scene_collection,
+          stats:                    stats_json(snapshot.stats),
+          stream_bitrate_kbps:      snapshot.stream_bitrate_kbps,
+          stream_duration_ms:       snapshot.stream_duration_ms,
+          record_duration_ms:       snapshot.record_duration_ms,
+          last_error:               snapshot.last_error,
+          updated_at:               snapshot.updated_at.to_rfc3339,
         }.to_json)
+      end
+
+      private def self.stats_json(stats : OBS::State::ObsStats?)
+        return nil unless stats
+        {
+          cpu_usage_percent:            stats.cpu_usage_percent,
+          memory_usage_mb:              stats.memory_usage_mb,
+          available_disk_space_mb:      stats.available_disk_space_mb,
+          active_fps:                   stats.active_fps,
+          average_frame_render_time_ms: stats.average_frame_render_time_ms,
+          render_skipped_frames:        stats.render_skipped_frames,
+          render_total_frames:          stats.render_total_frames,
+          output_skipped_frames:        stats.output_skipped_frames,
+          output_total_frames:          stats.output_total_frames,
+        }
       end
 
       private def snapshot_to_json(snapshot : OBS::State::ObsSnapshot) : JSON::Any

@@ -60,6 +60,20 @@ module Obsctl
       end
     end
 
+    struct SetProfileCommand < Command
+      getter target
+
+      def initialize(@target : String)
+      end
+    end
+
+    struct SetSceneCollectionCommand < Command
+      getter target
+
+      def initialize(@target : String)
+      end
+    end
+
     # Mutes an OBS audio input resolved by alias, shortcut, or OBS name.
     struct MuteCommand < Command
       getter target

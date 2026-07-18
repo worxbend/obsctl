@@ -80,6 +80,10 @@ module Obsctl
           IPC::CommandPayload.new("shutdown_server")
         when Domain::SetSceneCommand
           IPC::CommandPayload.new("set_scene", command.target)
+        when Domain::SetProfileCommand
+          IPC::CommandPayload.new("set_profile", command.target)
+        when Domain::SetSceneCollectionCommand
+          IPC::CommandPayload.new("set_scene_collection", command.target)
         when Domain::MuteCommand
           IPC::CommandPayload.new("mute", command.target)
         when Domain::UnmuteCommand

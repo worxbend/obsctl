@@ -311,6 +311,8 @@ module Obsctl
         when "RecordStateChanged"
           active = data.try(&.["outputActive"]?.try(&.as_bool?))
           @state.update_output(recording: active) unless active.nil?
+        when "CurrentProfileChanged", "ProfileListChanged", "CurrentSceneCollectionChanged", "SceneCollectionListChanged"
+          @state.update(client.snapshot)
         end
       rescue ex : Domain::ObsctlError
         message = public_message(ex.message, "failed to refresh OBS state after event")

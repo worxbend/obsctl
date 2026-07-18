@@ -107,6 +107,8 @@ module Obsctl
       property scene_collections : Array(String)
       property current_scene_collection : String?
       property meter_levels : Hash(String, Float64)
+      property cpu_history : Array(Float64)
+      property bitrate_history : Array(Float64)
       property anim : AnimClock
       property scene_flash : Tuple(String, UInt64)?
       property view : View
@@ -134,6 +136,8 @@ module Obsctl
         @scene_collections = [] of String
         @current_scene_collection = nil
         @meter_levels = {} of String => Float64
+        @cpu_history = [] of Float64
+        @bitrate_history = [] of Float64
         @anim = AnimClock.new
         @scene_flash = nil
         @view = View::Main
@@ -171,6 +175,34 @@ module Obsctl
 
       def recording? : Bool
         @snapshot.try(&.output.recording) || false
+      end
+
+      def stats : OBS::State::ObsStats?
+        @snapshot.try(&.stats)
+      end
+
+      def stream_bitrate_kbps : Float64?
+        @snapshot.try(&.stream_bitrate_kbps)
+      end
+
+      def stream_duration_ms : Int64?
+        @snapshot.try(&.stream_duration_ms)
+      end
+
+      def record_duration_ms : Int64?
+        @snapshot.try(&.record_duration_ms)
+      end
+
+      def record_metric_sample
+        if current_stats = stats
+          @cpu_history << current_stats.cpu_usage_percent
+        end
+        if bitrate = stream_bitrate_kbps
+          @bitrate_history << bitrate
+        end
+        [@cpu_history, @bitrate_history].each do |history|
+          history.shift(history.size - 32) if history.size > 32
+        end
       end
 
       def push_log(entry : LogEntry)

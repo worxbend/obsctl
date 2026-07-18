@@ -32,4 +32,10 @@ describe Obsctl::Domain::CommandParser do
     parser.parse("record").should be_a(Obsctl::Domain::ToggleRecordCommand)
     expect_raises(Obsctl::Domain::CommandParseError) { parser.parse("/stream now") }
   end
+
+  it "parses profile and scene collection targets" do
+    parser.parse(%(/profile "Live Profile")).as(Obsctl::Domain::SetProfileCommand).target.should eq("Live Profile")
+    parser.parse(%(/collection "Gaming Collection")).as(Obsctl::Domain::SetSceneCollectionCommand).target.should eq("Gaming Collection")
+    parser.parse(%(/scene-collection Podcast)).should be_a(Obsctl::Domain::SetSceneCollectionCommand)
+  end
 end

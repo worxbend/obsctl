@@ -14,8 +14,22 @@ private def state_payload(scene = "Main")
     current_profile:          "Default",
     scene_collections:        ["Podcast"],
     current_scene_collection: "Podcast",
-    last_error:               nil,
-    updated_at:               "2026-07-18T12:00:00Z",
+    stats:                    {
+      cpu_usage_percent:            12.5,
+      memory_usage_mb:              512.0,
+      available_disk_space_mb:      4096.0,
+      active_fps:                   60.0,
+      average_frame_render_time_ms: 2.5,
+      render_skipped_frames:        1,
+      render_total_frames:          100,
+      output_skipped_frames:        2,
+      output_total_frames:          200,
+    },
+    stream_bitrate_kbps: 4500.0,
+    stream_duration_ms:  120_000,
+    record_duration_ms:  30_000,
+    last_error:          nil,
+    updated_at:          "2026-07-18T12:00:00Z",
   }.to_json)
 end
 
@@ -29,6 +43,11 @@ describe Obsctl::TUI::EventApplier do
     model.current_scene.should eq("Main")
     model.profiles.should eq(["Default", "Streaming"])
     model.current_scene_collection.should eq("Podcast")
+    model.stats.try(&.active_fps).should eq(60.0)
+    model.stream_duration_ms.should eq(120_000_i64)
+    model.record_duration_ms.should eq(30_000_i64)
+    model.cpu_history.should eq([12.5])
+    model.bitrate_history.should eq([4500.0])
   end
 
   it "starts a flash only when an established scene changes" do
