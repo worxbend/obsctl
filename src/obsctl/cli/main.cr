@@ -82,7 +82,7 @@ module Obsctl
             # The thin TUI needs local appearance/socket settings, but must not
             # require the daemon's OBS password environment to be present.
             config = File.exists?(options.config_path) ? Config::Config.from_yaml(File.read(options.config_path)) : Config::Config.default
-            return TUI::App.from_config(config, socket_path: socket_path, output: stdout).run
+            return TUI::App.from_config(config, socket_path: socket_path, output: stdout, config_path: options.config_path).run
           end
 
           palette_line = cli_to_palette(command, command_args)

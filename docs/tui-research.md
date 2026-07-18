@@ -111,6 +111,15 @@ partial custom RGB palettes whose missing or invalid fields safely inherit the
 Claude defaults. Runtime refresh timing, icon use, advanced rendering, and
 theme selection now come from the typed `ui` configuration.
 
+The secondary Rust surfaces are also ported. The appearance lab uses the same
+45/55 theme-list and semantic-preview composition, Enter persists the chosen
+theme atomically without discarding other UI settings, and startup renders a
+responsive animated splash that can be dismissed by any key before the daemon
+connection begins. Shared pulse, spinner, RGB blend, gradient, Unicode
+sparkline, and ASCII history helpers live outside the widgets for reuse. The
+standalone grouped Scene Map widget is available as in the Rust source, though
+the reference dashboard itself does not currently mount it.
+
 The primary dashboard now renders as a single frame using the same nested area
 contract as the Rust reference: fixed header/live/log/palette chrome, a flexible
 scenes/audio row, and a smaller profiles/collections row. The complete frame
