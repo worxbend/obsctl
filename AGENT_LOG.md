@@ -3075,3 +3075,20 @@ M  AGENT_LOG.md
   contract at 100x40.
 - Corrected CryTUI buffer layering so symbol writes patch pre-painted cell
   styles and wide-cell cleanup preserves the dashboard background.
+
+## 2026-07-18 — Wire the interactive TUI to local IPC
+
+- Added a persistent subscription session with an acknowledged
+  state/events/logs handshake and a correlated short-lived command client.
+- Added the action dispatcher for navigation, palette editing/submission,
+  focused scene/audio actions, bounded volume changes, retry, and theme preview.
+- Added the interactive raw-input/render/tick loop with incremental key parsing,
+  bracketed paste, resize refresh, generation-scoped subscription replacement,
+  server-unavailable rendering, and cleanup.
+- Changed both `obsctl` and `obsctl tui` to launch the TUI; scriptable commands
+  remain thin one-shot IPC clients.
+- Expanded the architecture boundary scan to cover all TUI sources and prevent
+  direct OBS client/connection ownership.
+- Added a real CLI PTY test against a fake local daemon proving topic
+  subscription, interactive `q`, client socket closure, alternate-screen exit,
+  and cursor restoration.

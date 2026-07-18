@@ -8,6 +8,7 @@ private NORMAL_CLIENT_LAYER_GLOBS = [
   "src/obsctl/cli/**/*.cr",
   "src/obsctl/ipc/**/*.cr",
   "src/obsctl/domain/**/*.cr",
+  "src/obsctl/tui/**/*.cr",
   "src/obsctl/support/**/*.cr",
 ]
 private DIRECT_OBS_CLIENT_PATTERNS = [
