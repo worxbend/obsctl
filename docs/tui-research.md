@@ -159,6 +159,14 @@ Scene `hidden` metadata also survives config parsing/dumps and authoritative
 snapshots; hidden utility scenes remain addressable but are omitted from TUI
 navigation just like the Rust model.
 
+The logs panel now ports the Rust semantic highlighter rather than rendering a
+single flat message color. It recognizes configured scene/audio names and
+aliases, profiles, collections, quoted values, palette commands, transition
+arrows, success/warning/error vocabulary, and numeric telemetry while
+preserving exact message text and resource word boundaries. Profile and
+collection widgets/completion also read the snapshot directly, eliminating an
+earlier duplicate model cache that could diverge from daemon state.
+
 ## Delivery Sequence
 
 1. Harden core geometry, Unicode display width, layout allocation, styled text,
