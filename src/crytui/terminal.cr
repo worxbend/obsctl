@@ -2,6 +2,12 @@ module CryTUI
   abstract class Backend
     abstract def size : Rect
     abstract def draw(changes : Array(Tuple(Int32, Int32, Cell))) : Nil
+
+    def enter : Nil
+    end
+
+    def leave : Nil
+    end
   end
 
   class TestBackend < Backend
@@ -40,6 +46,26 @@ module CryTUI
 
     def initialize(@backend : Backend)
       @previous = Buffer.new(@backend.size)
+      @active = false
+    end
+
+    def start : Nil
+      return if @active
+      @backend.enter
+      @active = true
+    end
+
+    def stop : Nil
+      return unless @active
+      @backend.leave
+      @active = false
+    end
+
+    def run(& : Terminal ->) : Nil
+      start
+      yield self
+    ensure
+      stop
     end
 
     def draw(& : Frame ->) : Nil

@@ -2,18 +2,20 @@ module CryTUI
   class Cell
     property symbol : String
     property style : Style
+    property? continuation : Bool
 
-    def initialize(@symbol = " ", @style = Style.new)
+    def initialize(@symbol = " ", @style = Style.new, @continuation = false)
     end
 
     def reset
       @symbol = " "
       @style = Style.new
+      @continuation = false
       self
     end
 
     def copy : Cell
-      Cell.new(@symbol, @style)
+      Cell.new(@symbol, @style, @continuation)
     end
   end
 
@@ -36,13 +38,25 @@ module CryTUI
 
     def set_string(x : Int, y : Int, text : String, style = Style.new, max_width : Int? = nil) : Int32
       limit = {max_width || (@area.right - x), @area.right - x}.min.clamp(0, Int32::MAX)
-      written = 0
-      text.each_char do |char|
-        break if written >= limit
+      written = 0_i32
+      text.each_grapheme do |grapheme|
+        symbol = grapheme.to_s
+        width = TextWidth.grapheme_width(symbol)
+        next if width == 0
+        break if written + width > limit
         if cell = self[x + written, y]?
-          cell.symbol = char.to_s
+          clear_wide_at(x + written, y)
+          cell = self[x + written, y]
+          cell.symbol = symbol
           cell.style = style
-          written += 1
+          cell.continuation = false
+          if width == 2
+            continuation = self[x + written + 1, y]
+            continuation.reset
+            continuation.style = style
+            continuation.continuation = true
+          end
+          written += width
         end
       end
       written
@@ -63,7 +77,7 @@ module CryTUI
       raise ArgumentError.new("buffer areas differ") unless @area == other.area
       changes = [] of Tuple(Int32, Int32, Cell)
       @cells.each_with_index do |cell, index|
-        unless cell.symbol == other.cells[index].symbol && cell.style == other.cells[index].style
+        unless cell.symbol == other.cells[index].symbol && cell.style == other.cells[index].style && cell.continuation? == other.cells[index].continuation?
           x = @area.x + index % @area.width
           y = @area.y + index // @area.width
           changes << {x, y, other.cells[index]}
@@ -80,8 +94,23 @@ module CryTUI
 
     def lines : Array(String)
       (0...@area.height).map do |row|
-        String.build { |io| (0...@area.width).each { |column| io << self[@area.x + column, @area.y + row].symbol } }
+        String.build do |io|
+          (0...@area.width).each do |column|
+            cell = self[@area.x + column, @area.y + row]
+            io << (cell.continuation? ? "" : cell.symbol)
+          end
+        end
       end
+    end
+
+    private def clear_wide_at(x : Int, y : Int)
+      cell = self[x, y]
+      if cell.continuation? && x > @area.left
+        self[x - 1, y].reset
+      elsif TextWidth.width(cell.symbol) == 2 && x + 1 < @area.right
+        self[x + 1, y].reset
+      end
+      cell.reset
     end
 
     private def index(x : Int, y : Int) : Int32

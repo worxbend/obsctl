@@ -86,10 +86,13 @@ obsctl widgets -> CryTUI Frame -> CryTUI Buffer
                          ANSI backend / TestBackend
 ```
 
-The initial implementation includes rectangles and clipping, constraints and
-nested layout, colors/styles/modifiers, cells and buffers, cell-level diffing,
-an immediate-mode terminal/frame, a memory test backend, and initial block,
-paragraph, gauge, and sparkline widgets.
+The implementation now includes rectangles and clipping, constraints and nested
+layout, colors/styles/modifiers, Unicode-grapheme-aware cells and buffers,
+wide-cell continuation tracking, cell-level diffing, an immediate-mode
+terminal/frame, memory and ANSI backends, exception-safe output restoration, an
+incremental VT key/paste parser, and initial block, paragraph, gauge, and
+sparkline widgets. Raw-mode ownership, live terminal sizing, resize delivery,
+and PTY lifecycle verification remain before the terminal layer is complete.
 
 ## Delivery Sequence
 
