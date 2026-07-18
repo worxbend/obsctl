@@ -2,6 +2,10 @@
 
 This tracker is grounded in the initial project brief. It records what is implemented, what is partial, what remains, and the next planned work.
 
+- [x] Replace the implementation-log-style README with a polished OSS landing
+  page covering value, setup, TUI controls, automation, architecture,
+  configuration, operations, troubleshooting, development, and contribution.
+
 ## Major Architecture Update: Local Client/Server
 
 `obsctl-cr` must evolve from a direct CLI/TUI-to-OBS application into a local client/server application.
