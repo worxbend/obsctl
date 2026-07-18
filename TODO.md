@@ -46,10 +46,15 @@ Critical rule:
   settings/splash/scene-map widgets, narrow-screen layout, and animation helpers.
 - [x] Render the complete primary dashboard frame with Rust-compatible header,
   live bar, scenes/audio, profiles/collections, logs, and command palette areas.
-- [ ] Implement the long-lived TUI Unix IPC session, action dispatcher, and
-  interactive render/input loop without any direct OBS connection.
-- [ ] Port the dashboard widgets and their TestBackend rendering contracts.
-- [ ] Wire `obsctl` / `obsctl tui` as Unix IPC clients with the unavailable
+- [x] Add the persistent state/events/logs subscription, correlated short-lived
+  command client, typed dispatcher, raw input/render loop, retry handling, and
+  `obsctl` / `obsctl tui` CLI entrypoints.
+- [x] Add PTY end-to-end coverage for the compiled CLI against a fake local
+  daemon, including subscription, interactive quit, socket close, and terminal
+  restoration.
+- [x] Port the primary dashboard widgets and their TestBackend-style rendering
+  contracts.
+- [x] Wire `obsctl` / `obsctl tui` as Unix IPC clients with the unavailable
   screen and command palette.
 
 ### Runtime Modes

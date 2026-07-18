@@ -100,6 +100,8 @@ module Obsctl
       property theme : Theme
       property show_icons : Bool
       property advanced_ui : Bool
+      property settings_cursor : Int32
+      property theme_preview_origin : Theme?
 
       def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true)
         @snapshot = nil
@@ -121,6 +123,8 @@ module Obsctl
         @anim = AnimClock.new
         @scene_flash = nil
         @view = View::Main
+        @settings_cursor = 0
+        @theme_preview_origin = nil
       end
 
       def rich_ui? : Bool

@@ -12,6 +12,7 @@ require "../runtime/logger"
 require "../server/server"
 require "../server/server_options"
 require "../service/service_installer"
+require "../tui/app"
 
 module Obsctl
   module CLI
@@ -21,6 +22,7 @@ module Obsctl
         service_installer : Service::ServiceInstaller? = nil,
         stdout : IO = STDOUT,
         stderr : IO = STDERR,
+        tui_runner : Proc(String, Int32)? = nil,
       ) : Int32
         json_output = argv.includes?("--json")
 
@@ -73,13 +75,10 @@ module Obsctl
             return 0
           end
 
-          if command.nil?
-            palette_line = "/status"
-            parsed = Domain::CommandParser.new.parse(palette_line)
-            client_commands = ClientCommands.new(IPC::UnixClient.new(client_socket_path(options.config_path)))
-            result = client_commands.execute(parsed)
-            stdout.puts result.message
-            return result.ok ? 0 : 1
+          if command.nil? || command == "tui"
+            raise Domain::CommandParseError.new("wrong argument count for tui") unless command_args.empty?
+            socket_path = client_socket_path(options.config_path)
+            return tui_runner ? tui_runner.call(socket_path) : TUI::App.new(socket_path: socket_path, output: stdout).run
           end
 
           palette_line = cli_to_palette(command, command_args)
