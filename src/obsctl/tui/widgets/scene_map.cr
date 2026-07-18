@@ -18,12 +18,12 @@ module Obsctl
             end
           end
           items = [] of CryTUI::Widgets::ListItem
-          grouped.keys.sort.each do |group|
+          grouped.keys.sort!.each do |group|
             items << item("[#{group}]", theme.accent, bold: true)
             grouped[group].each { |scene| items << scene_item(scene, model) }
           end
-          if ungrouped.any?
-            items << item("[ungrouped]", theme.muted) if grouped.any?
+          unless ungrouped.empty?
+            items << item("[ungrouped]", theme.muted) unless grouped.empty?
             ungrouped.each { |scene| items << scene_item(scene, model) }
           end
           block = CryTUI::Widgets::Block.new(title: "Scene Map", border_style: CryTUI::Style.new(foreground: theme.border), border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII)
