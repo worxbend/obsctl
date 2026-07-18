@@ -3232,3 +3232,14 @@ M  AGENT_LOG.md
   global options, format/build pass, and the complete 408-example suite passes.
   Repository-wide Ameba still reports its pre-existing backlog (264 findings
   across 160 Crystal files); the documentation-only change adds no lint scope.
+
+## 2026-07-19 — Add the obsctl project logo
+
+- Added a repository-owned transparent SVG mark combining a terminal command
+  prompt, live telemetry waveform, broadcast signal, and the existing
+  cyan/purple/green control-room palette.
+- Placed the logo above the centered README title and added an emoji-rich
+  control/observe/automate/connect value line to strengthen the hero layout.
+- Validation: SVG XML parses cleanly, raster preview is a transparent 512×512
+  image, README asset path resolves, and `git diff --check` passes. Application
+  code is unchanged from the previously validated 408-example suite.

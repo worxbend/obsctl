@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">obsctl logo</title>
+  <desc id="description">A glowing terminal control panel with broadcast waves and a command prompt.</desc>
+  <defs>
+    <linearGradient id="shell" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#84ffff"/>
+      <stop offset="0.52" stop-color="#89ddff"/>
+      <stop offset="1" stop-color="#c792ea"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="128" y1="142" x2="391" y2="381" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#171a26"/>
+      <stop offset="1" stop-color="#0f111a"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="170" y1="331" x2="348" y2="331" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c3e88d"/>
+      <stop offset="1" stop-color="#ffcb6b"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <path d="M256 24 457 140v232L256 488 55 372V140L256 24Z" fill="#0f111a" stroke="url(#shell)" stroke-width="14"/>
+  <path d="M256 57 428 156v200L256 455 84 356V156L256 57Z" fill="none" stroke="#36595f" stroke-width="4" stroke-dasharray="8 13"/>
+
+  <rect x="112" y="132" width="288" height="250" rx="30" fill="url(#screen)" stroke="url(#shell)" stroke-width="10"/>
+  <path d="M117 193h278" stroke="#36595f" stroke-width="7"/>
+  <circle cx="146" cy="164" r="9" fill="#ff5370"/>
+  <circle cx="177" cy="164" r="9" fill="#ffcb6b"/>
+  <circle cx="208" cy="164" r="9" fill="#c3e88d"/>
+
+  <path d="m155 237 45 36-45 36" fill="none" stroke="#84ffff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  <path d="M221 309h75" stroke="#c792ea" stroke-width="16" stroke-linecap="round" filter="url(#glow)"/>
+
+  <path d="M156 345h28l15-28 24 54 25-82 25 56h27l18-38 20 38h24" fill="none" stroke="url(#signal)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <circle cx="256" cy="98" r="14" fill="#84ffff" filter="url(#glow)"/>
+  <path d="M218 109a54 54 0 0 1 76 0M190 82a94 94 0 0 1 132 0" fill="none" stroke="#89ddff" stroke-width="10" stroke-linecap="round" opacity=".9"/>
+</svg>
