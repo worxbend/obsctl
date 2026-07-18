@@ -175,6 +175,17 @@ gradient segment progress/cursor, orbiting LIVE identity, exact signal slither
 trail, liquid-wave timing, and ASCII progress behavior. Subscription failures
 also restart the command-result reveal clock as the Rust runtime does.
 
+`Block` titles are no longer flattened to plain strings: CryTUI accepts a
+styled `Line`, clips it to the available border span, and preserves each
+foreground/background/modifier run. That restores Ratatui's animated gradient
+headings and highlighted count badges across settings, header, live telemetry,
+connection, and every shared dashboard panel while retaining string-title
+compatibility for simpler widgets.
+
+The audio panel now also distinguishes OBS's three mute states instead of
+presenting unknown state as unmuted, and its dB-scaled filled cells blend from
+success to info before crossing the warning/danger thresholds used by Rust.
+
 ## Delivery Sequence
 
 1. Harden core geometry, Unicode display width, layout allocation, styled text,

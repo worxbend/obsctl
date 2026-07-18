@@ -13,9 +13,13 @@ module Obsctl
           theme = model.theme
           focused = model.focus.audio?
           items = model.audio_inputs.map do |input|
-            icon, color = input.muted == true ? {model.symbol("🔇", "M"), theme.danger} : {model.symbol("🔊", "A"), theme.success}
+            mute_span = case input.muted
+                        when true  then CryTUI::Span.new("#{model.symbol("🔇", "M")} ", CryTUI::Style.new(foreground: theme.danger))
+                        when false then CryTUI::Span.new("#{model.symbol("🔊", "A")} ", CryTUI::Style.new(foreground: theme.success))
+                        else            CryTUI::Span.new("   ")
+                        end
             spans = [
-              CryTUI::Span.new("#{icon} ", CryTUI::Style.new(foreground: color)),
+              mute_span,
               CryTUI::Span.new(input.name, CryTUI::Style.new(foreground: theme.foreground)),
             ]
             spans << CryTUI::Span.new(" (#{input.alias})", CryTUI::Style.new(foreground: theme.muted)) if input.alias
@@ -46,7 +50,7 @@ module Obsctl
                     elsif index > METER_WIDTH * 0.65
                       theme.warning
                     else
-                      theme.success
+                      Anim.blend(theme.success, theme.info, index / (METER_WIDTH * 0.65))
                     end
             symbol = index < filled ? model.symbol("▰", "#") : model.symbol("▱", ".")
             spans << CryTUI::Span.new(symbol, CryTUI::Style.new(foreground: index < filled ? color : theme.border))

@@ -26,13 +26,13 @@ module CryTUI
     end
 
     struct Block
-      getter title : String?
+      getter title : String | Line | Nil
       getter borders : Borders
       getter style : Style
       getter border_style : Style
       getter border_set : BorderSet
 
-      def initialize(@title = nil, @borders = Borders::All, @style = Style.new, @border_style = Style.new, @border_set = BorderSet::ASCII)
+      def initialize(@title : String | Line | Nil = nil, @borders = Borders::All, @style = Style.new, @border_style = Style.new, @border_set = BorderSet::ASCII)
       end
 
       def inner(area : Rect) : Rect
@@ -85,9 +85,15 @@ module CryTUI
             buffer.set_string(right, y, @border_set.vertical, @border_style) if @borders.right? && right != left
           end
         end
-        if @title && area.width >= 4
+        if (title = @title) && area.width >= 4
           title_x = left + (@borders.left? ? 2 : 1)
-          buffer.set_string(title_x, top, " #{@title} ", @border_style, {area.right - title_x, 0}.max)
+          title_line = case title
+                       when Line
+                         Line.new([Span.new(" ", @border_style)] + title.spans + [Span.new(" ", @border_style)], style: title.style)
+                       else
+                         Line.from(" #{title} ", @border_style)
+                       end
+          title_line.render(buffer, Rect.new(title_x, top, {area.right - title_x, 0}.max, 1), @border_style)
         end
       end
     end

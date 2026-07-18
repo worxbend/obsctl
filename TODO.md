@@ -45,6 +45,10 @@ Critical rule:
   scenes, audio, connection, and command-palette rendering contracts.
 - [x] Add Ratatui-compatible independently selectable block borders and use a
   left-only thick rail in the large staged startup splash.
+- [x] Support styled `Line` block titles in CryTUI and restore animated
+  gradients, count badges, and semantic hints across application chrome.
+- [x] Match Rust audio-meter state semantics and success-to-info level
+  gradients, including a neutral presentation for unknown mute state.
 - [x] Port the complete Rust theme catalog, partial custom theme resolution,
   and typed runtime `ui` configuration without losing it on config dumps.
 - [x] Port the secondary split settings preview, responsive/dismissible startup

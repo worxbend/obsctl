@@ -119,6 +119,16 @@ describe Obsctl::TUI::Widgets::Header do
     text.should contain("profile: Default")
   end
 
+  it "renders the animated gradient as styled block-title cells" do
+    model = widget_model
+    model.anim.frame = 7_u64
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 110, 4))
+    Obsctl::TUI::Widgets::Header.render(buffer.area, buffer, model)
+
+    title_colors = (3...38).compact_map { |x| buffer[x, 0].style.foreground }.uniq
+    title_colors.size.should be > 2
+  end
+
   it "renders disconnected state without a snapshot" do
     model = Obsctl::TUI::Model.new(advanced_ui: false)
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 70, 4))
@@ -164,6 +174,19 @@ describe Obsctl::TUI::Widgets::Audio do
     text.should contain("▰")
     buffer[12, 1].style.background.should eq(model.theme.highlight_background)
     buffer[12, 2].style.background.should eq(model.theme.highlight_background)
+  end
+
+  it "renders unknown mute state without claiming the input is active" do
+    model = widget_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(audio_inputs: [
+      Obsctl::OBS::State::AudioState.new("Pending", muted: nil),
+    ])
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 50, 5))
+    Obsctl::TUI::Widgets::Audio.render(buffer.area, buffer, model)
+
+    text = rendered_text(buffer)
+    text.should contain("Pending")
+    text.should_not contain("🔊")
   end
 end
 
