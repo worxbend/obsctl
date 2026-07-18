@@ -35,4 +35,35 @@ describe Obsctl::Runtime::Logger do
   ensure
     File.delete(path) if path && File.exists?(path)
   end
+
+  it "mirrors filtered and redacted entries to an output sink" do
+    path = File.join(Dir.tempdir, "obsctl-logger-output-spec-#{Random.rand(1_000_000)}.log")
+    output = IO::Memory.new
+    logger = Obsctl::Runtime::Logger.new(Obsctl::Runtime::LogLevel::Warn, path, output)
+
+    logger.info("ignored")
+    logger.warn("connection failed password=secret")
+
+    rendered = output.to_s
+    rendered.should contain("level=warn")
+    rendered.should contain("connection failed")
+    rendered.should contain("password=[redacted]")
+    rendered.should_not contain("secret")
+    rendered.should_not contain("ignored")
+  ensure
+    File.delete(path) if path && File.exists?(path)
+  end
+
+  it "still writes to the output sink when the file sink fails" do
+    output = IO::Memory.new
+    logger = Obsctl::Runtime::Logger.new(
+      Obsctl::Runtime::LogLevel::Info,
+      "/dev/null/obsctl.log",
+      output
+    )
+
+    logger.info("terminal diagnostic")
+
+    output.to_s.should contain("terminal diagnostic")
+  end
 end

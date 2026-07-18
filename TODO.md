@@ -18,6 +18,8 @@ Critical rule:
 - There must be exactly one OBS WebSocket owner per user session: the `obsctl server`.
 - CLI and TUI clients must not create their own OBS WebSocket connection in normal mode.
 - Direct OBS access is allowed only inside server mode or explicit embedded-server mode.
+- Foreground/headless server lifecycle and reconnect logs are mirrored to
+  stderr as well as the persistent state log.
 
 ### TUI / CryTUI Progress
 

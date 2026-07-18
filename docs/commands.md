@@ -58,7 +58,10 @@ Quoted names are preserved: `/scene "Main Camera"`.
 
 `obsctl server` starts the foreground local server and owns the OBS WebSocket connection. `obsctl server --headless` runs the same server without interactive UI and is intended for a `systemd --user` service.
 
-`--log-level` controls persisted server log verbosity when running `obsctl server`. Server logs are written to `~/.local/state/obsctl/obsctl.log`, and password/authentication fields are redacted before writing.
+`--log-level` controls server log verbosity when running `obsctl server`.
+Server logs are written to `~/.local/state/obsctl/obsctl.log` and mirrored to
+stderr for the running process. Password and authentication fields are redacted
+before either sink receives an entry.
 
 `obsctl service install` writes `~/.config/systemd/user/obsctl.service` with an absolute `ExecStart=<obsctl> server --headless`, then runs `systemctl --user daemon-reload`. The other service subcommands wrap `systemctl --user start|stop|restart|status obsctl.service`; uninstall removes the unit file and reloads systemd.
 

@@ -34,7 +34,11 @@ module Obsctl
       SENSITIVE_VALUE_PATTERN = "(?:\"[^\"]*\"|'[^']*'|\\S+)"
 
       # Creates a logger writing to the configured runtime log path.
-      def initialize(@level : LogLevel = LogLevel::Info, @path : String = Config::ConfigPaths.log_path)
+      def initialize(
+        @level : LogLevel = LogLevel::Info,
+        @path : String = Config::ConfigPaths.log_path,
+        @output : IO? = nil,
+      )
       end
 
       # Writes a debug-level message when enabled.
@@ -61,10 +65,21 @@ module Obsctl
       def write(level : LogLevel, message : String) : Nil
         return if level.value < @level.value
 
+        line = "#{Time.utc.to_rfc3339} level=#{label_for(level)} #{self.class.redact_secrets(message)}"
+        write_file(line)
+        write_output(line)
+      end
+
+      private def write_file(line : String) : Nil
         FileUtils.mkdir_p(File.dirname(@path))
         File.open(@path, "a") do |file|
-          file.puts("#{Time.utc.to_rfc3339} level=#{label_for(level)} #{self.class.redact_secrets(message)}")
+          file.puts(line)
         end
+      rescue
+      end
+
+      private def write_output(line : String) : Nil
+        @output.try(&.puts(line))
       rescue
       end
 

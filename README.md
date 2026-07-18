@@ -33,7 +33,10 @@ variable is absent or empty, obsctl connects using an empty password.
 Plaintext `connection.password` is supported as a fallback; `validate-config`
 warns about plaintext passwords without printing the secret value.
 
-Use `--log-level debug|info|warn|error` with `obsctl server` to control persisted server log verbosity. Logs are written to `~/.local/state/obsctl/obsctl.log` with password/authentication fields redacted.
+Use `--log-level debug|info|warn|error` with `obsctl server` to control server
+log verbosity. Logs are written to `~/.local/state/obsctl/obsctl.log` and are
+also mirrored to stderr while the server process is running. Password and
+authentication fields are redacted from both sinks.
 
 ## Commands
 
