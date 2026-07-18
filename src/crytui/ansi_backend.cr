@@ -4,9 +4,14 @@ module CryTUI
   class AnsiBackend < Backend
     getter io : IO
 
-    def initialize(@io : IO, width : Int, height : Int, @alternate_screen = true)
+    def initialize(@io : IO, width : Int, height : Int, @alternate_screen = true, @size_source : IO::FileDescriptor? = nil)
       @area = Rect.new(0, 0, width.to_i, height.to_i)
       @last_style = Style.new
+    end
+
+    def self.for_terminal(io : IO, size_source : IO::FileDescriptor, alternate_screen = true) : self
+      area = TerminalSize.from(size_source) || TerminalSize.from_environment || Rect.new(0, 0, 80, 24)
+      new(io, area.width, area.height, alternate_screen, size_source)
     end
 
     def size : Rect
@@ -15,6 +20,15 @@ module CryTUI
 
     def resize(width : Int, height : Int)
       @area = Rect.new(0, 0, width.to_i, height.to_i)
+    end
+
+    def refresh_size : Bool
+      source = @size_source
+      return false unless source
+      discovered = TerminalSize.from(source)
+      return false unless discovered && discovered != @area
+      @area = discovered
+      true
     end
 
     def enter : Nil

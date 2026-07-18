@@ -1,0 +1,59 @@
+require "../../spec_helper"
+require "../../../src/obsctl/tui/model"
+
+private def tui_snapshot
+  Obsctl::OBS::State::ObsSnapshot.new(
+    connected: true,
+    obs_studio_version: "30.0.0",
+    obs_websocket_version: "5.0.0",
+    current_scene: "Main",
+    scenes: [Obsctl::OBS::State::SceneState.new("Main", active: true), Obsctl::OBS::State::SceneState.new("Cam")],
+    audio_inputs: [Obsctl::OBS::State::AudioState.new("Mic", muted: false, volume_percent: 80)]
+  )
+end
+
+describe Obsctl::TUI::FocusPanel do
+  it "navigates the four-panel grid and stops at edges" do
+    Obsctl::TUI::FocusPanel::Scenes.right.should eq(Obsctl::TUI::FocusPanel::Audio)
+    Obsctl::TUI::FocusPanel::Audio.down.should eq(Obsctl::TUI::FocusPanel::Collections)
+    Obsctl::TUI::FocusPanel::Collections.left.should eq(Obsctl::TUI::FocusPanel::Profiles)
+    Obsctl::TUI::FocusPanel::Profiles.up.should eq(Obsctl::TUI::FocusPanel::Scenes)
+    Obsctl::TUI::FocusPanel::Scenes.left.should eq(Obsctl::TUI::FocusPanel::Scenes)
+  end
+end
+
+describe Obsctl::TUI::Model do
+  it "clamps and moves focused list cursors" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = tui_snapshot
+    model.scene_cursor = 99
+    model.clamp_cursors
+    model.scene_cursor.should eq(1)
+    model.focused_scene.try(&.name).should eq("Cam")
+    model.move_up
+    model.focused_scene.try(&.name).should eq("Main")
+  end
+
+  it "caps rolling logs at 200 entries" do
+    model = Obsctl::TUI::Model.new
+    210.times { |index| model.push_log(Obsctl::TUI::LogEntry.new(Obsctl::Runtime::LogLevel::Info, "line #{index}")) }
+    model.logs.size.should eq(200)
+    model.logs.first.message.should eq("line 10")
+  end
+
+  it "reveals command results by Unicode grapheme" do
+    model = Obsctl::TUI::Model.new
+    model.set_last_result("Київ ✓")
+    model.revealed_last_result(2).should eq("")
+    model.anim.tick
+    model.revealed_last_result(2).should eq("Ки")
+  end
+
+  it "cycles palette completions in both directions" do
+    palette = Obsctl::TUI::CommandPaletteState.new(completions: ["/scene Main", "/scene Cam"])
+    palette.cycle_next
+    palette.input.should eq("/scene Main")
+    palette.cycle_previous
+    palette.input.should eq("/scene Cam")
+  end
+end

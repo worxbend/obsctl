@@ -3023,3 +3023,18 @@ M  AGENT_LOG.md
   Ctrl+arrows, F2, navigation keys, split sequences, Alt characters, and
   bracketed paste.
 - Added focused Unicode, buffer, ANSI lifecycle, and input parser specs.
+
+## 2026-07-18 — Close terminal lifecycle and start obsctl TUI model
+
+- Added ioctl-based terminal size discovery, environment fallback, live resize
+  refresh, and a raw-mode `Terminal#run` overload that restores exact termios.
+- Added a real PTY integration helper proving size discovery, resize detection,
+  and termios restoration after an exception.
+- Ported the first `obsctl-rs` model slice: four-panel focus/navigation,
+  cursors, command palette completion state, bounded logs, Unicode result
+  reveal, connection/output helpers, meters, scene flash, and extended
+  profile/collection compatibility fields.
+- Added an IPC event applier for Crystal server state, log, and normalized meter
+  messages, including malformed-payload preservation.
+- Extended Crystal state-event JSON with output streaming/recording state so
+  the TUI can remain a thin IPC client.
