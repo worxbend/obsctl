@@ -16,7 +16,8 @@ module Obsctl
                          else
                            theme.border
                          end
-          block = CryTUI::Widgets::Block.new(title: "#{model.symbol("◉", "*")} LIVE TELEMETRY", border_style: CryTUI::Style.new(foreground: border_color), border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII)
+          title = model.advanced_ui ? Anim.gradient_line("◉ LIVE TELEMETRY", theme.danger, theme.warning, model.anim.frame, true) : CryTUI::Line.from("LIVE TELEMETRY", CryTUI::Style.new(foreground: theme.danger, modifiers: CryTUI::Modifier::Bold))
+          block = CryTUI::Widgets::Block.new(title: title, border_style: CryTUI::Style.new(foreground: border_color), border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII)
           first = CryTUI::Line.new([
             badge("LIVE", model.streaming?, model.stream_duration_ms, pulse, model), CryTUI::Span.new("  "),
             badge("REC", model.recording?, model.record_duration_ms, pulse, model), separator(model),

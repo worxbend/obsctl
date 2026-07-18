@@ -55,6 +55,20 @@ describe CryTUI::Terminal do
 end
 
 describe CryTUI::Widgets::Block do
+  it "preserves styled spans in line titles" do
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 10, 3))
+    title = CryTUI::Line.new([
+      CryTUI::Span.new("A", CryTUI::Style.new(foreground: CryTUI::Color::RED)),
+      CryTUI::Span.new("B", CryTUI::Style.new(foreground: CryTUI::Color::BLUE)),
+    ])
+    CryTUI::Widgets::Block.new(title: title).render(buffer.area, buffer)
+
+    buffer[3, 0].symbol.should eq("A")
+    buffer[3, 0].style.foreground.should eq(CryTUI::Color::RED)
+    buffer[4, 0].symbol.should eq("B")
+    buffer[4, 0].style.foreground.should eq(CryTUI::Color::BLUE)
+  end
+
   it "renders and reserves independent border sides" do
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 8, 3))
     block = CryTUI::Widgets::Block.new(
