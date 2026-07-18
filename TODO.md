@@ -20,6 +20,8 @@ Critical rule:
 - Direct OBS access is allowed only inside server mode or explicit embedded-server mode.
 - Foreground/headless server lifecycle and reconnect logs are mirrored to
   stderr as well as the persistent state log.
+- Live OBS scene and audio resources remain actionable before they are written
+  into config; profile and collection lists use their real OBS wire shapes.
 
 ### TUI / CryTUI Progress
 

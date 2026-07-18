@@ -543,6 +543,7 @@ describe Obsctl::Server::Server do
 
     log = read_log_until(logs, "obs_disconnected")
     log["message"].as_s.should contain("OBS WebSocket disconnected")
+    log["message"].as_s.should contain("reconnect attempt 1 scheduled in 500ms")
 
     response = client.request(
       Obsctl::IPC::Request.new(

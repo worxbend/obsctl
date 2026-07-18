@@ -67,5 +67,8 @@ prints a warning when plaintext `connection.password` is configured and does
 not echo the secret value.
 
 Scene lookup priority is shortcut, alias, exact OBS name, case-insensitive alias, then case-insensitive OBS name. Ambiguous matches fail without executing an action.
+Scene and audio names discovered in the current OBS snapshot remain selectable
+even when they do not yet have entries in the config; configured aliases and
+shortcuts keep their normal priority.
 
 `dump-config` preserves existing aliases, shortcuts, groups, stale markers, and top-level daemon and appearance settings such as `server`, `reconnect`, and `ui`. Before writing, it reports duplicate aliases/shortcuts and alias/shortcut collisions with discovered OBS scene or audio names so a dump cannot save a config that would make later command lookup ambiguous.

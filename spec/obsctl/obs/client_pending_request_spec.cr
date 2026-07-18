@@ -119,10 +119,32 @@ describe Obsctl::OBS::Client do
       error = client.wait_for_close(1.second)
       elapsed = Time.instant - started
       error.should be_a(Obsctl::Domain::ConnectionFailed)
-      error.not_nil!.message.to_s.should eq("OBS WebSocket disconnected")
+      error.not_nil!.message.to_s.should contain("OBS WebSocket disconnected")
+      error.not_nil!.message.to_s.should contain("close code 1005")
+      error.not_nil!.message.to_s.should contain("without a close status")
       client.terminal_error.not_nil!.message.to_s.should eq(error.not_nil!.message.to_s)
       elapsed.should be < 1.second
       client.connected?.should be_false
+    ensure
+      client.try(&.close)
+      server.stop
+    end
+  end
+
+  it "preserves an OBS close code and reason in the terminal error" do
+    server = Obsctl::SpecSupport::FakeObsServer.new.start
+    client = Obsctl::OBS::Client.new(server.config)
+
+    begin
+      client.connect
+      server.close_connections(4005, "Authentication failed")
+
+      error = client.wait_for_close(1.second)
+      error.should_not be_nil
+      message = error.not_nil!.message.to_s
+      message.should contain("close code 4005")
+      message.should contain("OBS authentication failed")
+      message.should contain("reason: Authentication failed")
     ensure
       client.try(&.close)
       server.stop

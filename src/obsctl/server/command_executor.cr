@@ -70,7 +70,8 @@ module Obsctl
           object({"message" => "server shutdown requested"})
         when "set_scene"
           target = required_target(command)
-          scene = Domain::Aliases.resolve_scene(@config, target)
+          live_names = @state.snapshot.scenes.map(&.name)
+          scene = Domain::Aliases.resolve_scene(@config, target, live_names)
           @supervisor.with_client(&.set_scene(scene.name))
           refresh_snapshot
           object({"message" => "scene set: #{scene.name}"})
@@ -89,7 +90,7 @@ module Obsctl
         when "unmute"
           set_mute(command, false)
         when "toggle_mute"
-          input = Domain::Aliases.resolve_audio(@config, required_target(command))
+          input = resolve_audio(required_target(command))
           @supervisor.with_client(&.toggle_mute(input.name))
           refresh_snapshot
           object({"message" => "toggled mute: #{input.name}"})
@@ -126,10 +127,15 @@ module Obsctl
       end
 
       private def set_mute(command : IPC::CommandPayload, muted : Bool) : JSON::Any
-        input = Domain::Aliases.resolve_audio(@config, required_target(command))
+        input = resolve_audio(required_target(command))
         @supervisor.with_client { |client| client.mute(input.name, muted) }
         refresh_snapshot
         object({"message" => "#{muted ? "muted" : "unmuted"}: #{input.name}"})
+      end
+
+      private def resolve_audio(target : String) : Config::AudioInputConfig
+        live_names = @state.snapshot.audio_inputs.map(&.name)
+        Domain::Aliases.resolve_audio(@config, target, live_names)
       end
 
       private def refresh_snapshot : Nil

@@ -81,7 +81,9 @@ module Obsctl
         reset_terminal_state
         @ws = Connection.new(@config.connection).connect
         @ws.on_message { |message| handle_frame(message) }
-        @ws.on_close { fail_all_pending(close_terminal_error) }
+        @ws.on_close do |code, reason|
+          fail_all_pending(close_terminal_error(code, reason))
+        end
         spawn do
           begin
             @ws.run
@@ -204,7 +206,9 @@ module Obsctl
 
       def profiles : NamedTuple(current: String?, names: Array(String))
         data = request(Requests::Studio::GET_PROFILE_LIST).response_data || JSON.parse("{}")
-        names = data["profiles"]?.try(&.as_a?).try(&.compact_map { |profile| profile["profileName"]?.try(&.as_s?) }) || [] of String
+        names = data["profiles"]?.try(&.as_a?).try(&.compact_map { |profile|
+          profile.as_s? || profile.as_h?.try { profile["profileName"]?.try(&.as_s?) }
+        }) || [] of String
         {current: data["currentProfileName"]?.try(&.as_s?), names: names}
       end
 
@@ -485,14 +489,49 @@ module Obsctl
         end
       end
 
-      private def close_terminal_error : Domain::ConnectionFailed
+      private def close_terminal_error(
+        code : HTTP::WebSocket::CloseCode? = nil,
+        reason : String = "",
+      ) : Domain::ConnectionFailed
         existing = terminal_error
         return existing if existing
 
         message = @terminal_error_lock.synchronize do
-          @close_requested ? "OBS WebSocket closed cleanly" : "OBS WebSocket disconnected"
+          if @close_requested
+            "OBS WebSocket closed cleanly"
+          elsif code
+            websocket_close_message(code, reason)
+          else
+            "OBS WebSocket disconnected"
+          end
         end
         record_terminal_error(Domain::ConnectionFailed.new(message))
+      end
+
+      private def websocket_close_message(code : HTTP::WebSocket::CloseCode, reason : String) : String
+        explanation = case code.value
+                      when 1000 then "normal closure requested by OBS"
+                      when 1001 then "OBS is going away or shutting down"
+                      when 1002 then "WebSocket protocol error"
+                      when 1005 then "OBS closed without a close status"
+                      when 1006 then "connection ended without a close frame"
+                      when 1011 then "OBS encountered an internal error"
+                      when 1012 then "OBS is restarting"
+                      when 1013 then "OBS asked the client to retry later"
+                      when 4000 then "OBS reported an unknown reason"
+                      when 4001 then "OBS could not decode a client message"
+                      when 4002 then "OBS received an unknown message type"
+                      when 4003 then "client sent a request before Identify completed"
+                      when 4004 then "client attempted to Identify more than once"
+                      when 4005 then "OBS authentication failed"
+                      when 4006 then "OBS does not support the requested RPC version"
+                      when 4007 then "OBS invalidated the session"
+                      when 4008 then "OBS does not support a requested feature"
+                      when 4009 then "an OBS request was missing its request type"
+                      else           "peer closed the WebSocket"
+                      end
+        suffix = reason.empty? ? explanation : "#{explanation}; reason: #{reason}"
+        "OBS WebSocket disconnected (close code #{code.value}: #{suffix})"
       end
 
       private def record_terminal_error(error : Domain::ConnectionFailed) : Domain::ConnectionFailed
