@@ -49,6 +49,8 @@ obsctl mute <alias-or-name>
 obsctl unmute <alias-or-name>
 obsctl toggle-mute <alias-or-name>
 obsctl vol|volume <alias-or-name> <0-100>
+obsctl stream
+obsctl rec|record
 obsctl dump-config
 obsctl reload-config
 obsctl validate-config

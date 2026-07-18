@@ -305,6 +305,12 @@ module Obsctl
           @state.update_scenes(refresh[:current_scene], refresh[:scenes])
         when "InputCreated", "InputRemoved", "InputNameChanged"
           @state.update_audio_inputs(client.audio_snapshot)
+        when "StreamStateChanged"
+          active = data.try(&.["outputActive"]?.try(&.as_bool?))
+          @state.update_output(streaming: active) unless active.nil?
+        when "RecordStateChanged"
+          active = data.try(&.["outputActive"]?.try(&.as_bool?))
+          @state.update_output(recording: active) unless active.nil?
         end
       rescue ex : Domain::ObsctlError
         message = public_message(ex.message, "failed to refresh OBS state after event")

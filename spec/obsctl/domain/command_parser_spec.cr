@@ -25,4 +25,11 @@ describe Obsctl::Domain::CommandParser do
     parser.parse("/reconnect").should be_a(Obsctl::Domain::ReconnectCommand)
     parser.parse("/shutdown-server").should be_a(Obsctl::Domain::ShutdownServerCommand)
   end
+
+  it "parses stream and recording toggles without arguments" do
+    parser.parse("/stream").should be_a(Obsctl::Domain::ToggleStreamCommand)
+    parser.parse("/rec").should be_a(Obsctl::Domain::ToggleRecordCommand)
+    parser.parse("record").should be_a(Obsctl::Domain::ToggleRecordCommand)
+    expect_raises(Obsctl::Domain::CommandParseError) { parser.parse("/stream now") }
+  end
 end

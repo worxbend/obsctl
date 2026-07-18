@@ -66,6 +66,12 @@ module Obsctl
           expect_count(tokens, 3)
           percent = parse_percent(tokens[2])
           VolumeCommand.new(tokens[1], percent)
+        when "stream"
+          expect_count(tokens, 1)
+          ToggleStreamCommand.new
+        when "rec", "record"
+          expect_count(tokens, 1)
+          ToggleRecordCommand.new
         else
           raise CommandParseError.new("unknown command: #{command}")
         end
