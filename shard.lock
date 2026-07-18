@@ -4,3 +4,7 @@ shards:
     git: https://github.com/crystal-ameba/ameba.git
     version: 1.6.4
 
+  kiwi:
+    git: https://github.com/da1nerd/kiwi.cr.git
+    version: 0.3.0
+
