@@ -3183,6 +3183,9 @@ M  AGENT_LOG.md
 - Clear the physical terminal and invalidate the previous diff buffer whenever
   geometry changes, preventing old nonblank cells from surviving in blank
   areas after shrinking or expanding.
+- Force the first post-resize frame to repaint every cell, including spaces,
+  because relying on CSI erase plus a blank-to-blank diff left an old right
+  border visible one column beside the new edge on the reported terminal.
 - Disable automatic terminal wrapping during CryTUI sessions and restore it on
   exit, preventing bottom-right writes from scrolling a resized dashboard.
 - Added ANSI-buffer, dashboard, and real-PTY regressions covering repeated
