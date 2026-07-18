@@ -62,7 +62,7 @@ module Obsctl
             config = load_server_config(options.config_path, stderr)
             server_options = Server::ServerOptions.new(headless: command_args.includes?("--headless"))
             socket_path = IPC::SocketPath.resolve(config.server.socket_path)
-            logger = Runtime::Logger.new(log_level)
+            logger = Runtime::Logger.new(log_level, output: stderr)
             return Server::Server.new(config, options.config_path, server_options, socket_path, logger).run
           end
 
