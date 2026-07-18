@@ -3,6 +3,7 @@ require "../../../src/obsctl/tui/widgets/header"
 require "../../../src/obsctl/tui/widgets/scenes"
 require "../../../src/obsctl/tui/widgets/audio"
 require "../../../src/obsctl/tui/widgets/connection"
+require "../../../src/obsctl/tui/widgets/live_bar"
 require "../../../src/obsctl/tui/widgets/command_palette"
 require "../../../src/obsctl/tui/widgets/dashboard"
 require "../../../src/obsctl/tui/widgets/settings"
@@ -34,6 +35,42 @@ end
 
 private def rendered_text(buffer : CryTUI::Buffer)
   buffer.lines.join("\n")
+end
+
+describe Obsctl::TUI::Widgets::LiveBar do
+  it "renders active durations and OBS performance telemetry" do
+    model = widget_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(
+      output: Obsctl::OBS::State::OutputState.new(streaming: true, recording: true),
+      stats: Obsctl::OBS::State::ObsStats.new(
+        cpu_usage_percent: 12.5,
+        memory_usage_mb: 768.0,
+        active_fps: 59.9
+      ),
+      stream_bitrate_kbps: 4_500.0,
+      stream_duration_ms: 65_000_i64,
+      record_duration_ms: 3_661_000_i64
+    )
+    model.cpu_history = [5.0, 12.5]
+    model.bitrate_history = [4_000.0, 4_500.0]
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 4))
+
+    Obsctl::TUI::Widgets::LiveBar.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+    text.should contain("LIVE 01:05")
+    text.should contain("REC 01:01:01")
+    text.should contain("CPU 12.5%")
+    text.should contain("FPS 59.9")
+    text.should contain("MEM 768MB")
+    text.should contain("NET 4500kbps")
+  end
+
+  it "keeps the waiting state before the first statistics sample" do
+    model = widget_model
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 90, 4))
+    Obsctl::TUI::Widgets::LiveBar.render(buffer.area, buffer, model)
+    rendered_text(buffer).should contain("waiting for OBS metrics")
+  end
 end
 
 describe Obsctl::TUI::Widgets::Header do
