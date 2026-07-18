@@ -109,6 +109,14 @@ specs cover connected, disconnected, selected, empty, metered, and completion
 states. The three initial themes are Claude, Nord, and Mono; the full reference
 theme catalog remains an explicit parity item.
 
+The primary dashboard now renders as a single frame using the same nested area
+contract as the Rust reference: fixed header/live/log/palette chrome, a flexible
+scenes/audio row, and a smaller profiles/collections row. The complete frame
+includes daemon logs and LIVE/REC placeholders sourced from IPC state. The
+background-fill exercise also exposed and fixed an important buffer semantic:
+writing a symbol patches the cell style instead of discarding an already
+painted background, matching Ratatui's layered rendering behavior.
+
 ## Delivery Sequence
 
 1. Harden core geometry, Unicode display width, layout allocation, styled text,

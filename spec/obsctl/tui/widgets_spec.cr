@@ -4,6 +4,7 @@ require "../../../src/obsctl/tui/widgets/scenes"
 require "../../../src/obsctl/tui/widgets/audio"
 require "../../../src/obsctl/tui/widgets/connection"
 require "../../../src/obsctl/tui/widgets/command_palette"
+require "../../../src/obsctl/tui/widgets/dashboard"
 
 private def widget_model
   model = Obsctl::TUI::Model.new(theme: Obsctl::TUI::Theme::NORD)
@@ -135,5 +136,37 @@ describe Obsctl::TUI::Widgets::CommandPalette do
     text.should contain("[/scene Main]")
     text.should contain("[/scene Media]")
     text.should contain("sce")
+  end
+end
+
+describe Obsctl::TUI::DashboardLayout do
+  it "matches the Rust dashboard geometry at 100x40" do
+    areas = Obsctl::TUI::DashboardLayout.compute(CryTUI::Rect.new(0, 0, 100, 40))
+    areas.header.height.should eq(4)
+    areas.live_bar.height.should eq(4)
+    areas.scenes.height.should be > areas.profiles.height
+    areas.scenes.width.should eq(50)
+    areas.audio.x.should eq(50)
+    areas.profiles.height.should eq(7)
+    areas.logs.height.should eq(7)
+    areas.palette.height.should eq(4)
+  end
+end
+
+describe Obsctl::TUI::Widgets::Dashboard do
+  it "renders the complete primary dashboard into one frame" do
+    model = widget_model
+    model.scene_collections = ["Podcast", "Gaming"]
+    model.current_scene_collection = "Podcast"
+    model.logs << Obsctl::TUI::LogEntry.new(Obsctl::Runtime::LogLevel::Warn, "reconnect attempt", "obs_reconnect", Time.utc(2026, 7, 18, 12, 34, 56))
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 40))
+    Obsctl::TUI::Widgets::Dashboard.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+
+    ["BROADCAST COMMAND CENTER", "LIVE TELEMETRY", "Scenes", "Audio Matrix", "Profiles", "Collections", "Logs // Event Stream", "Command Palette"].each do |label|
+      text.should contain(label)
+    end
+    text.should contain("reconnect attempt")
+    buffer[119, 39].style.background.should eq(model.theme.background)
   end
 end
