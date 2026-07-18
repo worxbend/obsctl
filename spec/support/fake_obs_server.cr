@@ -54,6 +54,7 @@ module Obsctl
         @current_scene_collection : String = "Podcast",
         @stream_bytes : Int64 = 1_000_000_i64,
         @stream_bytes_per_status : Int64 = 0_i64,
+        @authentication : Bool = false,
       )
         @host = "127.0.0.1"
         @server = HTTP::Server.new([websocket_handler])
@@ -349,6 +350,14 @@ module Obsctl
               json.object do
                 json.field "obsWebSocketVersion", "5.4.0"
                 json.field "rpcVersion", 1
+                if @authentication
+                  json.field "authentication" do
+                    json.object do
+                      json.field "challenge", "test-challenge"
+                      json.field "salt", "test-salt"
+                    end
+                  end
+                end
               end
             end
           end

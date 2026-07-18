@@ -1,6 +1,7 @@
 require "../../spec_helper"
 require "../../support/fake_obs_server"
 require "../../../src/obsctl/obs/client"
+require "../../../src/obsctl/obs/auth"
 require "../../../src/obsctl/obs/protocol/event_subscription"
 
 describe Obsctl::OBS::Client do
@@ -119,6 +120,33 @@ describe Obsctl::OBS::Client do
     ensure
       client.try(&.close)
       server.stop
+    end
+  end
+
+  it "answers an OBS authentication challenge with an empty password when none is configured" do
+    env_name = "OBSCTL_SPEC_MISSING_PASSWORD"
+    previous = ENV.delete(env_name)
+    server = Obsctl::SpecSupport::FakeObsServer.new(authentication: true).start
+    config = server.config
+    config.connection = Obsctl::Config::ConnectionConfig.new(
+      host: server.host,
+      port: server.port,
+      password_env: env_name,
+      request_timeout_ms: 500
+    )
+    client = Obsctl::OBS::Client.new(config)
+
+    begin
+      client.connect
+      identify = wait_for_identify_data(server)
+      identify["authentication"].as_s.should eq(
+        Obsctl::OBS::Auth.authentication("", "test-salt", "test-challenge")
+      )
+      client.connected?.should be_true
+    ensure
+      client.try(&.close)
+      server.stop
+      ENV["OBSCTL_SPEC_MISSING_PASSWORD"] = previous
     end
   end
 

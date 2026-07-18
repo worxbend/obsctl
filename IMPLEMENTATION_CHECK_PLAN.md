@@ -325,7 +325,7 @@ Validation:
 - valid timeout values
 - valid reconnect values
 - valid UI refresh interval
-- `password_env` exists if configured
+- missing or empty `password_env` values allow a passwordless connection attempt
 - no duplicate scene aliases
 - no duplicate scene shortcuts
 - no duplicate audio aliases

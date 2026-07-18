@@ -28,7 +28,10 @@ bin/obsctl
 
 Default config path on Linux is `~/.config/obsctl/config.yml`. Override with `--config` or `OBSCTL_CONFIG`.
 
-Use `connection.password_env` for OBS WebSocket passwords. Plaintext `connection.password` is supported only when `password_env: ""` is configured; `validate-config` warns about plaintext passwords without printing the secret value.
+Use `connection.password_env` for OBS WebSocket passwords. If that environment
+variable is absent or empty, obsctl connects using an empty password.
+Plaintext `connection.password` is supported as a fallback; `validate-config`
+warns about plaintext passwords without printing the secret value.
 
 Use `--log-level debug|info|warn|error` with `obsctl server` to control persisted server log verbosity. Logs are written to `~/.local/state/obsctl/obsctl.log` with password/authentication fields redacted.
 

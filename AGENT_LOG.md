@@ -3130,3 +3130,18 @@ M  AGENT_LOG.md
   and edited app/theme/log surfaces is clean. The repository-wide Ameba target
   still reports its pre-existing 256-finding backlog; strict sibling contract
   mode still lacks the separately planned Rust fixture root.
+
+## 2026-07-19 — Allow passwordless OBS connections
+
+- Removed the config-validation failure for an absent or empty configured
+  password environment variable.
+- Kept the existing credential resolution order: a non-empty environment
+  password, then plaintext fallback, then an empty password. When OBS advertises
+  an authentication challenge, the empty password is hashed into Identify
+  instead of aborting and triggering a reconnect loop.
+- Documented the behavior and added regression coverage for the default
+  password environment variable being absent.
+- Validation: format, debug/release builds, the focused 19-example supervisor
+  suite, and the complete 397-example suite pass. Ameba still reports only
+  existing findings in the touched legacy files (complexity, accessor naming,
+  `not_nil!`, and verbose blocks); it identified no finding on the new paths.

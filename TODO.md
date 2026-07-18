@@ -547,7 +547,7 @@ Implemented:
   - invalid port
   - invalid server socket/pid paths
   - invalid reconnect delay policy values
-  - missing configured password env var
+  - missing or empty password env vars are accepted for passwordless OBS
   - invalid UI refresh interval
   - duplicate scene aliases
   - duplicate scene shortcuts
