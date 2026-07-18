@@ -120,6 +120,16 @@ sparkline, and ASCII history helpers live outside the widgets for reuse. The
 standalone grouped Scene Map widget is available as in the Rust source, though
 the reference dashboard itself does not currently mount it.
 
+Ratatui 0.29 delegates layout to a strength-ranked Cassowary solver rather
+than a greedy splitter. CryTUI now follows that architecture using the MIT
+licensed `kiwi.cr` Cassowary port (pinned through `shard.lock`) for mixed
+constraints, with deterministic cumulative rounding for homogeneous ratios,
+percentages, and weighted fills. Differential probes against Ratatui cover
+normal, undersized, weighted, and spaced allocations. Equal-strength solutions
+can differ between Cassowary implementations where Ratatui itself has no
+stable/fair tie contract; required bounds and documented constraint priorities
+remain identical.
+
 The primary dashboard now renders as a single frame using the same nested area
 contract as the Rust reference: fixed header/live/log/palette chrome, a flexible
 scenes/audio row, and a smaller profiles/collections row. The complete frame

@@ -1,3 +1,5 @@
+require "kiwi"
+
 module CryTUI
   enum Direction
     Horizontal
@@ -99,49 +101,119 @@ module CryTUI
 
     def split(area : Rect) : Array(Rect)
       return [] of Rect if @constraints.empty?
-      available = (@direction.horizontal? ? area.width : area.height) - @spacing * (@constraints.size - 1)
-      available = available.clamp(0, Int32::MAX)
-      sizes = allocate(available)
-      cursor = @direction.horizontal? ? area.x : area.y
-      sizes.map do |size|
-        rect = @direction.horizontal? ? Rect.new(cursor, area.y, size, area.height) : Rect.new(area.x, cursor, area.width, size)
-        cursor += size + @spacing
-        rect
+      total = @direction.horizontal? ? area.width : area.height
+      solve(total).map do |start, size|
+        @direction.horizontal? ? Rect.new(area.x + start, area.y, size, area.height) : Rect.new(area.x, area.y + start, area.width, size)
       end
     end
 
-    private def allocate(total : Int32) : Array(Int32)
-      sizes = Array(Int32).new(@constraints.size, 0)
-      flexible = [] of Int32
+    private REQUIRED = Kiwi::Strength::REQUIRED
+    private STRONG   = Kiwi::Strength::STRONG
+    private MEDIUM   = Kiwi::Strength::MEDIUM
+    private WEAK     = Kiwi::Strength::WEAK
+
+    private def solve(total : Int32) : Array(Tuple(Int32, Int32))
+      if @spacing == 0 && @constraints.all?(&.kind.percentage?)
+        return cumulative_ranges(total, @constraints.map { |constraint| constraint.value.to_f64 / 100.0 })
+      end
+      if @spacing == 0 && @constraints.all?(&.kind.ratio?)
+        return cumulative_ranges(total, @constraints.map { |constraint| constraint.value.to_f64 / {constraint.denominator, 1}.max })
+      end
+      if @spacing >= 0 && @constraints.all?(&.kind.fill?)
+        weights = @constraints.map { |constraint| {constraint.value, 1}.max.to_f64 }
+        sum = weights.sum
+        available = {total - @spacing * (@constraints.size - 1), 0}.max
+        ranges = cumulative_ranges(available, weights.map { |weight| weight / sum })
+        return ranges.map_with_index { |(start, size), index| {start + index * @spacing, size} }
+      end
+
+      precision = 100.0
+      scaled_total = total * precision
+      count = @constraints.size
+      variables = Array.new(count * 2 + 2) { |index| Kiwi::Variable.new("layout_#{index}") }
+      solver = Kiwi::Solver.new
+      constrain(solver, variables.first == 0, REQUIRED)
+      constrain(solver, variables.last == scaled_total, REQUIRED)
+      variables.each do |variable|
+        constrain(solver, variable >= 0, REQUIRED)
+        constrain(solver, variable <= scaled_total, REQUIRED)
+      end
+      variables.each_cons(2) { |pair| constrain(solver, pair[0] <= pair[1], REQUIRED) }
+
+      # Flex::Start, Ratatui's default: no leading space, fixed internal
+      # spacing, and any unused room trails after the final segment.
+      constrain(solver, variables[1] == variables[0], REQUIRED)
+      (1...count).each do |index|
+        constrain(solver, variables[index * 2 + 1] - variables[index * 2] == @spacing.clamp(0, Int32::MAX) * precision, REQUIRED / 10.0)
+      end
+      constrain(solver, variables.last - variables[-2] == scaled_total, MEDIUM / 10.0)
+
+      segments = @constraints.map_with_index { |_, index| {variables[index * 2 + 1], variables[index * 2 + 2]} }
       @constraints.each_with_index do |constraint, index|
-        sizes[index] = case constraint.kind
-                       when .length?     then constraint.value
-                       when .percentage? then total * constraint.value.clamp(0, 100) // 100
-                       when .ratio?      then constraint.denominator > 0 ? total * constraint.value // constraint.denominator : 0
-                       when .min?        then constraint.value
-                       else                   0
-                       end
-        flexible << index if constraint.kind.min? || constraint.kind.max? || constraint.kind.fill?
+        start, finish = segments[index]
+        size = finish - start
+        case constraint.kind
+        when .min?
+          constrain(solver, size >= constraint.value * precision, STRONG * 100.0)
+          constrain(solver, size == scaled_total, MEDIUM)
+        when .max?
+          constrain(solver, size <= constraint.value * precision, STRONG * 100.0)
+          constrain(solver, size == constraint.value * precision, MEDIUM * 10.0)
+        when .length?
+          constrain(solver, size == constraint.value * precision, STRONG * 10.0)
+        when .percentage?
+          constrain(solver, size == scaled_total * constraint.value / 100.0, STRONG)
+        when .ratio?
+          denominator = {constraint.denominator, 1}.max
+          constrain(solver, size == scaled_total * constraint.value / denominator, STRONG / 10.0)
+        when .fill?
+          constrain(solver, size == scaled_total, MEDIUM)
+        end
       end
-      used = sizes.sum
-      remaining = (total - used).clamp(0, Int32::MAX)
-      weights = flexible.sum { |i| @constraints[i].kind.fill? ? @constraints[i].value.clamp(1, Int32::MAX) : 1 }
-      flexible.each_with_index do |index, position|
-        share = position == flexible.size - 1 ? remaining : remaining * (@constraints[index].kind.fill? ? @constraints[index].value.clamp(1, Int32::MAX) : 1) // weights
-        sizes[index] += share
-        remaining -= share
-        weights -= @constraints[index].kind.fill? ? @constraints[index].value.clamp(1, Int32::MAX) : 1
-        sizes[index] = {sizes[index], @constraints[index].value}.min if @constraints[index].kind.max?
+
+      flexible = @constraints.each_with_index.select { |constraint, _| constraint.kind.fill? || constraint.kind.min? }.to_a
+      flexible.each_combination(2) do |pair|
+        left_constraint, left_index = pair[0]
+        right_constraint, right_index = pair[1]
+        left_weight = left_constraint.kind.fill? ? {left_constraint.value, 1}.max.to_f64 : 1.0
+        right_weight = right_constraint.kind.fill? ? {right_constraint.value, 1}.max.to_f64 : 1.0
+        left_start, left_finish = segments[left_index]
+        right_start, right_finish = segments[right_index]
+        constrain(solver, right_weight * (left_finish - left_start) == left_weight * (right_finish - right_start), MEDIUM / 10.0)
       end
-      overflow = sizes.sum - total
-      sizes.reverse_each.with_index do |size, reverse_index|
-        break if overflow <= 0
-        index = sizes.size - reverse_index - 1
-        reduction = {size, overflow}.min
-        sizes[index] -= reduction
-        overflow -= reduction
+      segments.each_cons(2) do |pair|
+        left_start, left_finish = pair[0]
+        right_start, right_finish = pair[1]
+        constrain(solver, left_finish - left_start == right_finish - right_start, WEAK)
       end
-      sizes
+
+      solver.update_variables
+      segments.map do |start, finish|
+        rounded_start = (start.value.round / precision).round.to_i
+        rounded_finish = (finish.value.round / precision).round.to_i
+        {rounded_start, {rounded_finish - rounded_start, 0}.max}
+      end
+    end
+
+    private def cumulative_ranges(total : Int32, fractions : Array(Float64)) : Array(Tuple(Int32, Int32))
+      cursor = 0
+      cumulative = 0.0
+      fractions.map do |fraction|
+        cumulative += fraction
+        finish = {round_half_up(total * cumulative), total}.min
+        result = {cursor, {finish - cursor, 0}.max}
+        cursor = finish
+        result
+      end
+    end
+
+    private def round_half_up(value : Float64) : Int32
+      (value + 0.5).floor.to_i
+    end
+
+    private def constrain(solver : Kiwi::Solver, constraint : Kiwi::Constraint, strength : Float64)
+      constraint.strength = strength
+      solver.add_constraint(constraint)
     end
   end
 end
