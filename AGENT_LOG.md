@@ -3194,3 +3194,12 @@ M  AGENT_LOG.md
   pass, including the real-PTY resize probe. Focused lint is clean on the
   CryTUI resize implementation and reports only three pre-existing unused test
   lambda arguments in the broader app spec.
+
+## 2026-07-19 — Resolve live audio inputs for volume changes
+
+- Routed `set_volume` through the same live-snapshot audio resolver already
+  used by mute and toggle-mute, removing the last config-only interaction path.
+- Added a server-owned OBS regression that changes and refreshes the volume of
+  an input while the configured audio list is completely empty.
+- Validation: format, debug/release builds, the focused 37-example command/
+  dispatcher suite, and the complete 406-example suite pass.
