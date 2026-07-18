@@ -95,7 +95,7 @@ module Obsctl
           refresh_snapshot
           object({"message" => "toggled mute: #{input.name}"})
         when "set_volume"
-          input = Domain::Aliases.resolve_audio(@config, required_target(command))
+          input = resolve_audio(required_target(command))
           percent = command.percent
           raise Domain::CommandParseError.new("missing volume percent") unless percent
           @supervisor.with_client(&.set_volume(input.name, percent))
