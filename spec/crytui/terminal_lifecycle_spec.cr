@@ -17,6 +17,9 @@ describe "CryTUI terminal lifecycle" do
     terminal.draw(&.buffer.set_string(0, 0, "small"))
     shrink_output = output.to_s.byte_slice(before_shrink, output.bytesize - before_shrink)
     shrink_output.should start_with("\e[0m\e[2J\e[H")
+    # A resize must repaint blank cells too; otherwise an old border can remain
+    # one column beside the new edge when the terminal ignores/defers CSI 2J.
+    shrink_output.should contain("\e[2;5H ")
     terminal.area.should eq(CryTUI::Rect.new(0, 0, 5, 2))
 
     before_expand = output.bytesize
