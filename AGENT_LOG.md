@@ -3050,3 +3050,17 @@ M  AGENT_LOG.md
   audio volume controls.
 - Covered Unicode palette characters, F2, Ctrl+vim/arrows, panel activation,
   completion cycling, and resource completion with focused specs.
+
+## 2026-07-18 — Add styled lists and first dashboard widgets
+
+- Added CryTUI styled spans/lines, Unicode-aware left/center/right alignment,
+  styled multi-line text, variable-height list items, selection state,
+  automatic selected-item scrolling, and full-row highlights.
+- Added configurable ASCII, rounded, thick, and double border sets.
+- Added the initial Claude, Nord, and terminal-safe Mono theme definitions plus
+  case-insensitive lookup and safe truecolor hex parsing.
+- Ported header, scenes, audio meter, connection/unavailable, and command
+  palette widgets from the Rust reference.
+- Added memory-buffer rendering contracts covering connected/disconnected,
+  empty/selected resources, scene metadata, audio mute/volume/meter display,
+  server startup guidance, result reveal, and completion selection.

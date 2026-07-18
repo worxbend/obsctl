@@ -100,6 +100,15 @@ model and event applier consumes only local IPC state/log/event messages. It
 does not import or instantiate the OBS client. This establishes the required
 thin-client boundary before widget rendering is ported.
 
+The first application-driven widget expansion is now implemented. CryTUI has
+styled spans/lines, Unicode-aware alignment, scrollable variable-height lists,
+stateful selection, full-row highlights, and ASCII/rounded/thick/double border
+sets. obsctl uses those primitives for its header, scenes, logarithmic audio
+meters, connection/unavailable screens, and command palette. Direct buffer
+specs cover connected, disconnected, selected, empty, metered, and completion
+states. The three initial themes are Claude, Nord, and Mono; the full reference
+theme catalog remains an explicit parity item.
+
 ## Delivery Sequence
 
 1. Harden core geometry, Unicode display width, layout allocation, styled text,

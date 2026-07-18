@@ -5,13 +5,31 @@ module CryTUI
       All
     end
 
+    struct BorderSet
+      getter top_left : String
+      getter top_right : String
+      getter bottom_left : String
+      getter bottom_right : String
+      getter horizontal : String
+      getter vertical : String
+
+      def initialize(@top_left, @top_right, @bottom_left, @bottom_right, @horizontal, @vertical)
+      end
+
+      ASCII   = new("+", "+", "+", "+", "-", "|")
+      ROUNDED = new("╭", "╮", "╰", "╯", "─", "│")
+      THICK   = new("┏", "┓", "┗", "┛", "━", "┃")
+      DOUBLE  = new("╔", "╗", "╚", "╝", "═", "║")
+    end
+
     struct Block
       getter title : String?
       getter borders : Borders
       getter style : Style
       getter border_style : Style
+      getter border_set : BorderSet
 
-      def initialize(@title = nil, @borders = Borders::All, @style = Style.new, @border_style = Style.new)
+      def initialize(@title = nil, @borders = Borders::All, @style = Style.new, @border_style = Style.new, @border_set = BorderSet::ASCII)
       end
 
       def inner(area : Rect) : Rect
@@ -24,12 +42,14 @@ module CryTUI
         return unless @borders.all?
         left, right, top, bottom = area.left, area.right - 1, area.top, area.bottom - 1
         (left..right).each do |x|
-          buffer.set_string(x, top, x == left || x == right ? "+" : "-", @border_style)
-          buffer.set_string(x, bottom, x == left || x == right ? "+" : "-", @border_style) if bottom != top
+          top_symbol = x == left ? @border_set.top_left : (x == right ? @border_set.top_right : @border_set.horizontal)
+          bottom_symbol = x == left ? @border_set.bottom_left : (x == right ? @border_set.bottom_right : @border_set.horizontal)
+          buffer.set_string(x, top, top_symbol, @border_style)
+          buffer.set_string(x, bottom, bottom_symbol, @border_style) if bottom != top
         end
         (top + 1...bottom).each do |y|
-          buffer.set_string(left, y, "|", @border_style)
-          buffer.set_string(right, y, "|", @border_style) if right != left
+          buffer.set_string(left, y, @border_set.vertical, @border_style)
+          buffer.set_string(right, y, @border_set.vertical, @border_style) if right != left
         end
         buffer.set_string(left + 2, top, " #{@title} ", @border_style, area.width - 4) if @title && area.width >= 4
       end
@@ -52,6 +72,102 @@ module CryTUI
         @text.lines.first(content.height).each_with_index do |line, index|
           buffer.set_string(content.x, content.y + index, line, @style, content.width)
         end
+      end
+    end
+
+    struct StyledText
+      getter lines : Array(Line)
+      getter style : Style
+      getter block : Block?
+      getter scroll : Int32
+
+      def initialize(@lines, @style = Style.new, @block = nil, @scroll = 0)
+      end
+
+      def render(area : Rect, buffer : Buffer)
+        content = area
+        if block = @block
+          block.render(area, buffer)
+          content = block.inner(area)
+        end
+        return if content.empty?
+        @lines.skip(@scroll.clamp(0, Int32::MAX)).first(content.height).each_with_index do |line, index|
+          line.render(buffer, Rect.new(content.x, content.y + index, content.width, 1), @style)
+        end
+      end
+    end
+
+    struct ListItem
+      getter lines : Array(Line)
+      getter style : Style
+
+      def initialize(@lines, @style = Style.new)
+      end
+
+      def self.from(text : String, style = Style.new)
+        new([Line.from(text)], style)
+      end
+
+      def height : Int32
+        @lines.size
+      end
+    end
+
+    class ListState
+      property selected : Int32?
+      property offset : Int32
+
+      def initialize(@selected = nil, @offset = 0)
+      end
+    end
+
+    struct List
+      getter items : Array(ListItem)
+      getter style : Style
+      getter highlight_style : Style
+      getter block : Block?
+
+      def initialize(@items, @style = Style.new, @highlight_style = Style.new, @block = nil)
+      end
+
+      def render(area : Rect, buffer : Buffer, state : ListState)
+        content = area
+        if block = @block
+          block.render(area, buffer)
+          content = block.inner(area)
+        end
+        return if content.empty? || @items.empty?
+        clamp_state(state, content.height)
+        y = content.y
+        @items.each_with_index.skip(state.offset).each do |item, index|
+          break if y >= content.bottom
+          selected = state.selected == index
+          visible_height = {item.height, content.bottom - y}.min
+          inherited = @style.patch(item.style)
+          inherited = inherited.patch(@highlight_style) if selected
+          if selected
+            buffer.set_style(Rect.new(content.x, y, content.width, visible_height), inherited)
+          end
+          item.lines.first(visible_height).each do |line|
+            line.render(buffer, Rect.new(content.x, y, content.width, 1), inherited)
+            y += 1
+          end
+        end
+      end
+
+      private def clamp_state(state : ListState, height : Int32)
+        selected = state.selected
+        return state.offset = state.offset.clamp(0, {@items.size - 1, 0}.max) unless selected
+        selected = selected.clamp(0, @items.size - 1)
+        state.selected = selected
+        state.offset = {state.offset, selected}.min.clamp(0, Int32::MAX)
+        while item_rows(state.offset, selected) > height
+          state.offset += 1
+        end
+      end
+
+      private def item_rows(from : Int32, through : Int32) : Int32
+        @items[from..through].sum(&.height)
       end
     end
 
