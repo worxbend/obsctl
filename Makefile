@@ -3,6 +3,7 @@ CRYSTAL ?= crystal
 .PHONY: build test format lint bootstrap-obsctl-rs-contract-fixtures contract-rs-compat run release
 
 build:
+	mkdir -p bin
 	$(CRYSTAL) build src/obsctl.cr -o bin/obsctl
 
 test:
@@ -24,4 +25,5 @@ run:
 	$(CRYSTAL) run src/obsctl.cr
 
 release:
+	mkdir -p bin
 	$(CRYSTAL) build --release src/obsctl.cr -o bin/obsctl

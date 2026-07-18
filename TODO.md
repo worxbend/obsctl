@@ -19,6 +19,25 @@ Critical rule:
 - CLI and TUI clients must not create their own OBS WebSocket connection in normal mode.
 - Direct OBS access is allowed only inside server mode or explicit embedded-server mode.
 
+### TUI / CryTUI Progress
+
+- [x] Research the Ratatui 0.29 rendering architecture and inventory the subset
+  used by `obsctl-rs`.
+- [x] Evaluate Crysterm and `dsisnero/terminal` as possible Crystal backbones;
+  record the architecture, maturity, and licensing decision in
+  `docs/tui-research.md`.
+- [x] Add the first in-tree `CryTUI` substrate: geometry, constraint layout,
+  styles, cells, clipping, cell-level diffing, immediate-mode frames, memory
+  test backend, and initial dashboard widget primitives.
+- [ ] Add Unicode display-width handling and finish Ratatui-compatible layout
+  allocation edge cases.
+- [ ] Add ANSI backend, raw terminal lifecycle, input parser, resize handling,
+  and PTY restoration specs.
+- [ ] Port the Rust TUI model, IPC event applier, completion, and input actions.
+- [ ] Port the dashboard widgets and their TestBackend rendering contracts.
+- [ ] Wire `obsctl` / `obsctl tui` as Unix IPC clients with the unavailable
+  screen and command palette.
+
 ### Runtime Modes
 
 Server mode:

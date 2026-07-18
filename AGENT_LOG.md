@@ -2998,3 +2998,15 @@ M  spec/support/optional_obsctl_rs_compat.cr
 2026-06-21T10:13:40Z iteration final-10 checkpoint started
 2026-06-21T10:13:40Z iteration final-10 checkpoint status before commit:
 M  AGENT_LOG.md
+## 2026-07-18 — Start CryTUI rendering foundation
+
+- Audited the approximately 6,600-line `obsctl-rs` TUI and Ratatui 0.29's
+  immediate-mode buffer, layout, backend, and TestBackend architecture.
+- Evaluated active Crysterm (AGPL-3.0, retained widget tree) and
+  `dsisnero/terminal` (small MIT-oriented 0.1.0 implementation) as backbones;
+  documented why neither should currently be adopted wholesale.
+- Added `src/crytui` geometry, constraints, styles, cell buffer, cell diff,
+  terminal/frame, memory backend, and initial block/paragraph/gauge/sparkline
+  widgets with focused specs.
+- Fixed `make build` and `make release` to create their output directory.
+- Validation: focused CryTUI specs and the full 272-example suite pass.
