@@ -119,7 +119,7 @@ module Obsctl
           return handle(Action.new(ActionKind::OpenSettings))
         end
         if normalized == "/help"
-          return ActionOutcome.new(message: "Commands: /scene /profile /collection /mute /unmute /toggle-mute /vol /status /obs-status /server-status /reload-config /dump-config /validate-config /themes /reconnect /quit")
+          return ActionOutcome.new(message: "Commands: /scene /profile /collection /mute /unmute /toggle-mute /vol /stream /rec /status /obs-status /server-status /reload-config /dump-config /validate-config /themes /reconnect /quit")
         end
         parsed = Domain::CommandParser.new.parse(input)
         command(payload_for(parsed))
@@ -141,6 +141,8 @@ module Obsctl
         when Domain::UnmuteCommand         then IPC::CommandPayload.new("unmute", command.target)
         when Domain::ToggleMuteCommand     then IPC::CommandPayload.new("toggle_mute", command.target)
         when Domain::VolumeCommand         then IPC::CommandPayload.new("set_volume", command.target, command.percent)
+        when Domain::ToggleStreamCommand   then IPC::CommandPayload.new("toggle_stream")
+        when Domain::ToggleRecordCommand   then IPC::CommandPayload.new("toggle_record")
         else                                    raise Domain::CommandParseError.new("unsupported TUI command")
         end
       end

@@ -11,6 +11,7 @@ require "./protocol/message"
 require "./requests/version"
 require "./requests/scenes"
 require "./requests/audio"
+require "./requests/outputs"
 require "./state/obs_snapshot"
 require "../config/config"
 require "../domain/errors"
@@ -179,6 +180,25 @@ module Obsctl
         request(Requests::Audio::SET_INPUT_VOLUME, Requests::Audio.set_volume(name, Domain::Aliases.volume_percent_to_mul(percent)))
       end
 
+      def output_state : State::OutputState
+        stream = request(Requests::Outputs::GET_STREAM_STATUS).response_data || JSON.parse("{}")
+        record = request(Requests::Outputs::GET_RECORD_STATUS).response_data || JSON.parse("{}")
+        State::OutputState.new(
+          streaming: stream["outputActive"]?.try(&.as_bool?),
+          recording: record["outputActive"]?.try(&.as_bool?)
+        )
+      end
+
+      def toggle_stream : Bool?
+        data = request(Requests::Outputs::TOGGLE_STREAM).response_data || JSON.parse("{}")
+        data["outputActive"]?.try(&.as_bool?)
+      end
+
+      def toggle_record : Bool?
+        data = request(Requests::Outputs::TOGGLE_RECORD).response_data || JSON.parse("{}")
+        data["outputActive"]?.try(&.as_bool?)
+      end
+
       # Fetches only the scene list and current scene for targeted state updates.
       def scene_snapshot : {current_scene: String?, scenes: Array(State::SceneState)}
         current = current_scene
@@ -247,7 +267,8 @@ module Obsctl
           obs_websocket_version: version_data["obsWebSocketVersion"]?.try(&.as_s),
           current_scene: current,
           scenes: scenes,
-          audio_inputs: audio
+          audio_inputs: audio,
+          output: output_state
         )
       end
 

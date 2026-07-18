@@ -50,6 +50,8 @@ Critical rule:
 - [ ] Match Ratatui constraint degradation on narrow/short terminal layouts.
 - [x] Render the complete primary dashboard frame with Rust-compatible header,
   live bar, scenes/audio, profiles/collections, logs, and command palette areas.
+- [x] Wire `/stream` and `/rec` from parser through thin IPC clients to
+  server-owned OBS output requests, snapshots, events, and the live bar.
 - [x] Add the persistent state/events/logs subscription, correlated short-lived
   command client, typed dispatcher, raw input/render loop, retry handling, and
   `obsctl` / `obsctl tui` CLI entrypoints.

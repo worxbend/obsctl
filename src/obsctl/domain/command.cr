@@ -91,5 +91,11 @@ module Obsctl
       def initialize(@target : String, @percent : Int32)
       end
     end
+
+    struct ToggleStreamCommand < Command
+    end
+
+    struct ToggleRecordCommand < Command
+    end
   end
 end

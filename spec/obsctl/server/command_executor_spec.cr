@@ -273,6 +273,30 @@ describe Obsctl::Server::CommandExecutor do
     expect_error(response, Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE)
   end
 
+  it "toggles stream and record through the server-owned OBS client" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state)
+    begin
+      supervisor.start
+      next_command_executor_websocket_connection_id(obs)
+      obs.next_identify(2.seconds).should_not be_nil
+      wait_for_command_executor_supervisor { state.snapshot.connected }
+      executor = default_executor(obs.config, supervisor: supervisor, state: state)
+
+      stream = executor.execute(command_request(Obsctl::IPC::CommandPayload.new("toggle_stream")))
+      record = executor.execute(command_request(Obsctl::IPC::CommandPayload.new("toggle_record")))
+      stream.result.not_nil!["message"].as_s.should eq("streaming started")
+      record.result.not_nil!["message"].as_s.should eq("recording started")
+      obs.streaming?.should be_true
+      obs.recording?.should be_true
+      state.snapshot.output.should eq(Obsctl::OBS::State::OutputState.new(true, true))
+    ensure
+      supervisor.try(&.stop)
+      obs.try(&.stop)
+    end
+  end
+
   it "accepts reconnect only when the supervisor is alive" do
     state = Obsctl::Server::StateStore.new
     supervisor = ReconnectSupervisor.new(state, true)

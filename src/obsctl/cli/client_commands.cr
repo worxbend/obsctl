@@ -88,6 +88,10 @@ module Obsctl
           IPC::CommandPayload.new("toggle_mute", command.target)
         when Domain::VolumeCommand
           IPC::CommandPayload.new("set_volume", command.target, command.percent)
+        when Domain::ToggleStreamCommand
+          IPC::CommandPayload.new("toggle_stream")
+        when Domain::ToggleRecordCommand
+          IPC::CommandPayload.new("toggle_record")
         when Domain::DumpConfigCommand
           IPC::CommandPayload.new("dump_config")
         when Domain::ReloadConfigCommand

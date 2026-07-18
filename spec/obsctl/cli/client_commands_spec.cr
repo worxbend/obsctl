@@ -16,6 +16,17 @@ private class FakeClientCommandsUnixClient < Obsctl::IPC::UnixClient
 end
 
 describe Obsctl::CLI::ClientCommands do
+  it "routes stream and record toggles to distinct IPC commands" do
+    response = Obsctl::IPC::Response.new("req-000001", true, JSON.parse(%({"message":"ok"})))
+    stream = FakeClientCommandsUnixClient.new(response)
+    Obsctl::CLI::ClientCommands.new(stream).request(Obsctl::Domain::ToggleStreamCommand.new)
+    stream.request_payload.not_nil!.command.not_nil!.name.should eq("toggle_stream")
+
+    record = FakeClientCommandsUnixClient.new(response)
+    Obsctl::CLI::ClientCommands.new(record).request(Obsctl::Domain::ToggleRecordCommand.new)
+    record.request_payload.not_nil!.command.not_nil!.name.should eq("toggle_record")
+  end
+
   it "sends distinct IPC commands for combined, OBS-only, and daemon-only status" do
     response = Obsctl::IPC::Response.new("req-000001", true, JSON.parse(%({"message":"ok"})))
 

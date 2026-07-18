@@ -46,6 +46,8 @@ module Obsctl
         port : Int32? = nil,
         @request_delays : Hash(String, Time::Span) = {} of String => Time::Span,
         @request_timeout_ms : Int32 = 500,
+        @streaming : Bool = false,
+        @recording : Bool = false,
       )
         @host = "127.0.0.1"
         @server = HTTP::Server.new([websocket_handler])
@@ -102,6 +104,14 @@ module Obsctl
 
       def input(name : String) : AudioInput?
         @mutex.synchronize { @inputs.find { |input| input.name == name } }
+      end
+
+      def streaming? : Bool
+        @mutex.synchronize { @streaming }
+      end
+
+      def recording? : Bool
+        @mutex.synchronize { @recording }
       end
 
       def identify_data : JSON::Any?
@@ -537,6 +547,16 @@ module Obsctl
               result = false
               comment = "input not found"
             end
+          when "GetStreamStatus"
+            response_data = JSON.parse({"outputActive" => @streaming}.to_json)
+          when "GetRecordStatus"
+            response_data = JSON.parse({"outputActive" => @recording}.to_json)
+          when "ToggleStream"
+            @streaming = !@streaming
+            response_data = JSON.parse({"outputActive" => @streaming}.to_json)
+          when "ToggleRecord"
+            @recording = !@recording
+            response_data = JSON.parse({"outputActive" => @recording}.to_json)
           else
             result = false
             comment = "unsupported request: #{request_type}"

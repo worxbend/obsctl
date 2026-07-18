@@ -90,6 +90,14 @@ module Obsctl
           @supervisor.with_client(&.set_volume(input.name, percent))
           refresh_snapshot
           object({"message" => "volume set: #{input.name} #{percent}%"})
+        when "toggle_stream"
+          active = @supervisor.with_client(&.toggle_stream)
+          refresh_snapshot
+          object({"message" => "streaming #{output_state(active)}"})
+        when "toggle_record"
+          active = @supervisor.with_client(&.toggle_record)
+          refresh_snapshot
+          object({"message" => "recording #{output_state(active)}"})
         when "dump_config"
           @supervisor.with_client do |client|
             merged = Config::ConfigDump.merge(@config, client.scene_names, client.input_names)
@@ -117,6 +125,10 @@ module Obsctl
       private def refresh_snapshot : Nil
         @supervisor.with_client { |client| @state.update(client.snapshot) }
       rescue Domain::ObsctlError
+      end
+
+      private def output_state(active : Bool?) : String
+        active.nil? ? "toggled" : (active ? "started" : "stopped")
       end
 
       private def server_status : JSON::Any
