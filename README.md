@@ -1,5 +1,9 @@
 # obsctl-cr
 
+The TUI is being built on an in-tree immediate-mode Crystal library named
+`CryTUI`. Its architecture and the Ratatui/Crystal library evaluation are
+documented in [docs/tui-research.md](docs/tui-research.md).
+
 `obsctl-cr` is a Crystal 1.20 CLI/TUI for controlling OBS Studio through obs-websocket 5.x.
 
 ## Build
