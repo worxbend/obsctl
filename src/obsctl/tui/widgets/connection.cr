@@ -1,4 +1,5 @@
 require "./chrome"
+require "../anim"
 
 module Obsctl
   module TUI
@@ -37,7 +38,9 @@ module Obsctl
             CryTUI::Line.from(""),
             CryTUI::Line.from("Press R to retry or q to quit", CryTUI::Style.new(foreground: theme.muted)),
           ]
-          block = CryTUI::Widgets::Block.new(title: "SERVER UNAVAILABLE", border_style: CryTUI::Style.new(foreground: theme.danger), border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::DOUBLE : CryTUI::Widgets::BorderSet::ASCII)
+          title = model.advanced_ui ? Anim.gradient_line("SERVER UNAVAILABLE", theme.danger, theme.warning, model.anim.frame, true) : CryTUI::Line.from("SERVER UNAVAILABLE", CryTUI::Style.new(foreground: theme.danger, modifiers: CryTUI::Modifier::Bold))
+          border = model.advanced_ui ? Anim.blend(theme.danger, theme.warning, model.anim.pulse(24_u64)) : theme.danger
+          block = CryTUI::Widgets::Block.new(title: title, border_style: CryTUI::Style.new(foreground: border), border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::DOUBLE : CryTUI::Widgets::BorderSet::ASCII)
           CryTUI::Widgets::StyledText.new(lines, block: block).render(area, buffer)
         end
       end

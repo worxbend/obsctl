@@ -1,4 +1,5 @@
 require "./chrome"
+require "../anim"
 
 module Obsctl
   module TUI
@@ -8,9 +9,11 @@ module Obsctl
 
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           theme = model.theme
+          pulse = model.anim.pulse(30_u64)
+          title = model.advanced_ui ? Anim.gradient_line("◈ OBSCTL // BROADCAST COMMAND CENTER", theme.accent, theme.accent_alt, model.anim.frame, true) : CryTUI::Line.from("OBSCTL // BROADCAST COMMAND CENTER", CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold))
           block = CryTUI::Widgets::Block.new(
-            title: "OBSCTL // BROADCAST COMMAND CENTER",
-            border_style: CryTUI::Style.new(foreground: theme.border),
+            title: title,
+            border_style: CryTUI::Style.new(foreground: model.advanced_ui ? Anim.blend(theme.border, theme.accent, pulse * 0.45) : theme.border),
             border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
           )
           daemon = model.connected_to_daemon
