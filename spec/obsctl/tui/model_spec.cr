@@ -41,6 +41,21 @@ describe Obsctl::TUI::Model do
     model.focused_scene.try(&.name).should eq("Main")
   end
 
+  it "excludes hidden scenes from navigation while retaining them in the snapshot" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = tui_snapshot.copy_with(scenes: [
+      Obsctl::OBS::State::SceneState.new("Main", active: true),
+      Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
+      Obsctl::OBS::State::SceneState.new("Cam"),
+    ])
+    model.clamp_cursors
+
+    model.scenes.map(&.name).should eq(["Main", "Cam"])
+    model.snapshot.not_nil!.scenes.map(&.name).should eq(["Main", "Utility", "Cam"])
+    model.move_down
+    model.focused_scene.try(&.name).should eq("Cam")
+  end
+
   it "caps rolling logs at 200 entries" do
     model = Obsctl::TUI::Model.new
     210.times { |index| model.push_log(Obsctl::TUI::LogEntry.new(Obsctl::Runtime::LogLevel::Info, "line #{index}")) }

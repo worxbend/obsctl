@@ -20,6 +20,13 @@ require "../domain/aliases"
 
 module Obsctl
   module OBS
+    record TelemetrySample,
+      stats : State::ObsStats,
+      stream_active : Bool,
+      stream_bytes : Int64?,
+      stream_duration_ms : Int64?,
+      record_duration_ms : Int64?
+
     # obs-websocket 5.x client used by the server-owned OBS supervisor.
     class Client
       def initialize(
@@ -220,6 +227,23 @@ module Obsctl
         State::ObsStats.from_response(data)
       end
 
+      # Fetches the performance and output counters used by the daemon's
+      # periodic telemetry poller. OBS exposes bytes rather than bitrate, so
+      # the supervisor derives kbit/s from consecutive samples.
+      def telemetry_sample : TelemetrySample
+        stream = request(Requests::Outputs::GET_STREAM_STATUS).response_data || JSON.parse("{}")
+        record = request(Requests::Outputs::GET_RECORD_STATUS).response_data || JSON.parse("{}")
+        stream_active = stream["outputActive"]?.try(&.as_bool?) || false
+        record_active = record["outputActive"]?.try(&.as_bool?) || false
+        TelemetrySample.new(
+          stats: stats,
+          stream_active: stream_active,
+          stream_bytes: stream["outputBytes"]?.try(&.as_i64?),
+          stream_duration_ms: stream_active ? stream["outputDuration"]?.try(&.as_i64?) : nil,
+          record_duration_ms: record_active ? record["outputDuration"]?.try(&.as_i64?) : nil
+        )
+      end
+
       # Fetches only the scene list and current scene for targeted state updates.
       def scene_snapshot : {current_scene: String?, scenes: Array(State::SceneState)}
         current = current_scene
@@ -230,7 +254,8 @@ module Obsctl
             alias: configured.try(&.alias),
             shortcut: configured.try(&.shortcut),
             group: configured.try(&.group),
-            active: current == name
+            active: current == name,
+            hidden: configured.try(&.hidden) || false
           )
         end
         {current_scene: current, scenes: scenes}
@@ -265,7 +290,8 @@ module Obsctl
             alias: configured.try(&.alias),
             shortcut: configured.try(&.shortcut),
             group: configured.try(&.group),
-            active: current == name
+            active: current == name,
+            hidden: configured.try(&.hidden) || false
           )
         end
         audio = input_names.map do |name|

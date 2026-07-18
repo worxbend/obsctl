@@ -25,6 +25,27 @@ private def obs_snapshot(
 end
 
 describe Obsctl::Server::StateStore do
+  it "updates polled telemetry without losing other authoritative state" do
+    updates = [] of JSON::Any
+    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })
+    state.update(obs_snapshot)
+    updates.clear
+    stats = Obsctl::OBS::State::ObsStats.new(cpu_usage_percent: 17.5, active_fps: 60.0)
+
+    state.update_stats(stats, 4_500.0, 65_000_i64, 5_000_i64)
+
+    snapshot = state.snapshot
+    snapshot.current_scene.should eq("Main Camera")
+    snapshot.scenes.size.should eq(2)
+    snapshot.stats.should eq(stats)
+    snapshot.stream_bitrate_kbps.should eq(4_500.0)
+    snapshot.stream_duration_ms.should eq(65_000_i64)
+    snapshot.record_duration_ms.should eq(5_000_i64)
+    updates.size.should eq(1)
+    updates.first["stats"]["cpu_usage_percent"].as_f.should eq(17.5)
+    updates.first["stream_bitrate_kbps"].as_f.should eq(4_500.0)
+  end
+
   it "updates stream and record flags independently and publishes snapshots" do
     updates = [] of JSON::Any
     state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })

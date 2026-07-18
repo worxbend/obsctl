@@ -12,7 +12,7 @@ module Obsctl
         input_set = input_names.to_set
 
         scenes = config.scenes.map do |scene|
-          SceneConfig.new(scene.name, scene.alias, scene.shortcut, scene.group, !scene_set.includes?(scene.name))
+          SceneConfig.new(scene.name, scene.alias, scene.shortcut, scene.group, !scene_set.includes?(scene.name), scene.hidden)
         end
         known_scene_names = scenes.map(&.name).to_set
         scene_names.each do |name|
