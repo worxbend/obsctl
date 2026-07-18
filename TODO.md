@@ -32,10 +32,13 @@ Critical rule:
 - [x] Add Unicode grapheme/display-width handling for combining text, CJK,
   flags, and ZWJ emoji without splitting wide cells at clipping boundaries.
 - [ ] Finish Ratatui-compatible layout allocation edge cases.
-- [ ] Complete the ANSI terminal layer: raw terminal lifecycle, live size and
-  resize handling, and PTY restoration specs. Cell-diff output, styling,
-  alternate-screen cleanup, and the incremental key/paste parser are present.
-- [ ] Port the Rust TUI model, IPC event applier, completion, and input actions.
+- [x] Complete the ANSI terminal layer: raw terminal lifecycle, live size and
+  resize handling, PTY restoration specs, cell-diff output, styling,
+  alternate-screen cleanup, and incremental key/paste parsing.
+- [x] Port the first Rust TUI model and IPC event-applier slice: panel focus,
+  cursors, palette completion state, rolling logs, result reveal, snapshots,
+  profiles/collections compatibility fields, scene flashes, and meters.
+- [ ] Port completion generation and map CryTUI key events to typed TUI actions.
 - [ ] Port the dashboard widgets and their TestBackend rendering contracts.
 - [ ] Wire `obsctl` / `obsctl tui` as Unix IPC clients with the unavailable
   screen and command palette.
