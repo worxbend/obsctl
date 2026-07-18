@@ -116,10 +116,10 @@ describe CryTUI::AnsiBackend do
     end
 
     output = io.to_s
-    output.should contain("\e[?25l\e[2J\e[H")
+    output.should contain("\e[?25l\e[?7l\e[2J\e[H")
     output.should contain("\e[1;38;2;1;2;3m界")
     output.should contain("\e[1;3H!")
-    output.should end_with("\e[0m\e[?25h")
+    output.should end_with("\e[0m\e[?7h\e[?25h")
   end
 
   it "restores terminal state when the render block raises" do
@@ -130,6 +130,6 @@ describe CryTUI::AnsiBackend do
     expect_raises(Exception, "boom") do
       terminal.run { raise "boom" }
     end
-    io.to_s.should end_with("\e[0m\e[?25h\e[?1049l")
+    io.to_s.should end_with("\e[0m\e[?7h\e[?25h\e[?1049l")
   end
 end

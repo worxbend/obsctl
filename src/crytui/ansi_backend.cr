@@ -33,13 +33,19 @@ module CryTUI
 
     def enter : Nil
       @io << "\e[?1049h" if @alternate_screen
-      @io << "\e[?25l\e[2J\e[H"
+      @io << "\e[?25l\e[?7l\e[2J\e[H"
       @io.flush
     end
 
     def leave : Nil
-      @io << "\e[0m\e[?25h"
+      @io << "\e[0m\e[?7h\e[?25h"
       @io << "\e[?1049l" if @alternate_screen
+      @io.flush
+      @last_style = Style.new
+    end
+
+    def clear : Nil
+      @io << "\e[0m\e[2J\e[H"
       @io.flush
       @last_style = Style.new
     end
