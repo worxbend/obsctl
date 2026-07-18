@@ -36,6 +36,7 @@ module Obsctl
           reconnect: config.reconnect,
           scenes: scenes,
           audio: AudioConfig.new(inputs),
+          ui: config.ui,
         )
         validate_conflicts!(merged)
         merged

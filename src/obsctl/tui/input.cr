@@ -58,7 +58,7 @@ module Obsctl
 
         return action(ActionKind::OpenSettings) if function?(key, 2) || (character == 't' && control)
         return action(ActionKind::Quit) if character == 'q' || (character == 'c' && control)
-        return action(ActionKind::OpenPalette) if character == '/' || character == ':'
+        return action(ActionKind::OpenPalette) if character == ':' || (character && model.command_palette_prefix.includes?(character))
         return action(ActionKind::ReloadConfig) if character == 'r'
         return action(ActionKind::DumpConfig) if character == 'D'
         return action(ActionKind::RetryConnect) if character == 'R'

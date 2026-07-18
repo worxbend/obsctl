@@ -1,5 +1,6 @@
 require "../../crytui"
 require "../ipc/socket_path"
+require "../config/config"
 require "./dispatcher"
 require "./event_applier"
 require "./widgets/dashboard"
@@ -20,6 +21,32 @@ module Obsctl
       ESCAPE_DELAY    = 25.milliseconds
 
       getter model : Model
+
+      def self.from_config(config : Config::Config, socket_path : String = IPC::SocketPath.resolve, input : IO::FileDescriptor = STDIN, output : IO = STDOUT) : self
+        custom = config.ui.custom_theme.try do |theme|
+          CustomThemeSpec.new(
+            background: theme.bg, accent: theme.accent, accent_alt: theme.accent_alt,
+            foreground: theme.fg, muted: theme.muted, border: theme.border,
+            border_focus: theme.border_focus, success: theme.success, warning: theme.warning,
+            danger: theme.danger, info: theme.info, highlight_background: theme.highlight_bg,
+            highlight_foreground: theme.highlight_fg
+          )
+        end
+        prefix = config.ui.command_palette_prefix.empty? ? "/" : config.ui.command_palette_prefix
+        model = Model.new(
+          theme: Theme.resolve(config.ui.theme, custom),
+          show_icons: config.ui.show_icons,
+          advanced_ui: config.ui.advanced_ui,
+          command_palette_prefix: prefix
+        )
+        new(
+          socket_path: socket_path,
+          input: input,
+          output: output,
+          refresh: config.ui.refresh_interval_ms.clamp(10, 60_000).milliseconds,
+          model: model
+        )
+      end
 
       def initialize(
         @socket_path : String = IPC::SocketPath.resolve,

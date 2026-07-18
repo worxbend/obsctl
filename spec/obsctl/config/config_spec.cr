@@ -140,4 +140,31 @@ describe Obsctl::Config::Config do
     config.scenes.first.shortcut.should eq("2")
     config.audio.inputs.first.shortcut.should eq("3")
   end
+
+  it "round-trips TUI appearance and partial custom theme settings" do
+    config = Obsctl::Config::Config.from_yaml(<<-YAML)
+    version: 1
+    connection:
+      password_env: ""
+    ui:
+      refresh_interval_ms: 333
+      command_palette_prefix: ":"
+      advanced_ui: false
+      show_icons: false
+      theme: custom
+      locale: uk
+      custom_theme:
+        bg: "#010203"
+        accent: "aabbcc"
+    YAML
+
+    config.ui.refresh_interval_ms.should eq(333)
+    config.ui.command_palette_prefix.should eq(":")
+    config.ui.advanced_ui.should be_false
+    config.ui.show_icons.should be_false
+    config.ui.custom_theme.try(&.bg).should eq("#010203")
+
+    reparsed = Obsctl::Config::Config.from_yaml(config.to_yaml)
+    reparsed.ui.should eq(config.ui)
+  end
 end

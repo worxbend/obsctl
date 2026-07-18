@@ -106,8 +106,10 @@ stateful selection, full-row highlights, and ASCII/rounded/thick/double border
 sets. obsctl uses those primitives for its header, scenes, logarithmic audio
 meters, connection/unavailable screens, and command palette. Direct buffer
 specs cover connected, disconnected, selected, empty, metered, and completion
-states. The three initial themes are Claude, Nord, and Mono; the full reference
-theme catalog remains an explicit parity item.
+states. The complete 29-theme Rust reference catalog is available, along with
+partial custom RGB palettes whose missing or invalid fields safely inherit the
+Claude defaults. Runtime refresh timing, icon use, advanced rendering, and
+theme selection now come from the typed `ui` configuration.
 
 The primary dashboard now renders as a single frame using the same nested area
 contract as the Rust reference: fixed header/live/log/palette chrome, a flexible
