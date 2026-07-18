@@ -152,6 +152,8 @@ CPU/memory/disk/FPS/frame statistics, and active stream/record durations.
 Profile and collection selection are real server-owned OBS commands rather
 than client-only compatibility fields. The remaining telemetry gap is the
 Rust supervisor's periodic `outputBytes` delta calculation for bitrate.
+The live bar consumes that snapshot directly, including formatted LIVE/REC
+timers, CPU/FPS/memory values, bitrate, and Unicode or ASCII history graphs.
 
 ## Delivery Sequence
 
