@@ -3145,3 +3145,15 @@ M  AGENT_LOG.md
   suite, and the complete 397-example suite pass. Ameba still reports only
   existing findings in the touched legacy files (complexity, accessor naming,
   `not_nil!`, and verbose blocks); it identified no finding on the new paths.
+
+## 2026-07-19 — Show server logs in the terminal
+
+- Added an optional terminal sink to the runtime logger and wired foreground
+  and headless `obsctl server` execution to stderr.
+- Kept severity filtering and secret redaction identical across file and
+  terminal sinks, and isolated sink failures so an unwritable state log does
+  not suppress terminal diagnostics.
+- Added logger coverage for terminal mirroring, redaction, filtering, and file
+  sink failure.
+- Validation: format, debug/release builds, the focused 45-example
+  CLI/server/logger suite, and the complete 399-example suite pass.
