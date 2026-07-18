@@ -74,14 +74,17 @@ module Obsctl
       rescue
       end
 
-      def close_connections : Nil
+      def close_connections(
+        code : HTTP::WebSocket::CloseCode | Int32 | Nil = nil,
+        message : String? = nil,
+      ) : Nil
         sockets = @mutex.synchronize do
           existing = @websockets.dup
           @websockets.clear
           existing
         end
         sockets.each do |websocket|
-          websocket.close
+          websocket.close(code, message)
         rescue
         end
       end
@@ -588,7 +591,7 @@ module Obsctl
           when "GetProfileList"
             response_data = JSON.parse({
               "currentProfileName" => @current_profile,
-              "profiles"           => @profiles.map { |name| {"profileName" => name} },
+              "profiles"           => @profiles,
             }.to_json)
           when "SetCurrentProfile"
             name = data.try(&.["profileName"]?.try(&.as_s?)) || ""
