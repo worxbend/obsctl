@@ -5,13 +5,17 @@ module Obsctl
   module Domain
     # Parses CLI command text into typed command objects.
     class CommandParser
+      MAX_TARGET_TOKEN_LENGTH = 256
+
       # Parses one command line, including quoted arguments.
       def parse(input : String) : Command
-        tokens = tokenize(input.strip)
+        stripped = input.strip
+        tokens = tokenize(stripped)
         raise CommandParseError.new("empty command") if tokens.empty?
 
-        command = tokens[0]
+        command = sanitize_command(tokens[0])
         command = command[1..] if command.starts_with?("/")
+        command = command.downcase
 
         case command
         when "help"
@@ -52,26 +56,27 @@ module Obsctl
           DisconnectCommand.new
         when "set-scene", "scene"
           expect_count(tokens, 2)
-          SetSceneCommand.new(tokens[1])
+          SetSceneCommand.new(sanitize_target(tokens[1]))
         when "set-profile", "profile"
           expect_count(tokens, 2)
-          SetProfileCommand.new(tokens[1])
+          SetProfileCommand.new(sanitize_target(tokens[1]))
         when "set-collection", "collection", "scene-collection"
           expect_count(tokens, 2)
-          SetSceneCollectionCommand.new(tokens[1])
+          SetSceneCollectionCommand.new(sanitize_target(tokens[1]))
         when "mute"
           expect_count(tokens, 2)
-          MuteCommand.new(tokens[1])
+          MuteCommand.new(sanitize_target(tokens[1]))
         when "unmute"
           expect_count(tokens, 2)
-          UnmuteCommand.new(tokens[1])
+          UnmuteCommand.new(sanitize_target(tokens[1]))
         when "toggle-mute"
           expect_count(tokens, 2)
-          ToggleMuteCommand.new(tokens[1])
+          ToggleMuteCommand.new(sanitize_target(tokens[1]))
         when "vol", "volume"
           expect_count(tokens, 3)
+          raise CommandParseError.new("volume percentage must not be quoted") if stripped.ends_with?('"')
           percent = parse_percent(tokens[2])
-          VolumeCommand.new(tokens[1], percent)
+          VolumeCommand.new(sanitize_target(tokens[1]), percent)
         when "stream"
           expect_count(tokens, 1)
           ToggleStreamCommand.new
@@ -87,6 +92,23 @@ module Obsctl
         return if tokens.size == expected
 
         raise CommandParseError.new("wrong argument count for #{tokens[0]}")
+      end
+
+      private def sanitize_command(value : String) : String
+        sanitize_token(value, "command")
+      end
+
+      private def sanitize_target(value : String) : String
+        sanitize_token(value.strip, "target")
+      end
+
+      private def sanitize_token(value : String, label : String) : String
+        raise CommandParseError.new("#{label} must not be blank") if value.empty?
+        raise CommandParseError.new("#{label} must not contain control characters") if value.each_char.any?(&.control?)
+        if value.size > MAX_TARGET_TOKEN_LENGTH
+          raise CommandParseError.new("#{label} must be at most #{MAX_TARGET_TOKEN_LENGTH} characters")
+        end
+        value
       end
 
       private def parse_percent(value : String) : Int32

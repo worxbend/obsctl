@@ -12,12 +12,13 @@ module Obsctl
           theme = model.theme
           focused = model.focus.scenes?
           items = model.scenes.map_with_index do |scene, index|
-            flashing = flash?(model, scene.name)
+            flash = flash_intensity(model, scene.name)
+            active_color = flash > 0 ? Anim.blend(theme.success, theme.accent, flash) : theme.success
             marker = scene.active ? model.symbol("▶", ">") : model.symbol("◇", " ")
             spans = [
               CryTUI::Span.new(" #{(index + 1).to_s.rjust(2, '0')} ", CryTUI::Style.new(foreground: theme.muted)),
-              CryTUI::Span.new("#{marker} ", CryTUI::Style.new(foreground: scene.active ? theme.success : theme.muted)),
-              CryTUI::Span.new(scene.name, CryTUI::Style.new(foreground: flashing ? theme.accent : theme.foreground)),
+              CryTUI::Span.new("#{marker} ", CryTUI::Style.new(foreground: scene.active ? active_color : theme.muted)),
+              CryTUI::Span.new(scene.name, CryTUI::Style.new(foreground: flash > 0 ? active_color : theme.foreground)),
             ]
             spans << CryTUI::Span.new(" (#{scene.alias})", CryTUI::Style.new(foreground: theme.muted)) if scene.alias
             spans << CryTUI::Span.new(" [#{scene.shortcut}]", CryTUI::Style.new(foreground: theme.warning)) if scene.shortcut
@@ -31,10 +32,13 @@ module Obsctl
           CryTUI::Widgets::List.new(items, highlight_style: highlight, block: block).render(area, buffer, state)
         end
 
-        private def flash?(model : Model, name : String) : Bool
+        private def flash_intensity(model : Model, name : String) : Float64
           flash = model.scene_flash
-          return false unless flash && flash[0] == name
-          model.anim.frame >= flash[1] && model.anim.frame - flash[1] < FLASH_DURATION
+          return 0.0 unless flash && flash[0] == name
+          return 0.0 if model.anim.frame < flash[1]
+          elapsed = model.anim.frame - flash[1]
+          return 0.0 if elapsed >= FLASH_DURATION
+          1.0 - elapsed.to_f64 / FLASH_DURATION
         end
       end
     end
