@@ -3010,3 +3010,16 @@ M  AGENT_LOG.md
   widgets with focused specs.
 - Fixed `make build` and `make release` to create their output directory.
 - Validation: focused CryTUI specs and the full 272-example suite pass.
+
+## 2026-07-18 — Add Unicode rendering and ANSI/input primitives
+
+- Built on Crystal 1.20's Unicode 17 grapheme segmentation and added terminal
+  display-width classification for combining text, CJK, flags, and ZWJ emoji.
+- Made buffers track wide-cell continuations, clip without splitting graphemes,
+  clear overwritten wide symbols, and include continuation state in diffs.
+- Added ANSI truecolor/indexed-color output, modifiers, alternate-screen and
+  cursor lifecycle, and exception-safe terminal restoration.
+- Added an incremental VT parser for UTF-8 keys, control keys, arrows,
+  Ctrl+arrows, F2, navigation keys, split sequences, Alt characters, and
+  bracketed paste.
+- Added focused Unicode, buffer, ANSI lifecycle, and input parser specs.

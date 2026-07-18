@@ -18,6 +18,24 @@ describe CryTUI::Buffer do
     changes.size.should eq(1)
     changes[0][0..1].should eq({1, 0})
   end
+
+  it "places grapheme clusters according to terminal display width" do
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 8, 1))
+    buffer.set_string(0, 0, "A界e\u0301👩‍💻").should eq(6)
+
+    buffer[0, 0].symbol.should eq("A")
+    buffer[1, 0].symbol.should eq("界")
+    buffer[2, 0].continuation?.should be_true
+    buffer[3, 0].symbol.should eq("e\u0301")
+    buffer[4, 0].symbol.should eq("👩‍💻")
+    buffer[5, 0].continuation?.should be_true
+  end
+
+  it "does not split a wide grapheme at the clipping boundary" do
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 3, 1))
+    buffer.set_string(0, 0, "ab界").should eq(2)
+    buffer.lines.should eq(["ab "])
+  end
 end
 
 describe CryTUI::Terminal do
@@ -33,5 +51,35 @@ describe CryTUI::Terminal do
       "|hello     |",
       "+----------+",
     ])
+  end
+end
+
+describe CryTUI::AnsiBackend do
+  it "emits styled cell changes and skips wide-cell continuations" do
+    io = IO::Memory.new
+    backend = CryTUI::AnsiBackend.new(io, 4, 1, alternate_screen: false)
+    terminal = CryTUI::Terminal.new(backend)
+    terminal.run do |active|
+      active.draw do |frame|
+        frame.buffer.set_string(0, 0, "界!", CryTUI::Style.new(foreground: CryTUI::Color.rgb(1, 2, 3), modifiers: CryTUI::Modifier::Bold))
+      end
+    end
+
+    output = io.to_s
+    output.should contain("\e[?25l\e[2J\e[H")
+    output.should contain("\e[1;38;2;1;2;3m界")
+    output.should contain("\e[1;3H!")
+    output.should end_with("\e[0m\e[?25h")
+  end
+
+  it "restores terminal state when the render block raises" do
+    io = IO::Memory.new
+    backend = CryTUI::AnsiBackend.new(io, 2, 1, alternate_screen: true)
+    terminal = CryTUI::Terminal.new(backend)
+
+    expect_raises(Exception, "boom") do
+      terminal.run { raise "boom" }
+    end
+    io.to_s.should end_with("\e[0m\e[?25h\e[?1049l")
   end
 end
