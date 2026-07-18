@@ -52,7 +52,7 @@ module Obsctl
           scenes = current.scenes.map do |scene|
             OBS::State::SceneState.new(
               name: scene.name, alias: scene.alias, shortcut: scene.shortcut,
-              group: scene.group, active: scene.name == scene_name
+              group: scene.group, active: scene.name == scene_name, hidden: scene.hidden
             )
           end
           next_snap = current.copy_with(current_scene: scene_name, scenes: scenes, updated_at: Time.utc)
@@ -140,6 +140,30 @@ module Obsctl
               streaming: streaming.nil? ? current.output.streaming : streaming,
               recording: recording.nil? ? current.output.recording : recording
             ),
+            updated_at: Time.utc
+          )
+          @snapshot = next_snap
+          next_snap
+        end
+        publish_snapshot(next_snapshot) if next_snapshot
+      end
+
+      # Updates only periodically polled performance/output telemetry while
+      # preserving authoritative scene, audio, profile, and output state.
+      def update_stats(
+        stats : OBS::State::ObsStats,
+        stream_bitrate_kbps : Float64?,
+        stream_duration_ms : Int64?,
+        record_duration_ms : Int64?,
+      ) : Nil
+        next_snapshot = @lock.synchronize do
+          current = @snapshot
+          return unless current.connected
+          next_snap = current.copy_with(
+            stats: stats,
+            stream_bitrate_kbps: stream_bitrate_kbps,
+            stream_duration_ms: stream_duration_ms,
+            record_duration_ms: record_duration_ms,
             updated_at: Time.utc
           )
           @snapshot = next_snap
@@ -251,6 +275,7 @@ module Obsctl
               shortcut: scene.shortcut,
               group:    scene.group,
               active:   scene.active,
+              hidden:   scene.hidden,
             }
           end,
           audio_inputs: snapshot.audio_inputs.map do |input|

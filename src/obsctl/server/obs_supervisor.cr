@@ -13,6 +13,7 @@ module Obsctl
     # Owns the single OBS WebSocket client and reconnect loop for the daemon.
     class ObsSupervisor
       DISCONNECT_FALLBACK_TIMEOUT = 100.milliseconds
+      STATS_POLL_INTERVAL         = 2.seconds
 
       enum LifecycleState
         Starting
@@ -33,6 +34,7 @@ module Obsctl
         @log_broadcast : Proc(JSON::Any, Nil)? = nil,
         @logger : Runtime::Logger? = nil,
         @diagnostic_log_broadcast : Proc(JSON::Any, Bool)? = nil,
+        @stats_poll_interval : Time::Span = STATS_POLL_INTERVAL,
       )
         @client = nil.as(OBS::Client?)
         @client_lock = Mutex.new
@@ -209,15 +211,44 @@ module Obsctl
       end
 
       private def wait_for_disconnect(generation : UInt64, client : OBS::Client) : Domain::ConnectionFailed?
+        last_stream_sample = nil.as(Tuple(Int64, Time::Instant)?)
+        next_stats_poll = Time.instant + @stats_poll_interval
         loop do
           drain_events(client)
           return client.terminal_error if client.terminal_error
           return client.terminal_error if stopped?(generation) || !client.connected?
 
+          if Time.instant >= next_stats_poll
+            last_stream_sample = poll_stats(client, last_stream_sample)
+            next_stats_poll = Time.instant + @stats_poll_interval
+          end
+
           if error = client.wait_for_close(DISCONNECT_FALLBACK_TIMEOUT)
             return error
           end
         end
+      end
+
+      private def poll_stats(
+        client : OBS::Client,
+        previous : Tuple(Int64, Time::Instant)?,
+      ) : Tuple(Int64, Time::Instant)?
+        sample = client.telemetry_sample
+        now = Time.instant
+        current = sample.stream_active ? sample.stream_bytes.try { |bytes| {bytes, now} } : nil
+        bitrate = if current && previous
+                    bytes, measured_at = current
+                    previous_bytes, previous_at = previous
+                    elapsed = (measured_at - previous_at).total_seconds
+                    if bytes >= previous_bytes && elapsed > 0
+                      (bytes - previous_bytes).to_f64 * 8.0 / 1000.0 / elapsed
+                    end
+                  end
+        @state.update_stats(sample.stats, bitrate, sample.stream_duration_ms, sample.record_duration_ms)
+        current
+      rescue ex : Domain::ObsctlError
+        publish_log("warn", "obs_stats_poll_failed", public_message(ex.message, "failed to poll OBS telemetry"))
+        previous
       end
 
       private def stopped?(generation : UInt64) : Bool

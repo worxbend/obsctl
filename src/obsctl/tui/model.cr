@@ -154,7 +154,7 @@ module Obsctl
       end
 
       def scenes : Array(OBS::State::SceneState)
-        @snapshot.try(&.scenes) || [] of OBS::State::SceneState
+        @snapshot.try(&.scenes.reject(&.hidden)) || [] of OBS::State::SceneState
       end
 
       def audio_inputs : Array(OBS::State::AudioState)

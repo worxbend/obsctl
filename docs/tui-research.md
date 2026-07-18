@@ -150,10 +150,14 @@ The daemon snapshot now carries the Rust model's studio and telemetry state:
 profile names/current profile, scene collections/current collection, OBS
 CPU/memory/disk/FPS/frame statistics, and active stream/record durations.
 Profile and collection selection are real server-owned OBS commands rather
-than client-only compatibility fields. The remaining telemetry gap is the
-Rust supervisor's periodic `outputBytes` delta calculation for bitrate.
+than client-only compatibility fields. The Crystal supervisor now mirrors the
+Rust two-second telemetry poll and derives bitrate from consecutive active
+`outputBytes` samples, resetting its baseline across stopped/restarted streams.
 The live bar consumes that snapshot directly, including formatted LIVE/REC
 timers, CPU/FPS/memory values, bitrate, and Unicode or ASCII history graphs.
+Scene `hidden` metadata also survives config parsing/dumps and authoritative
+snapshots; hidden utility scenes remain addressable but are omitted from TUI
+navigation just like the Rust model.
 
 ## Delivery Sequence
 

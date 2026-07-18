@@ -47,7 +47,8 @@ module Obsctl
             alias: scene["alias"]?.try(&.as_s?),
             shortcut: scene["shortcut"]?.try(&.as_s?),
             group: scene["group"]?.try(&.as_s?),
-            active: scene["active"]?.try(&.as_bool?) || false
+            active: scene["active"]?.try(&.as_bool?) || false,
+            hidden: scene["hidden"]?.try(&.as_bool?) || false
           )
         end
         inputs = data["audio_inputs"].as_a.map do |input|

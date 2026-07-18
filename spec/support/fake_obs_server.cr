@@ -52,6 +52,8 @@ module Obsctl
         @current_profile : String = "Default",
         @scene_collections : Array(String) = ["Podcast", "Gaming"],
         @current_scene_collection : String = "Podcast",
+        @stream_bytes : Int64 = 1_000_000_i64,
+        @stream_bytes_per_status : Int64 = 0_i64,
       )
         @host = "127.0.0.1"
         @server = HTTP::Server.new([websocket_handler])
@@ -560,7 +562,12 @@ module Obsctl
               comment = "input not found"
             end
           when "GetStreamStatus"
-            response_data = JSON.parse({"outputActive" => @streaming, "outputDuration" => (@streaming ? 12_000 : 0)}.to_json)
+            @stream_bytes += @stream_bytes_per_status if @streaming
+            response_data = JSON.parse({
+              "outputActive"   => @streaming,
+              "outputDuration" => (@streaming ? 12_000 : 0),
+              "outputBytes"    => @stream_bytes,
+            }.to_json)
           when "GetRecordStatus"
             response_data = JSON.parse({"outputActive" => @recording, "outputDuration" => (@recording ? 3_000 : 0)}.to_json)
           when "ToggleStream"
