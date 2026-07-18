@@ -6,8 +6,9 @@ module Obsctl
       module Splash
         extend self
 
-        TAGLINE    = "Broadcast control, without breaking flow."
-        LARGE_LOGO = [
+        TAGLINE     = "Broadcast control, without breaking flow."
+        DESCRIPTION = "Scenes, audio, profiles, recording, and live telemetry — one command center."
+        LARGE_LOGO  = [
           " ██████╗ ██████╗ ███████╗ ██████╗████████╗██╗     ",
           "██╔═══██╗██╔══██╗██╔════╝██╔════╝╚══██╔══╝██║     ",
           "██║   ██║██████╔╝███████╗██║        ██║   ██║     ",
@@ -49,9 +50,12 @@ module Obsctl
             line(""),
             centered(TAGLINE, theme.foreground),
             live_line(model, frame),
+          ]
+          lines << centered("SYNC   #{slither(frame, 18)}", theme.info) if block.inner(area).height >= 7
+          lines.concat([
             progress_line(model, frame, total),
             centered(boot_message(frame, total, model.show_icons), theme.muted),
-          ]
+          ])
           CryTUI::Widgets::StyledText.new(lines, block: block).render(area, buffer)
         end
 
@@ -64,7 +68,9 @@ module Obsctl
           spinner = ["|", "/", "-", "\\"][(frame // 2 % 4).to_i]
           lines << centered("#{spinner}  (o) LIVE  #{spinner}", theme.danger, true)
           lines << line("")
-          lines << progress_line(model, frame, total)
+          ratio = progress(frame, total)
+          filled = (ratio * 30).round.to_i
+          lines << centered("[#{"#" * filled}#{"." * (30 - filled)}] #{(ratio * 100).round.to_i.to_s.rjust(3)}%", theme.info)
           lines << centered("#{spinner} initializing studio link", theme.muted)
           CryTUI::Widgets::StyledText.new(lines, block: block).render(area, buffer)
         end
@@ -78,20 +84,21 @@ module Obsctl
           CryTUI::Widgets::StyledText.new(logo).render(rows[0], buffer)
           identity = [
             Anim.gradient_line(TAGLINE, theme.accent_alt, theme.info, frame, true, CryTUI::Alignment::Center),
-            centered("Scenes, audio, profiles, recording, and live telemetry — one command center.", theme.muted),
+            centered(DESCRIPTION, theme.muted),
             live_line(model, frame),
           ]
           CryTUI::Widgets::StyledText.new(identity).render(rows[1], buffer)
           block = CryTUI::Widgets::Block.new(
             title: "STUDIO LINK // SECURE SESSION",
+            borders: CryTUI::Widgets::Borders::Left,
             style: CryTUI::Style.new(background: Anim.blend(theme.background, theme.border, 0.34)),
             border_style: CryTUI::Style.new(foreground: Anim.blend(theme.accent, theme.accent_alt, model.anim.pulse(35_u64))),
             border_set: CryTUI::Widgets::BorderSet::THICK
           )
           lines = [
+            line(""),
             centered("SIGNAL  #{slither(frame, 32)}", theme.accent),
             centered("LIQUID  #{liquid(frame, 32)}", theme.accent_alt),
-            line(""),
             progress_line(model, frame, total),
             centered(boot_message(frame, total, model.show_icons), theme.muted),
           ]
@@ -99,32 +106,63 @@ module Obsctl
         end
 
         private def live_line(model, frame)
-          icon = model.show_icons ? ["◉", "●", "◍", "○"][(frame // 2 % 4).to_i] : ["o", "*", "o", "."][(frame // 2 % 4).to_i]
-          centered("#{icon} LIVE CONTROL  ·  LOCAL IPC  ·  OBS STUDIO", model.theme.danger, true)
+          phase = (frame // 2 % 4).to_i
+          icon = model.show_icons ? ["◉", "●", "◍", "○"][phase] : ["O", "o", "O", "."][phase]
+          wings = model.show_icons ? [{"⟫", "⟪"}, {"›", "‹"}, {"·", "·"}, {"›", "‹"}][phase] : [{">", "<"}, {"-", "-"}, {".", "."}, {"-", "-"}][phase]
+          centered("#{wings[0]}   #{icon}  LIVE   #{wings[1]}", model.theme.danger, true)
         end
 
         private def progress_line(model, frame, total)
-          ratio = (frame.to_f64 / {total, 1_u64}.max).clamp(0.0, 1.0)
+          ratio = progress(frame, total)
           filled = (ratio * 30).round.to_i
-          full, empty = model.advanced_ui ? {"━", "─"} : {"#", "."}
-          centered("[#{full * filled}#{empty * (30 - filled)}] #{(ratio * 100).round.to_i.to_s.rjust(3)}%", model.theme.info)
+          spans = [CryTUI::Span.new("  ")]
+          30.times do |index|
+            if index < filled
+              color = Anim.blend(model.theme.accent, model.theme.accent_alt, index / 30.0)
+              spans << CryTUI::Span.new("█", CryTUI::Style.new(foreground: color))
+            elsif index == filled
+              spans << CryTUI::Span.new(frame.even? ? "▓" : "▒", CryTUI::Style.new(foreground: model.theme.info))
+            else
+              spans << CryTUI::Span.new("░", CryTUI::Style.new(foreground: model.theme.border))
+            end
+          end
+          spans << CryTUI::Span.new("  #{(ratio * 100).round.to_i.to_s.rjust(3)}%", CryTUI::Style.new(foreground: model.theme.warning, modifiers: CryTUI::Modifier::Bold))
+          CryTUI::Line.new(spans, CryTUI::Alignment::Center)
         end
 
         private def boot_message(frame, total, icons)
-          progress = frame.to_f64 / {total, 1_u64}.max
-          message = progress < 0.25 ? "loading terminal engine" : progress < 0.5 ? "negotiating local IPC" : progress < 0.75 ? "warming telemetry panels" : "broadcast control ready"
-          "#{icons ? "◆" : ">"} #{message}"
+          ratio = progress(frame, total)
+          icon, message = if ratio < 0.25
+                            {"◌", "loading control surfaces"}
+                          elsif ratio < 0.5
+                            {"◍", "warming animation engine"}
+                          elsif ratio < 0.75
+                            {"◉", "syncing OBS telemetry"}
+                          elsif ratio < 1.0
+                            {"◎", "painting command center"}
+                          else
+                            {"✓", "ready"}
+                          end
+          icons ? "#{icon}  #{message}" : "[..] #{message}"
         end
 
         private def slither(frame, width)
-          Array.new(width) { |index| ((index - frame.to_i) % 12) < 4 ? "█" : "·" }.join
+          cells = Array.new(width, '·')
+          return "" if width == 0
+          head = frame.to_i % width
+          ['█', '▓', '▒', '░'].each_with_index { |glyph, offset| cells[(head + width - offset) % width] = glyph }
+          cells.join
         end
 
         private def liquid(frame, width)
           bars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
           Array.new(width) do |index|
-            bars[((Math.sin(index * 0.55 + frame * 0.18) * 3.5 + 3.5).round.to_i).clamp(0, 7)]
+            bars[((Math.sin(index * 0.62 + frame * 0.32) * 0.5 + 0.5) * 7).round.to_i.clamp(0, 7)]
           end.join
+        end
+
+        private def progress(frame, total) : Float64
+          (frame.to_f64 / {total, 1_u64}.max).clamp(0.0, 1.0)
         end
 
         private def center(area, width, height)
