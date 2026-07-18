@@ -319,6 +319,32 @@ describe Obsctl::Server::CommandExecutor do
     end
   end
 
+  it "sets volume for a live OBS input that is absent from config" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    config = Obsctl::Config::Config.new(connection: obs.config.connection)
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(config, state)
+    begin
+      supervisor.start
+      next_command_executor_websocket_connection_id(obs)
+      obs.next_identify(2.seconds).should_not be_nil
+      wait_for_command_executor_supervisor { state.snapshot.connected }
+      executor = default_executor(config, supervisor: supervisor, state: state)
+
+      response = executor.execute(
+        command_request(Obsctl::IPC::CommandPayload.new("set_volume", "Desktop Audio", 35))
+      )
+
+      response.ok.should be_true
+      response.result.not_nil!["message"].as_s.should eq("volume set: Desktop Audio 35%")
+      obs.input("Desktop Audio").not_nil!.volume_mul.should eq(0.35)
+      state.snapshot.audio_inputs.find(&.name.==("Desktop Audio")).not_nil!.volume_percent.should eq(35)
+    ensure
+      supervisor.try(&.stop)
+      obs.try(&.stop)
+    end
+  end
+
   it "accepts reconnect only when the supervisor is alive" do
     state = Obsctl::Server::StateStore.new
     supervisor = ReconnectSupervisor.new(state, true)
