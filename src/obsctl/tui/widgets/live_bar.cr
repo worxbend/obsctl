@@ -17,7 +17,7 @@ module Obsctl
                            theme.border
                          end
           title = model.advanced_ui ? Anim.gradient_line(" ◉ LIVE TELEMETRY ", theme.danger, theme.warning, model.anim.frame, true) : CryTUI::Line.from(" LIVE TELEMETRY ", CryTUI::Style.new(foreground: theme.danger, modifiers: CryTUI::Modifier::Bold))
-          block = CryTUI::Widgets::Block.new(title: title, border_style: CryTUI::Style.new(foreground: border_color), border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII)
+          block = CryTUI::Widgets::Block.new(title: title, border_style: CryTUI::Style.new(foreground: border_color), border_set: Chrome.border_set)
           if {area.height - 2, 0}.max < 2
             compact = CryTUI::Line.new([
               badge("LIVE", model.streaming?, model.stream_duration_ms, pulse, model), CryTUI::Span.new("  "),

@@ -18,7 +18,7 @@ module Obsctl
                   else
                     [CryTUI::Line.from(Localization.text(model.locale, :waiting))]
                   end
-          block = CryTUI::Widgets::Block.new(title: Localization.text(model.locale, :connection_title), border_style: CryTUI::Style.new(foreground: theme.border), border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII)
+          block = CryTUI::Widgets::Block.new(title: Localization.text(model.locale, :connection_title), border_style: CryTUI::Style.new(foreground: theme.border), border_set: Chrome.border_set)
           CryTUI::Widgets::StyledText.new(lines, block: block).render(area, buffer)
         end
 
@@ -41,7 +41,7 @@ module Obsctl
           localized_title = Localization.text(model.locale, :unavailable_title)
           title = model.advanced_ui ? Anim.gradient_line(localized_title, theme.danger, theme.warning, model.anim.frame, true) : CryTUI::Line.from(localized_title.gsub('—', '-'), CryTUI::Style.new(foreground: theme.danger, modifiers: CryTUI::Modifier::Bold))
           border = model.advanced_ui ? Anim.blend(theme.danger, theme.warning, model.anim.pulse(24_u64)) : theme.danger
-          block = CryTUI::Widgets::Block.new(title: title, border_style: CryTUI::Style.new(foreground: border), border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::DOUBLE : CryTUI::Widgets::BorderSet::ASCII)
+          block = CryTUI::Widgets::Block.new(title: title, border_style: CryTUI::Style.new(foreground: border), border_set: Chrome.border_set)
           CryTUI::Widgets::StyledText.new(lines, block: block).render(area, buffer)
         end
       end

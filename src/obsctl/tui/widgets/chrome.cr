@@ -8,6 +8,15 @@ module Obsctl
       module Chrome
         extend self
 
+        # Keep panel edges aligned across terminals. Some terminal/font stacks
+        # render Unicode box-drawing corners and vertical strokes with
+        # incompatible glyph metrics, leaving visibly detached right edges.
+        # ASCII uses the same cell metrics everywhere while colors and focus
+        # styling continue to provide the advanced chrome treatment.
+        def border_set : CryTUI::Widgets::BorderSet
+          CryTUI::Widgets::BorderSet::ASCII
+        end
+
         def panel(icon : String, label : String, hint : String, count : Int32, focused : Bool, model : Model) : CryTUI::Widgets::Block
           heading = " #{icon}  #{label} "
           spans = if model.advanced_ui
@@ -20,7 +29,7 @@ module Obsctl
           CryTUI::Widgets::Block.new(
             title: CryTUI::Line.new(spans),
             border_style: CryTUI::Style.new(foreground: focused && model.advanced_ui ? Anim.blend(model.theme.border_focus, model.theme.accent_alt, 0.25) : (focused ? model.theme.border_focus : model.theme.border)),
-            border_set: model.advanced_ui ? (focused ? CryTUI::Widgets::BorderSet::THICK : CryTUI::Widgets::BorderSet::ROUNDED) : CryTUI::Widgets::BorderSet::ASCII
+            border_set: border_set
           )
         end
 

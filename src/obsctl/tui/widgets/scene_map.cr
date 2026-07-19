@@ -26,7 +26,7 @@ module Obsctl
             items << item("[ungrouped]", theme.muted) unless grouped.empty?
             ungrouped.each { |scene| items << scene_item(scene, model) }
           end
-          block = CryTUI::Widgets::Block.new(title: " Scene Map ", border_style: CryTUI::Style.new(foreground: theme.border), border_set: CryTUI::Widgets::BorderSet::PLAIN)
+          block = CryTUI::Widgets::Block.new(title: " Scene Map ", border_style: CryTUI::Style.new(foreground: theme.border), border_set: CryTUI::Widgets::BorderSet::ASCII)
           CryTUI::Widgets::List.new(items, block: block).render(area, buffer, CryTUI::Widgets::ListState.new)
         end
 
