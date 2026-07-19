@@ -274,15 +274,17 @@ describe Obsctl::TUI::DashboardLayout do
   it "overlaps adjacent panel edges at 100x40" do
     areas = Obsctl::TUI::DashboardLayout.compute(CryTUI::Rect.new(0, 0, 100, 40))
     areas.header.height.should eq(4)
-    areas.live_bar.height.should eq(4)
+    areas.live_bar.height.should eq(5)
     areas.scenes.height.should be > areas.profiles.height
     areas.scenes.width.should eq(50)
     areas.audio.x.should eq(49)
     areas.scenes.right.should eq(areas.audio.x + 1)
+    areas.audio.right.should eq(100)
     areas.header.bottom.should eq(areas.live_bar.y + 1)
-    areas.profiles.height.should eq(7)
-    areas.logs.height.should eq(7)
-    areas.palette.height.should eq(4)
+    areas.palette.bottom.should eq(40)
+    areas.profiles.height.should eq(8)
+    areas.logs.height.should eq(8)
+    areas.palette.height.should eq(5)
   end
 end
 
@@ -306,6 +308,10 @@ describe Obsctl::TUI::Widgets::Dashboard do
     buffer[areas.audio.x, areas.scenes.bottom - 1].symbol.should eq("┼")
     buffer[areas.header.x, areas.live_bar.y].symbol.should eq("├")
     buffer[areas.header.right - 1, areas.live_bar.y].symbol.should eq("┤")
+    buffer[areas.audio.right - 1, areas.audio.y].symbol.should eq("┤")
+    buffer[areas.logs.right - 1, areas.logs.y].symbol.should eq("┤")
+    buffer[areas.palette.right - 1, areas.palette.y].symbol.should eq("┤")
+    buffer[areas.palette.right - 1, areas.palette.bottom - 1].symbol.should eq("╯")
   end
 end
 
