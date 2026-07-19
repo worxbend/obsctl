@@ -62,7 +62,7 @@ module CryTUI
                      else
                        @border_set.horizontal
                      end
-            buffer.set_string(x, top, symbol, @border_style)
+            set_border(buffer, x, top, symbol)
           end
         end
         if @borders.bottom? && bottom != top
@@ -74,15 +74,15 @@ module CryTUI
                      else
                        @border_set.horizontal
                      end
-            buffer.set_string(x, bottom, symbol, @border_style)
+            set_border(buffer, x, bottom, symbol)
           end
         end
         vertical_top = top + (@borders.top? ? 1 : 0)
         vertical_bottom = bottom - (@borders.bottom? ? 1 : 0)
         if vertical_top <= vertical_bottom
           (vertical_top..vertical_bottom).each do |y|
-            buffer.set_string(left, y, @border_set.vertical, @border_style) if @borders.left?
-            buffer.set_string(right, y, @border_set.vertical, @border_style) if @borders.right? && right != left
+            set_border(buffer, left, y, @border_set.vertical) if @borders.left?
+            set_border(buffer, right, y, @border_set.vertical) if @borders.right? && right != left
           end
         end
         if (title = @title) && area.width >= 4
@@ -98,6 +98,54 @@ module CryTUI
                        end
           title_right = area.right - (@borders.right? ? 1 : 0)
           title_line.render(buffer, Rect.new(title_x, top, {title_right - title_x, 0}.max, 1), @border_style)
+        end
+      end
+
+      # Adjacent blocks may deliberately overlap by one row or column. Merge
+      # their directional strokes into a real box-drawing junction instead of
+      # letting the later block replace the earlier corner.
+      private def set_border(buffer : Buffer, x : Int, y : Int, symbol : String)
+        incoming = border_connections(symbol)
+        existing = buffer[x, y]?.try { |cell| border_connections(cell.symbol) }
+        rendered = if incoming && existing
+                     border_symbol(incoming | existing)
+                   else
+                     symbol
+                   end
+        buffer.set_string(x, y, rendered, @border_style)
+      end
+
+      private def border_connections(symbol : String) : Int32?
+        case symbol
+        when "─", "━", "═"      then 0b0011 # left | right
+        when "│", "┃", "║"      then 0b1100 # up | down
+        when "┌", "╭", "┏", "╔" then 0b1010 # right | down
+        when "┐", "╮", "┓", "╗" then 0b1001 # left | down
+        when "└", "╰", "┗", "╚" then 0b0110 # right | up
+        when "┘", "╯", "┛", "╝" then 0b0101 # left | up
+        when "├"                then 0b1110
+        when "┤"                then 0b1101
+        when "┬"                then 0b1011
+        when "┴"                then 0b0111
+        when "┼"                then 0b1111
+        else                         nil
+        end
+      end
+
+      private def border_symbol(connections : Int32) : String
+        case connections
+        when 0b0011 then @border_set.horizontal
+        when 0b1100 then @border_set.vertical
+        when 0b1010 then @border_set.top_left
+        when 0b1001 then @border_set.top_right
+        when 0b0110 then @border_set.bottom_left
+        when 0b0101 then @border_set.bottom_right
+        when 0b1110 then "├"
+        when 0b1101 then "┤"
+        when 0b1011 then "┬"
+        when 0b0111 then "┴"
+        when 0b1111 then "┼"
+        else             @border_set.horizontal
         end
       end
     end

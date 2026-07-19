@@ -18,7 +18,7 @@ module Obsctl
           outer = CryTUI::Widgets::Block.new(
             title: title,
             border_style: CryTUI::Style.new(foreground: theme.border_focus),
-            border_set: Chrome.border_set
+            border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::DOUBLE : CryTUI::Widgets::BorderSet::ASCII
           )
           outer.render(area, buffer)
           inner = outer.inner(area)
@@ -43,7 +43,7 @@ module Obsctl
           block = CryTUI::Widgets::Block.new(
             title: " Themes // #{Theme::ALL.size.to_s.rjust(2, '0')} palettes ",
             border_style: CryTUI::Style.new(foreground: theme.border),
-            border_set: Chrome.border_set
+            border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
           )
           state = CryTUI::Widgets::ListState.new(selected: model.settings_cursor)
           highlight = CryTUI::Style.new(foreground: theme.highlight_foreground, background: theme.highlight_background, modifiers: CryTUI::Modifier::Bold)
@@ -55,7 +55,7 @@ module Obsctl
           block = CryTUI::Widgets::Block.new(
             title: " Preview: #{theme.label} ",
             border_style: CryTUI::Style.new(foreground: theme.border_focus),
-            border_set: Chrome.border_set
+            border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
           )
           lines = model.advanced_ui ? rich_preview(model) : ascii_preview(model)
           CryTUI::Widgets::StyledText.new(lines, block: block).render(area, buffer)

@@ -271,13 +271,15 @@ describe Obsctl::TUI::Widgets::CommandPalette do
 end
 
 describe Obsctl::TUI::DashboardLayout do
-  it "matches the Rust dashboard geometry at 100x40" do
+  it "overlaps adjacent panel edges at 100x40" do
     areas = Obsctl::TUI::DashboardLayout.compute(CryTUI::Rect.new(0, 0, 100, 40))
     areas.header.height.should eq(4)
     areas.live_bar.height.should eq(4)
     areas.scenes.height.should be > areas.profiles.height
     areas.scenes.width.should eq(50)
-    areas.audio.x.should eq(50)
+    areas.audio.x.should eq(49)
+    areas.scenes.right.should eq(areas.audio.x + 1)
+    areas.header.bottom.should eq(areas.live_bar.y + 1)
     areas.profiles.height.should eq(7)
     areas.logs.height.should eq(7)
     areas.palette.height.should eq(4)
@@ -298,6 +300,12 @@ describe Obsctl::TUI::Widgets::Dashboard do
     end
     text.should contain("reconnect attempt")
     buffer[119, 39].style.background.should eq(model.theme.background)
+
+    areas = Obsctl::TUI::DashboardLayout.compute(buffer.area)
+    buffer[areas.audio.x, areas.audio.y].symbol.should eq("┬")
+    buffer[areas.audio.x, areas.scenes.bottom - 1].symbol.should eq("┼")
+    buffer[areas.header.x, areas.live_bar.y].symbol.should eq("├")
+    buffer[areas.header.right - 1, areas.live_bar.y].symbol.should eq("┤")
   end
 end
 

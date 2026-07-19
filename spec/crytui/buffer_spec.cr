@@ -102,6 +102,23 @@ describe CryTUI::Widgets::Block do
 
     buffer.lines.should eq(["╭─────", "│     ", "│     "])
   end
+
+  it "merges overlapping block edges into Unicode junctions" do
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 9, 5))
+    border = CryTUI::Widgets::BorderSet::ROUNDED
+    CryTUI::Widgets::Block.new(border_set: border).render(CryTUI::Rect.new(0, 0, 5, 3), buffer)
+    CryTUI::Widgets::Block.new(border_set: border).render(CryTUI::Rect.new(4, 0, 5, 3), buffer)
+    CryTUI::Widgets::Block.new(border_set: border).render(CryTUI::Rect.new(0, 2, 5, 3), buffer)
+    CryTUI::Widgets::Block.new(border_set: border).render(CryTUI::Rect.new(4, 2, 5, 3), buffer)
+
+    buffer.lines.should eq([
+      "╭───┬───╮",
+      "│   │   │",
+      "├───┼───┤",
+      "│   │   │",
+      "╰───┴───╯",
+    ])
+  end
 end
 
 describe CryTUI::AnsiBackend do
