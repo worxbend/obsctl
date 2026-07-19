@@ -14,7 +14,7 @@ module Obsctl
           block = CryTUI::Widgets::Block.new(
             title: title,
             border_style: CryTUI::Style.new(foreground: model.advanced_ui ? Anim.blend(theme.border, theme.accent, pulse * 0.45) : theme.border),
-            border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
+            border_set: Chrome.border_set
           )
           daemon = model.connected_to_daemon
           obs = model.obs_connected?

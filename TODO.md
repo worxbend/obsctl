@@ -114,6 +114,8 @@ Critical rule:
   and literal backslashes outside quoted command tokens.
 - [x] Wire `obsctl` / `obsctl tui` as Unix IPC clients with the unavailable
   screen and command palette.
+- [x] Use portable ASCII application frames so terminals with inconsistent
+  Unicode box-drawing metrics keep corners and vertical edges aligned.
 
 ### Runtime Modes
 

@@ -3243,3 +3243,13 @@ M  AGENT_LOG.md
 - Validation: SVG XML parses cleanly, raster preview is a transparent 512×512
   image, README asset path resolves, and `git diff --check` passes. Application
   code is unchanged from the previously validated 408-example suite.
+
+## 2026-07-19 — Make dashboard borders terminal-portable
+
+- Replaced the application's rounded, thick, double, and plain Unicode frames
+  with a shared ASCII border set, avoiding detached right edges on terminals
+  whose box-drawing glyph metrics do not join consistently.
+- Preserved advanced-mode colors, animated gradients, titles, badges, and
+  focused-panel styling; only the frame glyphs changed.
+- Validation: `make format`, the complete 408-example suite, and `make build`
+  pass.
