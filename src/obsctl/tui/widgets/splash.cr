@@ -48,7 +48,7 @@ module Obsctl
           block = CryTUI::Widgets::Block.new(
             title: title,
             border_style: CryTUI::Style.new(foreground: Anim.blend(theme.accent, theme.accent_alt, pulse)),
-            border_set: CryTUI::Widgets::BorderSet::ASCII
+            border_set: CryTUI::Widgets::BorderSet::ROUNDED
           )
           lines = [
             line(""),
@@ -99,7 +99,7 @@ module Obsctl
             borders: CryTUI::Widgets::Borders::Left,
             style: CryTUI::Style.new(background: Anim.blend(theme.background, theme.border, 0.34)),
             border_style: CryTUI::Style.new(foreground: Anim.blend(theme.accent, theme.accent_alt, splash_pulse(frame))),
-            border_set: CryTUI::Widgets::BorderSet::ASCII
+            border_set: CryTUI::Widgets::BorderSet::THICK
           )
           lines = [
             centered("SIGNAL #{slither(frame, 32)}", theme.accent),
