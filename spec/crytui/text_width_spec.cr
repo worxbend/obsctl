@@ -11,9 +11,19 @@ describe CryTUI::TextWidth do
     CryTUI::TextWidth.width("🇺🇦").should eq(2)
   end
 
-  it "matches Ratatui for ambiguous TUI symbols and emoji presentation" do
-    CryTUI::TextWidth.width("▶◇🎚⚠✓").should eq(5)
+  it "keeps BMP presentation-ambiguous symbols narrow" do
+    # ▶ ◇ ⚠ ✓ have narrow text glyphs, so terminals render them one cell wide.
+    CryTUI::TextWidth.width("▶◇⚠✓").should eq(4)
+    CryTUI::TextWidth.width("▶️").should eq(2) # VS16 forces emoji presentation
+  end
+
+  it "reserves two cells for supplementary-plane pictographs" do
+    # 🎚 🎛 🗂 are Emoji_Presentation=No, but the astral plane has no narrow
+    # text glyph, so every terminal renders them two cells wide. Under-counting
+    # them shifts each panel's right border one column right.
+    CryTUI::TextWidth.width("🎚").should eq(2)
+    CryTUI::TextWidth.width("🎛").should eq(2)
+    CryTUI::TextWidth.width("🗂").should eq(2)
     CryTUI::TextWidth.width("⚡🔊").should eq(4)
-    CryTUI::TextWidth.width("▶️").should eq(2)
   end
 end

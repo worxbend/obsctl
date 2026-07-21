@@ -16,8 +16,16 @@ module CryTUI
       property = String::Grapheme::Property.from(first)
       return 0 if property.control? || property.cr? || property.lf? || property.extend? || property.zwj?
       return 2 if property.regional_indicator?
-      codepoints = grapheme.each_char.map(&.ord)
+      codepoints = grapheme.each_char.map(&.ord).to_a
+      return 1 if codepoints.includes?(0xFE0E) # explicit text presentation selector
       return 2 if codepoints.includes?(0xFE0F) || codepoints.includes?(0x20E3)
+      # Supplementary-plane pictographs (🎚 🎛 🗂 …) are Emoji_Presentation=No, so
+      # unicode-width classes them as one cell — but the astral plane has no
+      # narrow text glyph, and terminals render them with emoji presentation
+      # (two cells) regardless. Reserving one cell would let the emoji overrun
+      # its column and drag every following glyph, including the panel border,
+      # one cell to the right.
+      return 2 if first.ord >= 0x1F000 && property.extended_pictographic?
       wide_codepoint?(first.ord) ? 2 : 1
     end
 
