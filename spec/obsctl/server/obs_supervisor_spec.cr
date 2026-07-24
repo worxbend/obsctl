@@ -70,7 +70,7 @@ private class FailedAttemptBeforeDelayStateStore < Obsctl::Server::StateStore
 
   def release_failed_attempt : Nil
     should_release = @gate_lock.synchronize do
-      next false unless @blocked && !@released
+      next false if !@blocked || @released
 
       @released = true
       true
@@ -410,7 +410,7 @@ describe Obsctl::Server::ObsSupervisor do
         payload["message"].as_s == "OBS reconnect requested"
     end.should be_false
   ensure
-    supervisor.try { |instance| instance.test_reconnect_before_publication = nil }
+    supervisor.try(&.test_reconnect_before_publication=(nil))
     if release = release_reconnect
       select
       when release.send(nil)

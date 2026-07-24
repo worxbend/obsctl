@@ -25,10 +25,33 @@ module Obsctl
         @volume_versions = Hash(String, UInt64).new(0_u64)
       end
 
+      # Actions that only move focus or the cursor, with no daemon round trip.
+      FOCUS_ACTIONS = {
+        ActionKind::FocusScenes      => ->(model : Model) { model.focus = FocusPanel::Scenes },
+        ActionKind::FocusAudio       => ->(model : Model) { model.focus = FocusPanel::Audio },
+        ActionKind::FocusProfiles    => ->(model : Model) { model.focus = FocusPanel::Profiles },
+        ActionKind::FocusCollections => ->(model : Model) { model.focus = FocusPanel::Collections },
+        ActionKind::FocusPaneLeft    => ->(model : Model) { model.focus = model.focus.left },
+        ActionKind::FocusPaneRight   => ->(model : Model) { model.focus = model.focus.right },
+        ActionKind::FocusPaneUp      => ->(model : Model) { model.focus = model.focus.up },
+        ActionKind::FocusPaneDown    => ->(model : Model) { model.focus = model.focus.down },
+      }
+
       def handle(action : Action) : ActionOutcome
+        if move = FOCUS_ACTIONS[action.kind]?
+          move.call(@model)
+          return ActionOutcome.new
+        end
+
+        palette_action(action) ||
+          navigation_action(action) ||
+          settings_action(action) ||
+          command_action(action) ||
+          ActionOutcome.new
+      end
+
+      private def palette_action(action : Action) : ActionOutcome?
         case action.kind
-        when .quit?
-          ActionOutcome.new(quit: true)
         when .open_palette?
           palette = @model.command_palette
           palette.active = true
@@ -43,55 +66,39 @@ module Obsctl
           refresh_completions
           ActionOutcome.new
         when .palette_backspace?
-          @model.command_palette.input = @model.command_palette.input.each_grapheme.to_a[0...-1].join unless @model.command_palette.input.empty?
+          unless @model.command_palette.input.empty?
+            @model.command_palette.input = @model.command_palette.input.each_grapheme.to_a[0...-1].join
+          end
           refresh_completions
           ActionOutcome.new
         when .palette_submit?
           input = @model.command_palette.input
           close_palette
           dispatch_palette(input)
-        when .reload_config?
-          command(IPC::CommandPayload.new("reload_config"))
-        when .dump_config?
-          command(IPC::CommandPayload.new("dump_config"))
-        when .retry_connect?
-          ActionOutcome.new(retry_subscription: true, message: "Reconnected to daemon.")
-        when .focus_scenes?
-          @model.focus = FocusPanel::Scenes; ActionOutcome.new
-        when .focus_audio?
-          @model.focus = FocusPanel::Audio; ActionOutcome.new
-        when .focus_profiles?
-          @model.focus = FocusPanel::Profiles; ActionOutcome.new
-        when .focus_collections?
-          @model.focus = FocusPanel::Collections; ActionOutcome.new
-        when .focus_pane_left?
-          @model.focus = @model.focus.left; ActionOutcome.new
-        when .focus_pane_right?
-          @model.focus = @model.focus.right; ActionOutcome.new
-        when .focus_pane_up?
-          @model.focus = @model.focus.up; ActionOutcome.new
-        when .focus_pane_down?
-          @model.focus = @model.focus.down; ActionOutcome.new
-        when .navigate_up?
-          @model.move_up; ActionOutcome.new
-        when .navigate_down?
-          @model.move_down; ActionOutcome.new
-        when .activate_scene?
-          target_command("set_scene", @model.focused_scene.try(&.name))
-        when .activate_profile?
-          target_command("set_profile", @model.profiles[@model.profile_cursor]?)
-        when .activate_collection?
-          target_command("set_scene_collection", @model.scene_collections[@model.collection_cursor]?)
-        when .toggle_mute?
-          target_command("toggle_mute", @model.focused_audio.try(&.name))
-        when .volume_down?
-          volume(-5)
-        when .volume_up?
-          volume(5)
         when .complete_next?
-          @model.command_palette.cycle_next; ActionOutcome.new
+          @model.command_palette.cycle_next
+          ActionOutcome.new
         when .complete_previous?
-          @model.command_palette.cycle_previous; ActionOutcome.new
+          @model.command_palette.cycle_previous
+          ActionOutcome.new
+        end
+      end
+
+      private def navigation_action(action : Action) : ActionOutcome?
+        case action.kind
+        when .navigate_up?
+          @model.move_up
+          ActionOutcome.new
+        when .navigate_down?
+          @model.move_down
+          ActionOutcome.new
+        when .volume_down? then volume(-5)
+        when .volume_up?   then volume(5)
+        end
+      end
+
+      private def settings_action(action : Action) : ActionOutcome?
+        case action.kind
         when .open_settings?
           @model.theme_preview_origin = @model.theme
           @model.settings_cursor = Theme::ALL.index(@model.theme) || 0
@@ -113,10 +120,23 @@ module Obsctl
         when .apply_settings_theme?
           @model.theme_preview_origin = nil
           @model.view = View::Main
-          message = @theme_persister.try(&.call(@model.theme)) || "theme set: #{@model.theme.id}"
-          ActionOutcome.new(message: message)
-        else
-          ActionOutcome.new
+          ActionOutcome.new(message: @theme_persister.try(&.call(@model.theme)) || "theme set: #{@model.theme.id}")
+        end
+      end
+
+      private def command_action(action : Action) : ActionOutcome?
+        case action.kind
+        when .quit?           then ActionOutcome.new(quit: true)
+        when .reload_config?  then command(IPC::CommandPayload.new("reload_config"))
+        when .dump_config?    then command(IPC::CommandPayload.new("dump_config"))
+        when .retry_connect?  then ActionOutcome.new(retry_subscription: true, message: "Reconnected to daemon.")
+        when .activate_scene? then target_command("set_scene", @model.focused_scene.try(&.name))
+        when .activate_profile?
+          target_command("set_profile", @model.profiles[@model.profile_cursor]?)
+        when .activate_collection?
+          target_command("set_scene_collection", @model.scene_collections[@model.collection_cursor]?)
+        when .toggle_mute?
+          target_command("toggle_mute", @model.focused_audio.try(&.name))
         end
       end
 
@@ -127,7 +147,7 @@ module Obsctl
           return handle(Action.new(ActionKind::OpenSettings))
         end
         if normalized == "/help"
-          return ActionOutcome.new(message: "Commands: /scene /profile /collection /mute /unmute /toggle-mute /vol /stream /rec /status /obs-status /server-status /reload-config /dump-config /validate-config /themes /reconnect /quit")
+          return ActionOutcome.new(message: "Commands: /scene /profile /collection /mute /unmute /toggle-mute /vol /stream /rec [start|stop|toggle|pause|resume|status] /status /obs-status /server-status /reload-config /dump-config /validate-config /themes /reconnect /quit")
         end
         parsed = Domain::CommandParser.new.parse(input)
         command(payload_for(parsed))
@@ -135,28 +155,46 @@ module Obsctl
         ActionOutcome.new(message: "error: #{ex.message}")
       end
 
+      # Commands carrying no argument, mapped to their IPC name.
+      NULLARY_PAYLOADS = {
+        Domain::StatusCommand         => "get_snapshot",
+        Domain::ObsStatusCommand      => "get_obs_status",
+        Domain::ServerStatusCommand   => "get_server_status",
+        Domain::ValidateConfigCommand => "validate_config",
+        Domain::ReconnectCommand      => "reconnect_obs",
+        Domain::ConnectCommand        => "reconnect_obs",
+        Domain::ShutdownServerCommand => "shutdown_server",
+        Domain::DumpConfigCommand     => "dump_config",
+        Domain::ReloadConfigCommand   => "reload_config",
+        Domain::ToggleStreamCommand   => "toggle_stream",
+        Domain::ToggleRecordCommand   => "toggle_record",
+        Domain::StartRecordCommand    => "start_record",
+        Domain::StopRecordCommand     => "stop_record",
+        Domain::PauseRecordCommand    => "pause_record",
+        Domain::ResumeRecordCommand   => "resume_record",
+        Domain::RecordStatusCommand   => "record_status",
+      }
+
+      # Commands carrying a single target, mapped to their IPC name.
+      TARGET_PAYLOADS = {
+        Domain::SetSceneCommand           => "set_scene",
+        Domain::SetProfileCommand         => "set_profile",
+        Domain::SetSceneCollectionCommand => "set_scene_collection",
+        Domain::MuteCommand               => "mute",
+        Domain::UnmuteCommand             => "unmute",
+        Domain::ToggleMuteCommand         => "toggle_mute",
+      }
+
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
-        case command
-        when Domain::StatusCommand         then IPC::CommandPayload.new("get_snapshot")
-        when Domain::ObsStatusCommand      then IPC::CommandPayload.new("get_obs_status")
-        when Domain::ServerStatusCommand   then IPC::CommandPayload.new("get_server_status")
-        when Domain::ValidateConfigCommand then IPC::CommandPayload.new("validate_config")
-        when Domain::ReconnectCommand, Domain::ConnectCommand
-          IPC::CommandPayload.new("reconnect_obs")
-        when Domain::ShutdownServerCommand     then IPC::CommandPayload.new("shutdown_server")
-        when Domain::DumpConfigCommand         then IPC::CommandPayload.new("dump_config")
-        when Domain::ReloadConfigCommand       then IPC::CommandPayload.new("reload_config")
-        when Domain::SetSceneCommand           then IPC::CommandPayload.new("set_scene", command.target)
-        when Domain::SetProfileCommand         then IPC::CommandPayload.new("set_profile", command.target)
-        when Domain::SetSceneCollectionCommand then IPC::CommandPayload.new("set_scene_collection", command.target)
-        when Domain::MuteCommand               then IPC::CommandPayload.new("mute", command.target)
-        when Domain::UnmuteCommand             then IPC::CommandPayload.new("unmute", command.target)
-        when Domain::ToggleMuteCommand         then IPC::CommandPayload.new("toggle_mute", command.target)
-        when Domain::VolumeCommand             then IPC::CommandPayload.new("set_volume", command.target, command.percent)
-        when Domain::ToggleStreamCommand       then IPC::CommandPayload.new("toggle_stream")
-        when Domain::ToggleRecordCommand       then IPC::CommandPayload.new("toggle_record")
-        else                                        raise Domain::CommandParseError.new("unsupported TUI command")
-        end
+        {% for type, name in NULLARY_PAYLOADS %}
+          return IPC::CommandPayload.new({{name}}) if command.is_a?({{type}})
+        {% end %}
+        {% for type, name in TARGET_PAYLOADS %}
+          return IPC::CommandPayload.new({{name}}, command.target) if command.is_a?({{type}})
+        {% end %}
+        return IPC::CommandPayload.new("set_volume", command.target, command.percent) if command.is_a?(Domain::VolumeCommand)
+
+        raise Domain::CommandParseError.new("unsupported TUI command")
       end
 
       private def command(payload : IPC::CommandPayload) : ActionOutcome

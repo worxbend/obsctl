@@ -74,7 +74,7 @@ end
 
 describe "CLI public contract" do
   it "prints the frozen human status output and keeps stderr empty on success" do
-    envelope = cli_contract_fixture("cli_status_success.json")
+    envelope = cli_contract_fixture("cli/json/status_success.json")
     response = cli_contract_response_from_envelope(envelope)
 
     with_cli_contract_runtime do
@@ -90,7 +90,7 @@ describe "CLI public contract" do
   end
 
   it "prints daemon command failures to stderr only in human mode" do
-    envelope = cli_contract_fixture("cli_scene_error.json")
+    envelope = cli_contract_fixture("cli/json/scene_error.json")
     response = cli_contract_response_from_envelope(envelope)
 
     with_cli_contract_runtime do
@@ -108,7 +108,7 @@ describe "CLI public contract" do
   end
 
   it "emits the exact frozen JSON status envelope on stdout only" do
-    envelope = cli_contract_fixture("cli_status_success.json")
+    envelope = cli_contract_fixture("cli/json/status_success.json")
     response = cli_contract_response_from_envelope(envelope)
 
     with_cli_contract_runtime do
@@ -117,14 +117,14 @@ describe "CLI public contract" do
 
         received.receive.command.not_nil!.name.should eq("status")
         exit_code.should eq(0)
-        stdout.should eq("#{cli_contract_fixture_json("cli_status_success.json")}\n")
+        stdout.should eq("#{cli_contract_fixture_json("cli/json/status_success.json")}\n")
         stderr.should eq("")
       end
     end
   end
 
   it "emits the exact frozen JSON error envelope on stdout only" do
-    envelope = cli_contract_fixture("cli_scene_error.json")
+    envelope = cli_contract_fixture("cli/json/scene_error.json")
     response = cli_contract_response_from_envelope(envelope)
 
     with_cli_contract_runtime do
@@ -135,7 +135,7 @@ describe "CLI public contract" do
         request.command.not_nil!.name.should eq("set_scene")
         request.command.not_nil!.target.should eq("missing")
         exit_code.should eq(4)
-        stdout.should eq("#{cli_contract_fixture_json("cli_scene_error.json")}\n")
+        stdout.should eq("#{cli_contract_fixture_json("cli/json/scene_error.json")}\n")
         stderr.should eq("")
       end
     end

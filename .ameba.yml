@@ -1,0 +1,56 @@
+# Ameba configuration for obsctl.
+#
+# `make lint` and the CI lint gate both run against this file. Every entry
+# below is a deliberate project decision, not a way to silence a backlog: the
+# rules that remain enabled are expected to stay at zero offenses.
+
+Excluded:
+  - lib
+  - bin
+
+# `not_nil!` is the idiomatic way to assert a value in a spec, where a nil
+# would fail the example anyway and the alternative is noise around every
+# assertion. Production code under src/ keeps the rule enforced.
+Lint/NotNil:
+  Excluded:
+    - spec/**/*.cr
+
+# Specs pre-declare `x = nil.as(T?)` before a begin/ensure block so the
+# variable is in scope for cleanup. Ameba reads the declaration as useless,
+# but removing it breaks the ensure block.
+Lint/UselessAssign:
+  Excluded:
+    - spec/**/*.cr
+
+# Enforced as a ratchet, not at ameba's default of 10.
+#
+# The dispatchers that used to dominate this rule have been split into named
+# groups and lookup tables: TUI::Input#handle (was 45), TUI::Dispatcher#handle
+# (36), CLI::Main.run (36), CommandExecutor#execute_command (26),
+# Domain::CommandParser#parse (24), and both `payload_for` mappings (23) are
+# all under the limit now.
+#
+# What is left is genuinely branch-heavy work rather than tangled control
+# flow — CryTUI's border/render resolution, the OBS supervisor's reconnect
+# state machine, and grapheme width classification. 25 sits just above the
+# worst of them, so nothing in src/ can get worse without failing the build,
+# and each one can be brought down on its own schedule.
+Metrics/CyclomaticComplexity:
+  MaxComplexity: 25
+  Excluded:
+    # The fake OBS server is one big protocol switchboard: a `case` over every
+    # obs-websocket request the specs exercise. Splitting it would scatter the
+    # test double's contract across several methods for no readability gain.
+    - spec/support/fake_obs_server.cr
+
+# `set_scene`, `set_last_result`, and friends mirror the obs-websocket request
+# names they wrap (SetCurrentProgramScene). Renaming them to `scene=` would
+# read as a plain attribute write and hide the round trip to OBS.
+Naming/AccessorMethodName:
+  Enabled: false
+
+# The TUI model exposes mutable Bool state as `property active` /
+# `property show_icons`; these are assigned as often as they are read, so the
+# `?` suffix would apply to only half of each pair.
+Naming/QueryBoolMethods:
+  Enabled: false

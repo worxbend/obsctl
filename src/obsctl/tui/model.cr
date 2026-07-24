@@ -74,18 +74,21 @@ module Obsctl
 
       def cycle_next
         return if @completions.empty?
-        @completion_index = @completion_index ? (@completion_index.not_nil! + 1) % @completions.size : 0
-        @input = @completions[@completion_index.not_nil!]
+        index = @completion_index
+        next_index = index ? (index + 1) % @completions.size : 0
+        @completion_index = next_index
+        @input = @completions[next_index]
       end
 
       def cycle_previous
         return if @completions.empty?
-        @completion_index = case index = @completion_index
-                            when Nil then @completions.size - 1
-                            when 0   then @completions.size - 1
-                            else          index - 1
-                            end
-        @input = @completions[@completion_index.not_nil!]
+        next_index = case index = @completion_index
+                     when Nil then @completions.size - 1
+                     when 0   then @completions.size - 1
+                     else          index - 1
+                     end
+        @completion_index = next_index
+        @input = @completions[next_index]
       end
     end
 

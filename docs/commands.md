@@ -8,9 +8,17 @@ Global options:
 - `--log-level debug|info|warn|error`
 - `--force`
 - `--json`
+- `-V`, `--version`
+- `-h`, `--help`
 
 Required commands:
 
+- `obsctl version` (also `obsctl --version`; supports `--json`)
+- `obsctl doctor` (supports `--json`)
+- `obsctl config explain` (supports `--json`)
+- `obsctl config diff` (supports `--json`)
+- `obsctl config migrate [--dry-run]` (supports `--json`)
+- `obsctl watch [--topics state,events,logs]`
 - `obsctl server`
 - `obsctl server --headless`
 - `obsctl status`
@@ -24,7 +32,13 @@ Required commands:
 - `obsctl toggle-mute <audio-alias|shortcut|obs-name>`
 - `obsctl vol|volume <audio-alias|shortcut|obs-name> <0-100>`
 - `obsctl stream`
-- `obsctl rec|record`
+- `obsctl rec|record` (toggles, unchanged)
+- `obsctl rec|record start`
+- `obsctl rec|record stop`
+- `obsctl rec|record toggle`
+- `obsctl rec|record pause`
+- `obsctl rec|record resume`
+- `obsctl rec|record status`
 - `obsctl dump-config`
 - `obsctl reload-config`
 - `obsctl validate-config`
@@ -42,7 +56,7 @@ Required commands:
 - `/toggle-mute <audio-alias|shortcut|obs-name>`
 - `/vol <audio-alias|shortcut|obs-name> <0-100>`
 - `/stream`
-- `/rec` or `/record`
+- `/rec` or `/record` (optionally `start|stop|toggle|pause|resume|status`)
 - `/dump-config`
 - `/reload-config`
 - `/status`
@@ -69,8 +83,8 @@ Non-interactive OBS control commands are IPC clients. They connect to the local 
 
 `--json` is available for scriptable commands: `status`, `obs-status`,
 `server-status`, `reconnect`, `shutdown-server`, `scene`, `mute`, `unmute`,
-`toggle-mute`, `vol`/`volume`, `stream`, `rec`/`record`, `dump-config`, `reload-config`, and
-`validate-config`. The flag can be placed before the command or after the
+`toggle-mute`, `vol`/`volume`, `stream`, `rec`/`record`, `dump-config`, `reload-config`,
+`validate-config`, `doctor`, `config`, and `watch`. The flag can be placed before the command or after the
 command arguments:
 
 ```sh
@@ -148,6 +162,150 @@ The public value is a JSON-safe non-negative integer; values above
 reported by the daemon, including `0`, and renders `-` when an older daemon
 omits the field. JSON output preserves the daemon payload and does not
 synthesize the missing field.
+
+`obsctl watch` streams daemon events to stdout as newline-delimited JSON, one
+self-describing object per line. It is the scripting counterpart to the TUI:
+consumers read it line-by-line without any framing logic.
+
+```sh
+obsctl watch | jq -r 'select(.topic == "state") | .data.current_scene'
+```
+
+Each line has exactly two fields. `data` is `null` when an event carries no
+payload; the key is always present rather than omitted, so consumers do not
+have to distinguish absent from null:
+
+```json
+{"topic":"state","data":{"connected":true,"current_scene":"Main Camera"}}
+{"topic":"logs","data":{"level":"info","message":"OBS connected"}}
+{"topic":"events","data":null}
+```
+
+Topics are `state`, `events`, and `logs`; all three are streamed by default.
+`--topics` takes a comma-separated subset and rejects an unknown name rather
+than silently streaming nothing:
+
+```sh
+obsctl watch --topics state,logs
+```
+
+Every line is flushed as it is written, so the stream is usable for reacting to
+events as they happen. The command runs until interrupted or until the daemon
+closes the connection, then exits `0`. If the daemon is not running it exits
+`3`, like every other client command. `watch` always writes JSON, so `--json`
+is accepted for consistency but changes nothing.
+
+`obsctl config explain` prints every effective setting with the source that
+supplied it, so it is clear which values the file actually sets and which are
+falling through to defaults:
+
+```text
+connection.host           127.0.0.1               (file)
+connection.port           4455                    (file)
+ui.theme                  nord                    (file)
+ui.locale                 null                    (default)
+```
+
+`obsctl config diff` prints only the settings where the file departs from the
+built-in defaults, as `key: default -> current`. A key present on only one side
+renders the missing side as `-`:
+
+```text
+ui.theme: default -> nord
+```
+
+It prints `config matches defaults: <path>` when there is nothing to report.
+
+`obsctl config migrate` rewrites the file in the current canonical schema. It
+drops top-level sections the current schema does not recognize, which is how a
+config written for an older obsctl stops carrying settings that no longer do
+anything, and it fills in keys the schema has since added:
+
+```text
+drop: legacy_setting
+migrated: /home/user/.config/obsctl/config.yml
+backup: /home/user/.config/obsctl/config.yml.bak.20260724192117
+```
+
+The original is always backed up to `<path>.bak.<timestamp>` before the rewrite,
+and the write is atomic. `--dry-run` reports the same `drop:` and `add:` lines
+without touching the file. Migrate is deliberately more tolerant than
+`validate-config`: it accepts unknown top-level keys, because removing them is
+the job. It still refuses a config that is invalid for any other reason, such
+as a port outside the valid range.
+
+Key paths are dotted and flattened from the canonical YAML. Sequences render
+inline as `[a, b]`, so reordering a list does not appear as a settings change.
+
+`obsctl doctor` checks the local setup and prints one line per check. It runs
+without a daemon, so it is the first thing to run when something is wrong.
+
+```text
+[ok  ] version        obsctl 0.3.0
+[ok  ] config         loaded /home/user/.config/obsctl/config.yml
+[warn] credentials    connection.password_env is OBS_WEBSOCKET_PASSWORD, but that variable is unset or empty
+                      -> export OBS_WEBSOCKET_PASSWORD in the environment that runs the daemon
+[fail] daemon         no obsctl daemon is responding at /run/user/1000/obsctl/obsctl.sock
+                      -> run: obsctl server --headless (or: obsctl service install)
+```
+
+Checks are `version`, `config`, `config.schema`, `credentials`, `socket`,
+`daemon`, `obs`, and `service`. Each reports `ok`, `warn`, or `fail`:
+
+- `warn` describes a setup that works but is worth changing, such as a
+  plaintext password or a daemon that is not installed as a user service.
+- `fail` means obsctl cannot do what you are asking of it.
+
+Doctor exits `0` when no check failed, and `1` when any check failed. Warnings
+alone do not fail the command. A failing check carries a remedy line; doctor
+never prints a problem without saying what to do about it.
+
+`--json` returns the same report as structured data. `result.healthy` mirrors
+the exit status, and every entry has `name`, `status`, `detail`, and `remedy`
+(null when there is nothing to do):
+
+```json
+{"ok":false,"result":{"healthy":false,"checks":[{"name":"daemon","status":"fail","detail":"no obsctl daemon is responding at /run/user/1000/obsctl/obsctl.sock","remedy":"run: obsctl server --headless (or: obsctl service install)"}]},"error":null,"exit_code":1}
+```
+
+Doctor never prints a password. The `credentials` check reports only which
+source is configured and whether it resolves.
+
+`obsctl record <action>` drives the OBS recording output. Bare `obsctl rec` and
+`obsctl record` keep their original toggle behavior; the explicit actions are
+`start`, `stop`, `toggle`, `pause`, `resume`, and `status`. The action is
+case-insensitive. An unrecognized action is a parse error, not a silent toggle:
+
+```text
+unknown record action: bogus; expected start, stop, toggle, pause, resume, or status
+```
+
+Starting while already recording, or stopping while already stopped, is a no-op
+in OBS rather than an error. `stop` reports the written file when OBS returns
+one:
+
+```json
+{"ok":true,"result":{"message":"recording stopped: /home/user/Videos/take.mkv"},"error":null,"exit_code":0}
+```
+
+`obsctl record status` returns structured fields alongside the message, so
+scripts do not parse prose. Human output renders one `key: value` line per
+field, with `-` for anything the daemon reports as null:
+
+```text
+recording: active
+timecode: 00:00:03.000
+duration_ms: 3000
+bytes: 4096
+```
+
+```json
+{"ok":true,"result":{"message":"recording active","active":true,"paused":false,"timecode":"00:00:03.000","duration_ms":3000,"bytes":4096},"error":null,"exit_code":0}
+```
+
+`recording:` renders `active`, `paused`, `stopped`, or `-` when the daemon
+cannot determine the state. `duration_ms` and `bytes` are only populated while
+recording is active.
 
 `obsctl reconnect` asks the running server supervisor to reconnect OBS. Success
 means the running supervisor accepted a generation-scoped reconnect request, or

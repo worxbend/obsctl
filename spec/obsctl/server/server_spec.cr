@@ -973,7 +973,7 @@ end
 private def wait_for_server_status(
   client : Obsctl::IPC::UnixClient,
   timeout : Time::Span = 3.seconds,
-  &block : JSON::Any -> Bool
+  & : JSON::Any -> Bool
 ) : JSON::Any
   deadline = Time.instant + timeout
 

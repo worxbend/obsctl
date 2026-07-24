@@ -118,6 +118,11 @@ fixtures:
     behavior: current_daemon
     contains_dropped_reconnect_diagnostic_logs: false
   - category: cli/json
+    relative_path: cli/json/scene_error.json
+    purpose: JSON envelope for a scene change that names an unknown scene.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
     relative_path: cli/json/scene_success.json
     purpose: JSON envelope for a successful scene change command.
     behavior: current_daemon

@@ -17,8 +17,9 @@ module Obsctl
           snapshot = parse_snapshot(data)
           return true unless snapshot
           previous_scene = model.current_scene
-          if previous_scene && snapshot.current_scene && previous_scene != snapshot.current_scene
-            model.scene_flash = {snapshot.current_scene.not_nil!, model.anim.frame}
+          current_scene = snapshot.current_scene
+          if previous_scene && current_scene && previous_scene != current_scene
+            model.scene_flash = {current_scene, model.anim.frame}
           end
           model.snapshot = snapshot
           model.connected_to_daemon = true

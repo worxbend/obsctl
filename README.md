@@ -13,7 +13,7 @@
 [![Release](https://img.shields.io/github/v/release/worxbend/obsctl?display_name=tag&sort=semver&style=flat-square)](https://github.com/worxbend/obsctl/releases)
 [![Crystal](https://img.shields.io/badge/Crystal-%E2%89%A5%201.20.2-000000?style=flat-square&logo=crystal)](https://crystal-lang.org/)
 [![obs-websocket](https://img.shields.io/badge/obs--websocket-5.x-302E31?style=flat-square&logo=obsstudio)](https://github.com/obsproject/obs-websocket)
-[![License](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](shard.yml)
+[![License](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](LICENSE)
 
 [Get started](#-quick-start) · [Explore the TUI](#-the-control-room) · [Automate with the CLI](#-cli--automation) · [Read the docs](#-documentation)
 
@@ -68,8 +68,10 @@ make release
 install -Dm755 bin/obsctl ~/.local/bin/obsctl
 ```
 
-The release binary is written to `bin/obsctl`. Prebuilt Linux AMD64 archives
-are also available on the [Releases page](https://github.com/worxbend/obsctl/releases).
+The release binary is written to `bin/obsctl`. Prebuilt static binaries for
+`linux-amd64` and `linux-arm64`, with `SHA256SUMS.txt`, are published on the
+[Releases page](https://github.com/worxbend/obsctl/releases). They are linked
+against musl, so they do not depend on your glibc version.
 
 ### 2. Initialize
 
@@ -154,7 +156,8 @@ Press `/` and use the same grammar as the CLI:
 /profile Streaming
 /collection Gaming
 /stream
-/rec
+/rec start
+/rec status
 /status
 /reconnect
 ```
@@ -182,10 +185,27 @@ obsctl stream
 obsctl record
 obsctl reconnect
 
+# Diagnostics
+obsctl doctor
+obsctl doctor --json
+
+# Recording
+obsctl record start
+obsctl record pause
+obsctl record resume
+obsctl record stop
+obsctl record status --json
+
+# Event stream for scripts
+obsctl watch --topics state | jq -r '.data.current_scene'
+
 # Configuration and lifecycle
 obsctl validate-config
 obsctl dump-config
 obsctl reload-config
+obsctl config explain
+obsctl config diff
+obsctl config migrate --dry-run
 obsctl shutdown-server
 ```
 
@@ -374,12 +394,16 @@ repositories. See [docs/protocol.md](docs/protocol.md) for the contract model.
 | [Configuration](docs/config.md) | Connection, reconnect, UI, theme, alias, and persistence settings |
 | [Protocol](docs/protocol.md) | IPC framing, subscriptions, state contracts, and compatibility fixtures |
 | [CryTUI research](docs/tui-research.md) | Ratatui analysis, Crystal library evaluation, rendering architecture, and parity evidence |
+| [Contributing](CONTRIBUTING.md) | Setup, the four build gates, project layout, and release process |
+| [Changelog](CHANGELOG.md) | Release history |
+| [Security](SECURITY.md) | Reporting vulnerabilities, credential handling, and the daemon's trust boundary |
 
 ## 🤝 Contributing
 
 Issues, focused bug reports, documentation improvements, and pull requests are
 welcome. For behavior changes, include a regression test at the narrowest
-useful layer and run the development checks above before opening a PR.
+useful layer and run `make check` before opening a PR — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 Useful reports include:
 
@@ -390,9 +414,12 @@ Useful reports include:
 
 Please never include OBS passwords or generated authentication strings.
 
+For security vulnerabilities, do not open a public issue — follow
+[SECURITY.md](SECURITY.md) instead.
+
 ## 📜 License
 
-`obsctl` is released under the MIT license.
+`obsctl` is released under the [MIT license](LICENSE).
 
 ---
 

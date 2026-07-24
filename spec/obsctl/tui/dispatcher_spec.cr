@@ -69,7 +69,7 @@ describe Obsctl::TUI::Dispatcher do
 
   it "parses palette commands and formats remote errors" do
     model = Obsctl::TUI::Model.new
-    sender = ->(payload : Obsctl::IPC::CommandPayload) do
+    sender = ->(_payload : Obsctl::IPC::CommandPayload) do
       Obsctl::IPC::Response.new("test", false, nil, Obsctl::IPC::ErrorPayload.new(Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE, "OBS offline"))
     end
     dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)

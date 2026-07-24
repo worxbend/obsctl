@@ -4,6 +4,8 @@ require "../../spec_helper"
 require "../../../src/obsctl/cli/main"
 require "../../../src/obsctl/ipc/client_session"
 require "../../../src/obsctl/ipc/socket_path"
+require "../../support/cli_capture"
+require "../../../src/obsctl/config/config_writer"
 
 private class FakeCliSystemCommandRunner < Obsctl::Service::SystemCommandRunner
   getter calls = [] of Tuple(String, Array(String))
@@ -64,6 +66,30 @@ private def parse_single_json(stdout : String) : JSON::Any
 end
 
 describe Obsctl::CLI::Main do
+  it "prints the version for the flag, the short flag, and the bare command" do
+    ["--version", "-V", "version"].each do |arg|
+      exit_code, stdout, stderr = run_cli_json([arg])
+      exit_code.should eq(0)
+      stdout.should eq("obsctl #{Obsctl::VERSION}\n")
+      stderr.should be_empty
+    end
+  end
+
+  it "emits a JSON envelope for the version command" do
+    exit_code, stdout, _ = run_cli_json(["version", "--json"])
+    exit_code.should eq(0)
+    envelope = parse_single_json(stdout)
+    envelope["ok"].as_bool.should be_true
+    envelope["result"]["version"].as_s.should eq(Obsctl::VERSION)
+    envelope["error"].raw.should be_nil
+    envelope["exit_code"].as_i.should eq(0)
+  end
+
+  it "reports a version that matches the shard manifest" do
+    manifest = File.read(File.join(__DIR__, "..", "..", "..", "shard.yml"))
+    manifest.should contain("version: #{Obsctl::VERSION}\n")
+  end
+
   it "starts the TUI for both the default and explicit tui commands" do
     paths = [] of String
     runner = ->(path : String) { paths << path; 17 }
@@ -77,7 +103,7 @@ describe Obsctl::CLI::Main do
 
   it "returns config error for missing config when command requires config" do
     path = "/tmp/obsctl-missing-#{Random.rand(1_000_000)}.yml"
-    Obsctl::CLI::Main.run(["--config", path, "validate-config"]).should eq(2)
+    Obsctl::SpecSupport::CliCapture.exit_code(["--config", path, "validate-config"]).should eq(2)
   end
 
   it "returns server unavailable for thin client commands when IPC is missing" do
@@ -85,7 +111,7 @@ describe Obsctl::CLI::Main do
     previous_runtime_dir = ENV["XDG_RUNTIME_DIR"]?
     ENV["XDG_RUNTIME_DIR"] = runtime_dir
 
-    Obsctl::CLI::Main.run(["status"]).should eq(3)
+    Obsctl::SpecSupport::CliCapture.exit_code(["status"]).should eq(3)
   ensure
     if previous_runtime_dir
       ENV["XDG_RUNTIME_DIR"] = previous_runtime_dir
@@ -600,7 +626,7 @@ describe Obsctl::CLI::Main do
   end
 
   it "returns command parse error for unsupported log levels" do
-    Obsctl::CLI::Main.run(["--log-level", "trace", "status"]).should eq(5)
+    Obsctl::SpecSupport::CliCapture.exit_code(["--log-level", "trace", "status"]).should eq(5)
   end
 
   it "smoke tests service install through the CLI boundary" do
@@ -613,7 +639,7 @@ describe Obsctl::CLI::Main do
       runner: runner
     )
 
-    Obsctl::CLI::Main.run(["service", "install"], installer).should eq(0)
+    Obsctl::SpecSupport::CliCapture.exit_code(["service", "install"], installer).should eq(0)
 
     File.read(service_path).should contain("ExecStart=/tmp/obsctl server --headless")
     runner.calls.should eq([{"systemctl", ["--user", "daemon-reload"]}])
@@ -629,7 +655,7 @@ describe Obsctl::CLI::Main do
       runner: runner
     )
 
-    Obsctl::CLI::Main.run(["service", "start"], installer).should eq(0)
+    Obsctl::SpecSupport::CliCapture.exit_code(["service", "start"], installer).should eq(0)
 
     runner.calls.should eq([{"systemctl", ["--user", "start", "obsctl.service"]}])
   end
@@ -648,5 +674,149 @@ describe Obsctl::CLI::Main do
     stderr = io.to_s
     stderr.should contain("warning: plaintext connection.password is configured")
     stderr.should_not contain("super-secret")
+  end
+
+  it "reports doctor failures as human lines with remedies and exit code 1" do
+    with_cli_json_runtime do
+      path = "/tmp/obsctl-doctor-cli-#{Random.rand(1_000_000)}.yml"
+      exit_code, stdout, _ = run_cli_json(["--config", path, "doctor"])
+
+      exit_code.should eq(1)
+      stdout.should contain("[ok  ] version")
+      stdout.should contain("[fail] config")
+      stdout.should contain("-> run: obsctl init")
+      stdout.should contain("[fail] daemon")
+    end
+  end
+
+  it "emits a doctor JSON envelope carrying every check" do
+    with_cli_json_runtime do
+      path = "/tmp/obsctl-doctor-cli-#{Random.rand(1_000_000)}.yml"
+      exit_code, stdout, _ = run_cli_json(["--config", path, "doctor", "--json"])
+
+      exit_code.should eq(1)
+      envelope = parse_single_json(stdout)
+      envelope["ok"].as_bool.should be_false
+      envelope["exit_code"].as_i.should eq(1)
+      envelope["result"]["healthy"].as_bool.should be_false
+
+      checks = envelope["result"]["checks"].as_a
+      checks.map(&.["name"].as_s).should contain("daemon")
+      checks.each do |check|
+        ["ok", "warn", "fail"].should contain(check["status"].as_s)
+        check["detail"].as_s.should_not be_empty
+      end
+    end
+  end
+
+  it "rejects doctor arguments" do
+    exit_code, _, stderr = run_cli_json(["doctor", "extra"])
+    exit_code.should eq(5)
+    stderr.should contain("wrong argument count for doctor")
+  end
+
+  it "prints config explain with a source column" do
+    path = File.tempname("obsctl-cli-explain", ".yml")
+    begin
+      Obsctl::Config::ConfigWriter.new.write(path, Obsctl::Config::Config.default, backup: false)
+      exit_code, stdout, _ = run_cli_json(["--config", path, "config", "explain"])
+
+      exit_code.should eq(0)
+      stdout.should contain("connection.port")
+      stdout.should contain("(file)")
+    ensure
+      File.delete(path) if File.exists?(path)
+    end
+  end
+
+  it "prints only departures from the defaults for config diff" do
+    path = File.tempname("obsctl-cli-diff", ".yml")
+    begin
+      File.write(path, "version: 1\nui:\n  theme: nord\n")
+      exit_code, stdout, _ = run_cli_json(["--config", path, "config", "diff"])
+
+      exit_code.should eq(0)
+      stdout.should eq("ui.theme: default -> nord\n")
+    ensure
+      File.delete(path) if File.exists?(path)
+    end
+  end
+
+  it "emits a config diff JSON envelope" do
+    path = File.tempname("obsctl-cli-diff-json", ".yml")
+    begin
+      File.write(path, "version: 1\nui:\n  theme: nord\n")
+      exit_code, stdout, _ = run_cli_json(["--config", path, "config", "diff", "--json"])
+
+      exit_code.should eq(0)
+      envelope = parse_single_json(stdout)
+      envelope["ok"].as_bool.should be_true
+      envelope["result"]["changed"].as_bool.should be_true
+      change = envelope["result"]["changes"].as_a.first
+      change["key"].as_s.should eq("ui.theme")
+      change["default"].as_s.should eq("default")
+      change["current"].as_s.should eq("nord")
+    ensure
+      File.delete(path) if File.exists?(path)
+    end
+  end
+
+  it "leaves the file alone for config migrate --dry-run" do
+    path = File.tempname("obsctl-cli-migrate", ".yml")
+    begin
+      File.write(path, "version: 1\nlegacy_setting: true\n")
+      before = File.read(path)
+      exit_code, stdout, _ = run_cli_json(["--config", path, "config", "migrate", "--dry-run"])
+
+      exit_code.should eq(0)
+      stdout.should contain("drop: legacy_setting")
+      stdout.should contain("dry run")
+      File.read(path).should eq(before)
+    ensure
+      File.delete(path) if File.exists?(path)
+      Dir.glob("#{path}.bak.*").each { |backup| File.delete(backup) }
+    end
+  end
+
+  it "rewrites and backs up the file for config migrate" do
+    path = File.tempname("obsctl-cli-migrate-write", ".yml")
+    begin
+      File.write(path, "version: 1\nlegacy_setting: true\n")
+      exit_code, stdout, _ = run_cli_json(["--config", path, "config", "migrate"])
+
+      exit_code.should eq(0)
+      stdout.should contain("migrated:")
+      stdout.should contain("backup:")
+      File.read(path).should_not contain("legacy_setting")
+      Dir.glob("#{path}.bak.*").should_not be_empty
+    ensure
+      File.delete(path) if File.exists?(path)
+      Dir.glob("#{path}.bak.*").each { |backup| File.delete(backup) }
+    end
+  end
+
+  it "rejects a missing, unknown, or misplaced config action" do
+    run_cli_json(["config"])[0].should eq(5)
+    run_cli_json(["config", "bogus"])[0].should eq(5)
+
+    _, _, stderr = run_cli_json(["config", "explain", "--dry-run"])
+    stderr.should contain("--dry-run is only supported for config migrate")
+  end
+
+  it "rejects unknown watch topics and stray arguments" do
+    _, _, stderr = run_cli_json(["watch", "--topics", "scenes"])
+    stderr.should contain("unknown watch topic: scenes")
+
+    _, _, stray = run_cli_json(["watch", "everything"])
+    stray.should contain("unexpected argument for watch: everything")
+
+    _, _, missing = run_cli_json(["watch", "--topics"])
+    missing.should contain("--topics requires a comma-separated list")
+  end
+
+  it "reports the daemon as unavailable when watch cannot subscribe" do
+    with_cli_json_runtime do
+      run_cli_json(["watch"])[0].should eq(3)
+    end
   end
 end

@@ -48,6 +48,8 @@ module Obsctl
         @request_timeout_ms : Int32 = 500,
         @streaming : Bool = false,
         @recording : Bool = false,
+        @record_paused : Bool = false,
+        @record_output_path : String = "/tmp/obsctl-fake-recording.mkv",
         @profiles : Array(String) = ["Default", "Streaming"],
         @current_profile : String = "Default",
         @scene_collections : Array(String) = ["Podcast", "Gaming"],
@@ -122,6 +124,14 @@ module Obsctl
 
       def recording? : Bool
         @mutex.synchronize { @recording }
+      end
+
+      def record_paused? : Bool
+        @mutex.synchronize { @record_paused }
+      end
+
+      def record_output_path : String
+        @mutex.synchronize { @record_output_path }
       end
 
       def current_profile : String
@@ -581,13 +591,34 @@ module Obsctl
               "outputBytes"    => @stream_bytes,
             }.to_json)
           when "GetRecordStatus"
-            response_data = JSON.parse({"outputActive" => @recording, "outputDuration" => (@recording ? 3_000 : 0)}.to_json)
+            response_data = JSON.parse({
+              "outputActive"   => @recording,
+              "outputPaused"   => @record_paused,
+              "outputTimecode" => (@recording ? "00:00:03.000" : "00:00:00.000"),
+              "outputDuration" => (@recording ? 3_000 : 0),
+              "outputBytes"    => (@recording ? 4_096 : 0),
+            }.to_json)
           when "ToggleStream"
             @streaming = !@streaming
             response_data = JSON.parse({"outputActive" => @streaming}.to_json)
           when "ToggleRecord"
             @recording = !@recording
+            @record_paused = false unless @recording
             response_data = JSON.parse({"outputActive" => @recording}.to_json)
+          when "StartRecord"
+            @recording = true
+            @record_paused = false
+            response_data = nil
+          when "StopRecord"
+            @recording = false
+            @record_paused = false
+            response_data = JSON.parse({"outputPath" => @record_output_path}.to_json)
+          when "PauseRecord"
+            @record_paused = true
+            response_data = nil
+          when "ResumeRecord"
+            @record_paused = false
+            response_data = nil
           when "GetProfileList"
             response_data = JSON.parse({
               "currentProfileName" => @current_profile,

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check (crystal ${{ matrix.crystal }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.20.2 is the floor declared in shard.yml; latest catches upstream drift.
+        crystal:
+          - "1.20.2"
+          - latest
+    env:
+      CRYSTAL_CACHE_DIR: /tmp/obsctl-crystal-cache
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: ${{ matrix.crystal }}
+
+      - name: Cache Crystal build artifacts
+        uses: actions/cache@v4
+        with:
+          path: /tmp/obsctl-crystal-cache
+          key: crystal-cache-${{ matrix.crystal }}-${{ hashFiles('shard.lock') }}-${{ github.sha }}
+          restore-keys: |
+            crystal-cache-${{ matrix.crystal }}-${{ hashFiles('shard.lock') }}-
+            crystal-cache-${{ matrix.crystal }}-
+
+      # Not --production: ameba is a development dependency and its postinstall
+      # is what produces bin/ameba for the lint gate.
+      - name: Install shards
+        run: shards install
+
+      - name: Check formatting
+        run: make format-check
+
+      - name: Lint
+        run: make lint
+
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: make test

@@ -12,7 +12,7 @@ describe Obsctl::TUI::Anim do
   it "builds gradients without changing their text" do
     line = Obsctl::TUI::Anim.gradient_line("OBS", CryTUI::Color.rgb(0, 0, 0), CryTUI::Color.rgb(255, 0, 0), 3_u64, true)
     line.spans.map(&.content).join.should eq("OBS")
-    line.spans.each { |span| span.style.modifiers.bold?.should be_true }
+    line.spans.each(&.style.modifiers.bold?.should(be_true))
   end
 
   it "renders fixed-width Unicode and ASCII histories" do

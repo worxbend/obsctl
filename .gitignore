@@ -4,6 +4,3 @@
 /.crystal/
 *.dwarf
 *.log
-
-# Agent Loop runtime
-.agent-loop/

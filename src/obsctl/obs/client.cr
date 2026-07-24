@@ -14,6 +14,7 @@ require "./requests/audio"
 require "./requests/outputs"
 require "./requests/studio"
 require "./state/obs_snapshot"
+require "./state/record_status"
 require "../config/config"
 require "../domain/errors"
 require "../domain/aliases"
@@ -140,7 +141,7 @@ module Obsctl
       # Returns the current OBS scene names in OBS order.
       def scene_names : Array(String)
         data = request(Requests::Scenes::GET_SCENE_LIST).response_data || JSON.parse("{}")
-        data["scenes"].as_a.map { |scene| scene["sceneName"].as_s }
+        data["scenes"].as_a.map(&.["sceneName"].as_s)
       end
 
       # Returns the current OBS program scene name when available.
@@ -157,7 +158,7 @@ module Obsctl
       # Returns current OBS input names.
       def input_names : Array(String)
         data = request(Requests::Audio::GET_INPUT_LIST).response_data || JSON.parse("{}")
-        data["inputs"].as_a.map { |input| input["inputName"].as_s }
+        data["inputs"].as_a.map(&.["inputName"].as_s)
       end
 
       # Returns mute state for an OBS input by exact OBS input name.
@@ -202,6 +203,38 @@ module Obsctl
       def toggle_record : Bool?
         data = request(Requests::Outputs::TOGGLE_RECORD).response_data || JSON.parse("{}")
         data["outputActive"]?.try(&.as_bool?)
+      end
+
+      # Starts recording. OBS returns no data, so the caller re-reads status.
+      def start_record : Nil
+        request(Requests::Outputs::START_RECORD)
+      end
+
+      # Stops recording and returns the written file path when OBS reports one.
+      def stop_record : String?
+        data = request(Requests::Outputs::STOP_RECORD).response_data || JSON.parse("{}")
+        data["outputPath"]?.try(&.as_s?)
+      end
+
+      def pause_record : Nil
+        request(Requests::Outputs::PAUSE_RECORD)
+      end
+
+      def resume_record : Nil
+        request(Requests::Outputs::RESUME_RECORD)
+      end
+
+      # Returns the full record status, including pause state and timecode.
+      def record_status : State::RecordStatus
+        data = request(Requests::Outputs::GET_RECORD_STATUS).response_data || JSON.parse("{}")
+        active = data["outputActive"]?.try(&.as_bool?)
+        State::RecordStatus.new(
+          active: active,
+          paused: data["outputPaused"]?.try(&.as_bool?),
+          timecode: data["outputTimecode"]?.try(&.as_s?),
+          duration_ms: active == true ? data["outputDuration"]?.try(&.as_i64?) : nil,
+          bytes: active == true ? data["outputBytes"]?.try(&.as_i64?) : nil
+        )
       end
 
       def profiles : NamedTuple(current: String?, names: Array(String))
@@ -535,17 +568,15 @@ module Obsctl
       end
 
       private def record_terminal_error(error : Domain::ConnectionFailed) : Domain::ConnectionFailed
-        notifications = nil.as(Channel(Domain::ConnectionFailed)?)
-        terminal = @terminal_error_lock.synchronize do
+        terminal, notifications = @terminal_error_lock.synchronize do
           if existing = @terminal_error
-            existing
+            {existing, nil.as(Channel(Domain::ConnectionFailed)?)}
           else
             @terminal_error = error
-            notifications = @close_notifications
-            error
+            {error, @close_notifications}
           end
         end
-        notify_close(notifications.not_nil!, terminal) if notifications
+        notify_close(notifications, terminal) if notifications
         terminal
       end
 

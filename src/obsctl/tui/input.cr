@@ -49,42 +49,85 @@ module Obsctl
     module Input
       extend self
 
+      # Plain characters that map straight to an action.
+      #
+      # Checked before the control-modified bindings below, matching the
+      # original ordering: `r` reloads whether or not control is held, while
+      # `c` reaches FocusCollections only because control+c is claimed by Quit
+      # earlier in `global_key`.
+      SIMPLE_KEYS = {
+        'r' => ActionKind::ReloadConfig,
+        'D' => ActionKind::DumpConfig,
+        'R' => ActionKind::RetryConnect,
+        's' => ActionKind::FocusScenes,
+        'a' => ActionKind::FocusAudio,
+        'p' => ActionKind::FocusProfiles,
+        'c' => ActionKind::FocusCollections,
+      }
+
+      # Resolves a key press to an action, or nil when nothing is bound.
+      #
+      # The palette and settings views capture every key, so they short-circuit.
+      # Otherwise the binding groups are tried in priority order; each returns
+      # nil to pass the key along.
       def handle_key(model : Model, key : CryTUI::KeyEvent) : Action?
         return palette_key(key) if model.command_palette.active
         return settings_key(key) if model.view.settings?
 
+        global_key(model, key) ||
+          pane_focus_key(key) ||
+          navigation_key(key) ||
+          activation_key(model, key) ||
+          audio_key(model, key)
+      end
+
+      private def global_key(model : Model, key : CryTUI::KeyEvent) : Action?
         character = key.character
         control = key.modifiers.control?
 
         return action(ActionKind::OpenSettings) if function?(key, 2) || (character == 't' && control)
         return action(ActionKind::Quit) if character == 'q' || (character == 'c' && control)
         return action(ActionKind::OpenPalette) if character == ':' || (character && model.command_palette_prefix.includes?(character))
-        return action(ActionKind::ReloadConfig) if character == 'r'
-        return action(ActionKind::DumpConfig) if character == 'D'
-        return action(ActionKind::RetryConnect) if character == 'R'
-        return action(ActionKind::FocusScenes) if character == 's'
-        return action(ActionKind::FocusAudio) if character == 'a'
-        return action(ActionKind::FocusProfiles) if character == 'p'
-        return action(ActionKind::FocusCollections) if character == 'c'
 
-        return action(ActionKind::FocusPaneLeft) if control && (key.code.left? || character == 'h')
-        return action(ActionKind::FocusPaneRight) if control && (key.code.right? || character == 'l')
-        return action(ActionKind::FocusPaneUp) if control && (key.code.up? || character == 'k')
-        return action(ActionKind::FocusPaneDown) if control && (key.code.down? || character == 'j')
+        return nil unless character
+        SIMPLE_KEYS[character]?.try { |kind| action(kind) }
+      end
+
+      # Control plus an arrow or hjkl moves focus between panes.
+      private def pane_focus_key(key : CryTUI::KeyEvent) : Action?
+        return nil unless key.modifiers.control?
+
+        character = key.character
+        return action(ActionKind::FocusPaneLeft) if key.code.left? || character == 'h'
+        return action(ActionKind::FocusPaneRight) if key.code.right? || character == 'l'
+        return action(ActionKind::FocusPaneUp) if key.code.up? || character == 'k'
+        return action(ActionKind::FocusPaneDown) if key.code.down? || character == 'j'
+        nil
+      end
+
+      private def navigation_key(key : CryTUI::KeyEvent) : Action?
+        character = key.character
         return action(ActionKind::NavigateUp) if key.code.up? || character == 'k'
         return action(ActionKind::NavigateDown) if key.code.down? || character == 'j'
+        nil
+      end
 
-        if key.code.enter?
-          return action(ActionKind::ActivateScene) if model.focus.scenes?
-          return action(ActionKind::ActivateProfile) if model.focus.profiles?
-          return action(ActionKind::ActivateCollection) if model.focus.collections?
-        end
+      private def activation_key(model : Model, key : CryTUI::KeyEvent) : Action?
+        return nil unless key.code.enter?
 
-        if model.focus.audio?
-          return action(ActionKind::ToggleMute) if character == 'm'
-          return action(ActionKind::VolumeDown) if key.code.left? || character == 'h'
-          return action(ActionKind::VolumeUp) if key.code.right? || character == 'l'
-        end
+        return action(ActionKind::ActivateScene) if model.focus.scenes?
+        return action(ActionKind::ActivateProfile) if model.focus.profiles?
+        return action(ActionKind::ActivateCollection) if model.focus.collections?
+        nil
+      end
+
+      private def audio_key(model : Model, key : CryTUI::KeyEvent) : Action?
+        return nil unless model.focus.audio?
+
+        character = key.character
+        return action(ActionKind::ToggleMute) if character == 'm'
+        return action(ActionKind::VolumeDown) if key.code.left? || character == 'h'
+        return action(ActionKind::VolumeUp) if key.code.right? || character == 'l'
         nil
       end
 

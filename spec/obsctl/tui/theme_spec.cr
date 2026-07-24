@@ -15,7 +15,7 @@ describe Obsctl::TUI::Theme do
     themes.first.id.should eq("claude")
     themes[1].id.should eq("codex")
     themes.last.id.should eq("mono")
-    themes.map(&.id).uniq.size.should eq(themes.size)
+    themes.map(&.id).uniq!.size.should eq(themes.size)
   end
 
   it "resolves names case-insensitively and defaults unknown names" do
