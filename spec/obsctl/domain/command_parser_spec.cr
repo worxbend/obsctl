@@ -59,4 +59,27 @@ describe Obsctl::Domain::CommandParser do
   it "rejects quoted volume percentages like the Rust parser" do
     expect_raises(Obsctl::Domain::CommandParseError, /must not be quoted/) { parser.parse(%(/vol mic "50")) }
   end
+
+  it "parses every explicit record action" do
+    parser.parse("/rec start").should be_a(Obsctl::Domain::StartRecordCommand)
+    parser.parse("/rec stop").should be_a(Obsctl::Domain::StopRecordCommand)
+    parser.parse("/rec toggle").should be_a(Obsctl::Domain::ToggleRecordCommand)
+    parser.parse("/rec pause").should be_a(Obsctl::Domain::PauseRecordCommand)
+    parser.parse("/rec resume").should be_a(Obsctl::Domain::ResumeRecordCommand)
+    parser.parse("/rec status").should be_a(Obsctl::Domain::RecordStatusCommand)
+  end
+
+  it "accepts record actions through the record alias and ignores action case" do
+    parser.parse("record START").should be_a(Obsctl::Domain::StartRecordCommand)
+    parser.parse("/RECORD Status").should be_a(Obsctl::Domain::RecordStatusCommand)
+  end
+
+  it "keeps bare rec as a toggle for backward compatibility" do
+    parser.parse("/rec").should be_a(Obsctl::Domain::ToggleRecordCommand)
+  end
+
+  it "rejects unknown and surplus record actions" do
+    expect_raises(Obsctl::Domain::CommandParseError, /unknown record action: bogus/) { parser.parse("/rec bogus") }
+    expect_raises(Obsctl::Domain::CommandParseError, /wrong argument count/) { parser.parse("/rec start now") }
+  end
 end

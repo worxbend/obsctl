@@ -45,19 +45,25 @@ module Obsctl
         IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.server_error)
       end
 
+      # Routes an IPC command to the group that owns it.
+      #
+      # The groups return nil for a name they do not handle, so an unknown
+      # command falls through to a single parse error at the bottom.
       private def execute_command(command : IPC::CommandPayload) : JSON::Any
+        status_command(command) ||
+          studio_command(command) ||
+          audio_command(command) ||
+          output_command(command) ||
+          config_command(command) ||
+          raise Domain::CommandParseError.new("unsupported IPC command: #{command.name}")
+      end
+
+      private def status_command(command : IPC::CommandPayload) : JSON::Any?
         case command.name
-        when "ping"
-          object({"message" => "pong"})
-        when "get_server_status"
-          server_status
-        when "status"
-          combined_status
-        when "get_obs_status", "get_snapshot"
-          @state.snapshot_json
-        when "validate_config"
-          Config::ConfigLoader.new.load(@config_path)
-          object({"message" => "config valid: #{@config_path}"})
+        when "ping"                           then object({"message" => "pong"})
+        when "get_server_status"              then server_status
+        when "status"                         then combined_status
+        when "get_obs_status", "get_snapshot" then @state.snapshot_json
         when "reconnect_obs"
           unless @supervisor.alive? && @supervisor.reconnect
             raise Domain::ObsUnavailable.new("OBS supervisor is not running; restart the server or enable reconnect.")
@@ -68,6 +74,11 @@ module Obsctl
             raise Domain::CommandParseError.new("remote shutdown is disabled")
           end
           object({"message" => "server shutdown requested"})
+        end
+      end
+
+      private def studio_command(command : IPC::CommandPayload) : JSON::Any?
+        case command.name
         when "set_scene"
           target = required_target(command)
           live_names = @state.snapshot.scenes.map(&.name)
@@ -85,10 +96,13 @@ module Obsctl
           @supervisor.with_client(&.set_scene_collection(target))
           refresh_snapshot
           object({"message" => "scene collection set: #{target}"})
-        when "mute"
-          set_mute(command, true)
-        when "unmute"
-          set_mute(command, false)
+        end
+      end
+
+      private def audio_command(command : IPC::CommandPayload) : JSON::Any?
+        case command.name
+        when "mute"   then set_mute(command, true)
+        when "unmute" then set_mute(command, false)
         when "toggle_mute"
           input = resolve_audio(required_target(command))
           @supervisor.with_client(&.toggle_mute(input.name))
@@ -101,6 +115,11 @@ module Obsctl
           @supervisor.with_client(&.set_volume(input.name, percent))
           @state.update_input_volume(input.name, Domain::Aliases.volume_percent_to_mul(percent), nil)
           object({"message" => "volume set: #{input.name} #{percent}%"})
+        end
+      end
+
+      private def output_command(command : IPC::CommandPayload) : JSON::Any?
+        case command.name
         when "toggle_stream"
           active = @supervisor.with_client(&.toggle_stream)
           refresh_snapshot
@@ -109,6 +128,33 @@ module Obsctl
           active = @supervisor.with_client(&.toggle_record)
           refresh_snapshot
           object({"message" => "recording #{output_state(active)}"})
+        when "start_record"
+          @supervisor.with_client(&.start_record)
+          refresh_snapshot
+          object({"message" => "recording started"})
+        when "stop_record"
+          output_path = @supervisor.with_client(&.stop_record)
+          refresh_snapshot
+          message = output_path ? "recording stopped: #{output_path}" : "recording stopped"
+          object({"message" => message})
+        when "pause_record"
+          @supervisor.with_client(&.pause_record)
+          refresh_snapshot
+          object({"message" => "recording paused"})
+        when "resume_record"
+          @supervisor.with_client(&.resume_record)
+          refresh_snapshot
+          object({"message" => "recording resumed"})
+        when "record_status"
+          record_status_payload(@supervisor.with_client(&.record_status))
+        end
+      end
+
+      private def config_command(command : IPC::CommandPayload) : JSON::Any?
+        case command.name
+        when "validate_config"
+          Config::ConfigLoader.new.load(@config_path)
+          object({"message" => "config valid: #{@config_path}"})
         when "dump_config"
           @supervisor.with_client do |client|
             merged = Config::ConfigDump.merge(@config, client.scene_names, client.input_names)
@@ -121,14 +167,12 @@ module Obsctl
           @config = Config::ConfigLoader.new.load(@config_path)
           refresh_snapshot
           object({"message" => "config reloaded: #{@config_path}"})
-        else
-          raise Domain::CommandParseError.new("unsupported IPC command: #{command.name}")
         end
       end
 
       private def set_mute(command : IPC::CommandPayload, muted : Bool) : JSON::Any
         input = resolve_audio(required_target(command))
-        @supervisor.with_client { |client| client.mute(input.name, muted) }
+        @supervisor.with_client(&.mute(input.name, muted))
         refresh_snapshot
         object({"message" => "#{muted ? "muted" : "unmuted"}: #{input.name}"})
       end
@@ -145,6 +189,28 @@ module Obsctl
 
       private def output_state(active : Bool?) : String
         active.nil? ? "toggled" : (active ? "started" : "stopped")
+      end
+
+      # Carries the structured record fields plus a one-line `message`, so the
+      # TUI and any generic consumer can render it the same way as every other
+      # command result without special-casing.
+      private def record_status_payload(status : OBS::State::RecordStatus) : JSON::Any
+        object({
+          "message"     => "recording #{record_state_label(status)}",
+          "active"      => status.active,
+          "paused"      => status.paused,
+          "timecode"    => status.timecode,
+          "duration_ms" => status.duration_ms,
+          "bytes"       => status.bytes,
+        })
+      end
+
+      private def record_state_label(status : OBS::State::RecordStatus) : String
+        case status.active
+        when true  then status.paused == true ? "paused" : "active"
+        when false then "stopped"
+        else            "state unknown"
+        end
       end
 
       private def server_status : JSON::Any

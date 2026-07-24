@@ -239,10 +239,9 @@ module Obsctl
         at : Time = Time.utc,
         connection_failed : Bool = true,
       ) : JSON::Any
-        next_snapshot = nil
-        @lock.synchronize do
+        next_snapshot = @lock.synchronize do
           current = @snapshot
-          next_snapshot = current.copy_with(connected: false, last_error: error, updated_at: at)
+          updated = current.copy_with(connected: false, last_error: error, updated_at: at)
           was_connected = current.connected
           @telemetry = ServerTelemetry.new(
             reconnecting: reconnecting,
@@ -251,9 +250,10 @@ module Obsctl
             last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at,
             last_connection_failed_at: was_connected || !connection_failed ? @telemetry.last_connection_failed_at : at
           )
-          @snapshot = next_snapshot.not_nil!
+          @snapshot = updated
+          updated
         end
-        snapshot_to_json(next_snapshot.not_nil!)
+        snapshot_to_json(next_snapshot)
       end
 
       # Returns the latest snapshot as the IPC state-event JSON payload.
@@ -330,7 +330,7 @@ module Obsctl
         snapshot : OBS::State::ObsSnapshot,
       ) : ServerTelemetry
         if snapshot.connected
-          return @telemetry unless !current.connected || @telemetry.last_connected_at.nil? || @telemetry.reconnecting
+          return @telemetry if current.connected && !@telemetry.last_connected_at.nil? && !@telemetry.reconnecting
 
           ServerTelemetry.new(
             reconnecting: false,

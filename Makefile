@@ -1,6 +1,9 @@
 CRYSTAL ?= crystal
 
-.PHONY: build test format lint bootstrap-obsctl-rs-contract-fixtures contract-rs-compat run release
+.PHONY: build test format format-check lint check bootstrap-obsctl-rs-contract-fixtures contract-rs-compat run release
+
+# Every gate CI enforces, in the order a contributor should hit them.
+check: format-check lint build test
 
 build:
 	mkdir -p bin
@@ -12,8 +15,15 @@ test:
 format:
 	$(CRYSTAL) tool format
 
+format-check:
+	$(CRYSTAL) tool format --check
+
 lint:
-	@if [ -x bin/ameba ]; then bin/ameba; else echo "ameba not installed; run shards install"; fi
+	@if [ ! -x bin/ameba ]; then \
+		echo "ameba not found at bin/ameba; run 'shards install' first" >&2; \
+		exit 1; \
+	fi
+	bin/ameba
 
 bootstrap-obsctl-rs-contract-fixtures:
 	scripts/bootstrap_obsctl_rs_contract_fixtures ../obsctl-rs

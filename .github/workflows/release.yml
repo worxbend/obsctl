@@ -6,35 +6,86 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  # Matches the floor declared in shard.yml. The alpine image is multi-arch, so
+  # the same tag builds on both the x86_64 and arm64 runners.
+  BUILD_IMAGE: crystallang/crystal:1.20.2-alpine
 
 jobs:
-  build-and-release:
-    runs-on: ubuntu-latest
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runner: ubuntu-latest
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install Crystal
-        uses: crystal-lang/install-crystal@v1
+      # Built inside Alpine so `--static` links against musl and the release
+      # artifact does not depend on the runner's glibc. Checkout and packaging
+      # stay on the host runner, which avoids running the Actions node runtime
+      # under musl.
+      - name: Build static release binary
+        run: |
+          docker run --rm -v "${PWD}":/workspace -w /workspace "${BUILD_IMAGE}" \
+            sh -c 'shards install --production && mkdir -p bin && crystal build --release --static src/obsctl.cr -o bin/obsctl'
 
-      - name: Install shards
-        run: shards install --production
-
-      - name: Build release binary
-        env:
-          CRYSTAL_CACHE_DIR: /tmp/obsctl-crystal-cache
-        run: mkdir -p bin && make release
+      - name: Verify the binary is static and runnable
+        run: |
+          sudo chown "$(id -u):$(id -g)" bin/obsctl
+          file bin/obsctl
+          ldd bin/obsctl 2>&1 | grep -qE 'not a dynamic executable|statically linked'
+          ./bin/obsctl --version
 
       - name: Package binary
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          ARCHIVE="obsctl-${TAG}-linux-amd64.tar.gz"
+          ARCHIVE="obsctl-${GITHUB_REF_NAME}-${{ matrix.target }}.tar.gz"
           tar -czf "${ARCHIVE}" -C bin obsctl
-          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+          sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: obsctl-${{ matrix.target }}
+          path: |
+            obsctl-*.tar.gz
+            obsctl-*.tar.gz.sha256
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Collect checksums
+        working-directory: dist
+        run: |
+          cat ./*.tar.gz.sha256 > SHA256SUMS.txt
+          rm -f ./*.tar.gz.sha256
+          sha256sum -c SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ARCHIVE }}
+          files: |
+            dist/obsctl-*.tar.gz
+            dist/SHA256SUMS.txt
           generate_release_notes: true
+          fail_on_unmatched_files: true

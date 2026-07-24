@@ -34,7 +34,7 @@ module Obsctl
       end
 
       private def help_text : String
-        "/help /set-scene <target> /scene <target> /mute <target> /unmute <target> /toggle-mute <target> /vol <target> <0-100> /stream /rec /status /server-status /obs-status /reconnect /validate-config /dump-config /reload-config /connect /disconnect /quit"
+        "/help /set-scene <target> /scene <target> /mute <target> /unmute <target> /toggle-mute <target> /vol <target> <0-100> /stream /rec [start|stop|toggle|pause|resume|status] /status /server-status /obs-status /reconnect /validate-config /dump-config /reload-config /connect /disconnect /quit"
       end
     end
   end

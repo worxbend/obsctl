@@ -69,9 +69,10 @@ module Obsctl
 
           @lifecycle_generation += 1
           @lifecycle_state = LifecycleState::Starting
-          @reconnect_signal = ReconnectSignal.new
+          signal = ReconnectSignal.new
+          @reconnect_signal = signal
           @stopped_reconnect_attempted = false
-          {@lifecycle_generation, @reconnect_signal.not_nil!}
+          {@lifecycle_generation, signal}
         end
         spawn(name: "obsctl-obs-supervisor") { run(generation, reconnect_signal) }
       end
@@ -437,7 +438,7 @@ module Obsctl
       private def exception_summary(ex : Exception) : String
         exception_name = ex.class.name || "Exception"
         message = ex.message
-        return exception_name unless message && !message.empty?
+        return exception_name if message.nil? || message.empty?
 
         "#{exception_name}: #{Runtime::Logger.redact_secrets(message)}"
       end

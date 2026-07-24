@@ -68,7 +68,7 @@ module Obsctl
 
       private def subscriptions_for(topic : String) : Array(Subscription)
         @lock.synchronize do
-          @subscriptions.values.select { |subscription| subscription.topics.includes?(topic) }
+          @subscriptions.values.select(&.topics.includes?(topic))
         end
       end
     end

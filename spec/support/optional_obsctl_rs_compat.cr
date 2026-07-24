@@ -43,7 +43,7 @@ module Obsctl
         Dir.glob(File.join(root, "**", "*"))
           .select { |path| File.file?(path) }
           .map { |path| path[prefix_size..] }
-          .sort
+          .sort!
       end
 
       def self.assert_compatible!(
@@ -174,14 +174,14 @@ module Obsctl
 
           parsed = YAML.parse(File.read(path))
           required_directories = parsed["required_directories"].as_a.map(&.as_s)
-          fixture_paths = parsed["fixtures"].as_a.map { |fixture| fixture["relative_path"].as_s }.sort
+          fixture_paths = parsed["fixtures"].as_a.map(&.["relative_path"].as_s).sort!
           new(required_directories, fixture_paths)
         rescue ex : KeyError | TypeCastError | YAML::ParseException
           raise "invalid local contract manifest at #{path}: #{ex.message}\n#{OptionalObsctlRsCompat.bootstrap_guidance}"
         end
 
         def fixture_paths(prefix : String) : Array(String)
-          @fixture_paths.select { |path| path.starts_with?(prefix) }.sort
+          @fixture_paths.select(&.starts_with?(prefix)).sort!
         end
       end
 
@@ -193,8 +193,8 @@ module Obsctl
 
       private def self.prefixed_fixture_paths(root : String, prefix : String) : Array(String)
         local_fixture_paths(root)
-          .select { |path| path.starts_with?(prefix) }
-          .sort
+          .select(&.starts_with?(prefix))
+          .sort!
       end
 
       private def self.missing_required_directories(root : String, required_directories : Array(String)) : Array(String)

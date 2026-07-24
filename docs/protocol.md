@@ -17,14 +17,36 @@ Command request:
 {"id":"req-000001","type":"command","command":{"name":"set_scene","target":"main"}}
 ```
 
-Supported command names are `ping`, `status`, `get_server_status`,
-`get_obs_status`, `get_snapshot`, `set_scene`, `mute`, `unmute`, `toggle_mute`,
-`set_volume`, `dump_config`, `reload_config`, `validate_config`,
-`reconnect_obs`, and `shutdown_server`. `status` returns the combined daemon
-and OBS payload, `get_obs_status` returns only the OBS snapshot, and
-`get_server_status` returns only daemon status. `shutdown_server` returns
-`SHUTDOWN_DISABLED` unless
+Supported command names:
+
+| Group | Names |
+| --- | --- |
+| Liveness | `ping` |
+| Status | `status`, `get_server_status`, `get_obs_status`, `get_snapshot` |
+| Scenes and studio | `set_scene`, `set_profile`, `set_scene_collection` |
+| Audio | `mute`, `unmute`, `toggle_mute`, `set_volume` |
+| Outputs | `toggle_stream`, `toggle_record` |
+| Recording | `start_record`, `stop_record`, `pause_record`, `resume_record`, `record_status` |
+| Config | `dump_config`, `reload_config`, `validate_config` |
+| Lifecycle | `reconnect_obs`, `shutdown_server` |
+
+`status` returns the combined daemon and OBS payload, `get_obs_status` returns
+only the OBS snapshot, and `get_server_status` returns only daemon status.
+`shutdown_server` returns `SHUTDOWN_DISABLED` unless
 `server.allow_remote_shutdown` is enabled in the server config.
+
+Every command result carries a human `message` field. `record_status` adds the
+structured fields below, so scripts do not have to parse the message:
+
+```json
+{"message":"recording active","active":true,"paused":false,"timecode":"00:00:03.000","duration_ms":3000,"bytes":4096}
+```
+
+Each field is nullable. Older obs-websocket builds may omit `paused`,
+`timecode`, or `bytes`, and `duration_ms` and `bytes` are only populated while
+recording is active. Clients render a missing value as unknown rather than
+substituting a default. `stop_record` reports the written file in its message
+when OBS returns an `outputPath`.
 
 Subscribe request:
 

@@ -31,7 +31,7 @@ describe Obsctl::TUI::App do
   it "applies subscription events, palette paste, and quit actions" do
     model = Obsctl::TUI::Model.new
     app = Obsctl::TUI::App.new(model: model)
-    sender = ->(payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true, JSON.parse(%({"message":"ok"}))) }
+    sender = ->(_payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true, JSON.parse(%({"message":"ok"}))) }
     dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)
 
     state = JSON.parse(%({"connected":true,"obs_studio_version":"30","obs_websocket_version":"5","current_scene":"Main","scenes":[{"name":"Main","active":true}],"audio_inputs":[],"output":{"streaming":false,"recording":false},"updated_at":"2026-07-18T12:00:00Z"}))
@@ -52,7 +52,7 @@ describe Obsctl::TUI::App do
     model = Obsctl::TUI::Model.new
     model.anim.frame = 42_u64
     app = Obsctl::TUI::App.new(model: model)
-    sender = ->(payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true) }
+    sender = ->(_payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true) }
     dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)
 
     app.process(Obsctl::TUI::SubscriptionMessage.new(0, error: "daemon gone"), dispatcher)
@@ -65,7 +65,7 @@ describe Obsctl::TUI::App do
   it "quits when terminal input closes instead of ticking forever" do
     model = Obsctl::TUI::Model.new
     app = Obsctl::TUI::App.new(model: model)
-    sender = ->(payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true) }
+    sender = ->(_payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true) }
     dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)
 
     app.process(Obsctl::TUI::InputClosed.new, dispatcher).should be_true
@@ -106,7 +106,7 @@ describe Obsctl::TUI::App do
     backend.buffer.area.should eq(CryTUI::Rect.new(0, 0, 40, 12))
     compact_lines = backend.buffer.lines
     compact_lines.size.should eq(12)
-    compact_lines.map(&.size).max.should be <= 40
+    compact_lines.max_of(&.size).should be <= 40
 
     backend.resize(90, 28)
     app.render(terminal)

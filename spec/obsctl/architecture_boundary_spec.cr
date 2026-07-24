@@ -23,7 +23,7 @@ private def src_files(glob : String) : Array(String)
 end
 
 private def src_files(globs : Array(String)) : Array(String)
-  globs.flat_map { |glob| src_files(glob) }.uniq.sort
+  globs.flat_map { |glob| src_files(glob) }.uniq!.sort!
 end
 
 private def src_path(path : String) : String
@@ -67,7 +67,7 @@ private def pattern_usages(paths : Array(String), regex : Regex, label : String)
 end
 
 private def usage_files(usages : Array(String)) : Array(String)
-  usages.map { |usage| usage.split(':', 2).first }.uniq.sort
+  usages.map(&.split(':', 2).first).uniq!.sort!
 end
 
 describe "daemon-first architecture boundary" do

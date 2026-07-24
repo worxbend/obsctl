@@ -20,16 +20,16 @@ raise "wrong resized area: #{terminal.area}" unless terminal.area == CryTUI::Rec
 
 begin
   terminal.run(STDIN) do
-    terminal.draw { |frame| frame.buffer.set_string(0, 0, "wide") }
+    terminal.draw(&.buffer.set_string(0, 0, "wide"))
 
     shrink_status = Process.run("stty", ["rows", "14", "cols", "47"], input: STDIN, output: STDOUT, error: STDERR)
     raise "stty shrink failed" unless shrink_status.success?
-    terminal.draw { |frame| frame.buffer.set_string(0, 0, "small") }
+    terminal.draw(&.buffer.set_string(0, 0, "small"))
     raise "draw did not discover shrink: #{terminal.area}" unless terminal.area == CryTUI::Rect.new(0, 0, 47, 14)
 
     expand_status = Process.run("stty", ["rows", "29", "cols", "88"], input: STDIN, output: STDOUT, error: STDERR)
     raise "stty expansion failed" unless expand_status.success?
-    terminal.draw { |frame| frame.buffer.set_string(0, 0, "expanded") }
+    terminal.draw(&.buffer.set_string(0, 0, "expanded"))
     raise "draw did not discover expansion: #{terminal.area}" unless terminal.area == CryTUI::Rect.new(0, 0, 88, 29)
     raise "expected probe exception"
   end

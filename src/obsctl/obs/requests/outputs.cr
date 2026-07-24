@@ -6,6 +6,10 @@ module Obsctl
         GET_RECORD_STATUS = "GetRecordStatus"
         TOGGLE_STREAM     = "ToggleStream"
         TOGGLE_RECORD     = "ToggleRecord"
+        START_RECORD      = "StartRecord"
+        STOP_RECORD       = "StopRecord"
+        PAUSE_RECORD      = "PauseRecord"
+        RESUME_RECORD     = "ResumeRecord"
       end
     end
   end

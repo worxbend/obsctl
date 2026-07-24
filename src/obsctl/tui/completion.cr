@@ -12,6 +12,9 @@ module Obsctl
         "/dump-config", "/validate-config", "/reconnect", "/quit",
       ]
 
+      # Bare `/rec` still toggles; these are the explicit actions.
+      RECORD_ACTIONS = ["start", "stop", "toggle", "pause", "resume", "status"]
+
       def compute(input : String, model : Model) : Array(String)
         unless input.includes?(' ')
           prefix = input.downcase
@@ -29,17 +32,19 @@ module Obsctl
                        model.scene_collections
                      when "/mute", "/unmute", "/toggle-mute", "/vol", "/volume"
                        model.audio_inputs.flat_map { |input_state| [input_state.name, input_state.alias].compact }
+                     when "/rec", "/record"
+                       RECORD_ACTIONS
                      else
                        return [] of String
                      end
         prefix = argument_prefix.downcase
-        sorted(candidates.select { |candidate| candidate.downcase.starts_with?(prefix) }, argument_prefix)
+        sorted(candidates.select(&.downcase.starts_with?(prefix)), argument_prefix)
           .map { |candidate| "#{command} #{candidate}" }
       end
 
       private def sorted(candidates : Enumerable(String), exact : String) : Array(String)
         exact_lower = exact.downcase
-        candidates.to_a.sort_by { |candidate| {candidate.downcase == exact_lower ? 0 : 1, candidate.downcase, candidate} }.uniq
+        candidates.to_a.sort_by { |candidate| {candidate.downcase == exact_lower ? 0 : 1, candidate.downcase, candidate} }.uniq!
       end
     end
   end

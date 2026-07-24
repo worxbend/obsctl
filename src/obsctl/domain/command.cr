@@ -111,5 +111,25 @@ module Obsctl
 
     struct ToggleRecordCommand < Command
     end
+
+    # Starts the OBS recording output. Starting while already recording is a
+    # no-op in OBS, so the daemon reports the resulting state rather than
+    # failing.
+    struct StartRecordCommand < Command
+    end
+
+    # Stops the OBS recording output and reports the written file path.
+    struct StopRecordCommand < Command
+    end
+
+    struct PauseRecordCommand < Command
+    end
+
+    struct ResumeRecordCommand < Command
+    end
+
+    # Reports record active/paused state, timecode, duration, and size.
+    struct RecordStatusCommand < Command
+    end
   end
 end

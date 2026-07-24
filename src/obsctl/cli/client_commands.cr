@@ -52,8 +52,9 @@ module Obsctl
       def execute(command : Domain::Command) : Domain::CommandResult
         response = request(command)
         unless response.ok
-          error = response.error
-          raise_remote_error(error.not_nil!) if error
+          if error = response.error
+            raise_remote_error(error)
+          end
           raise Domain::IpcProtocolError.new("server returned an invalid error response")
         end
 
@@ -64,45 +65,45 @@ module Obsctl
         IPC::Request.new(next_id, IPC::Request::TYPE_COMMAND, payload_for(command))
       end
 
+      # Commands carrying no argument, mapped to their IPC name.
+      NULLARY_PAYLOADS = {
+        Domain::StatusCommand         => "status",
+        Domain::ObsStatusCommand      => "get_obs_status",
+        Domain::ServerStatusCommand   => "get_server_status",
+        Domain::ValidateConfigCommand => "validate_config",
+        Domain::ReconnectCommand      => "reconnect_obs",
+        Domain::ShutdownServerCommand => "shutdown_server",
+        Domain::ToggleStreamCommand   => "toggle_stream",
+        Domain::ToggleRecordCommand   => "toggle_record",
+        Domain::StartRecordCommand    => "start_record",
+        Domain::StopRecordCommand     => "stop_record",
+        Domain::PauseRecordCommand    => "pause_record",
+        Domain::ResumeRecordCommand   => "resume_record",
+        Domain::RecordStatusCommand   => "record_status",
+        Domain::DumpConfigCommand     => "dump_config",
+        Domain::ReloadConfigCommand   => "reload_config",
+      }
+
+      # Commands carrying a single target, mapped to their IPC name.
+      TARGET_PAYLOADS = {
+        Domain::SetSceneCommand           => "set_scene",
+        Domain::SetProfileCommand         => "set_profile",
+        Domain::SetSceneCollectionCommand => "set_scene_collection",
+        Domain::MuteCommand               => "mute",
+        Domain::UnmuteCommand             => "unmute",
+        Domain::ToggleMuteCommand         => "toggle_mute",
+      }
+
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
-        case command
-        when Domain::StatusCommand
-          IPC::CommandPayload.new("status")
-        when Domain::ObsStatusCommand
-          IPC::CommandPayload.new("get_obs_status")
-        when Domain::ServerStatusCommand
-          IPC::CommandPayload.new("get_server_status")
-        when Domain::ValidateConfigCommand
-          IPC::CommandPayload.new("validate_config")
-        when Domain::ReconnectCommand
-          IPC::CommandPayload.new("reconnect_obs")
-        when Domain::ShutdownServerCommand
-          IPC::CommandPayload.new("shutdown_server")
-        when Domain::SetSceneCommand
-          IPC::CommandPayload.new("set_scene", command.target)
-        when Domain::SetProfileCommand
-          IPC::CommandPayload.new("set_profile", command.target)
-        when Domain::SetSceneCollectionCommand
-          IPC::CommandPayload.new("set_scene_collection", command.target)
-        when Domain::MuteCommand
-          IPC::CommandPayload.new("mute", command.target)
-        when Domain::UnmuteCommand
-          IPC::CommandPayload.new("unmute", command.target)
-        when Domain::ToggleMuteCommand
-          IPC::CommandPayload.new("toggle_mute", command.target)
-        when Domain::VolumeCommand
-          IPC::CommandPayload.new("set_volume", command.target, command.percent)
-        when Domain::ToggleStreamCommand
-          IPC::CommandPayload.new("toggle_stream")
-        when Domain::ToggleRecordCommand
-          IPC::CommandPayload.new("toggle_record")
-        when Domain::DumpConfigCommand
-          IPC::CommandPayload.new("dump_config")
-        when Domain::ReloadConfigCommand
-          IPC::CommandPayload.new("reload_config")
-        else
-          raise Domain::CommandParseError.new("unsupported CLI command")
-        end
+        {% for type, name in NULLARY_PAYLOADS %}
+          return IPC::CommandPayload.new({{name}}) if command.is_a?({{type}})
+        {% end %}
+        {% for type, name in TARGET_PAYLOADS %}
+          return IPC::CommandPayload.new({{name}}, command.target) if command.is_a?({{type}})
+        {% end %}
+        return IPC::CommandPayload.new("set_volume", command.target, command.percent) if command.is_a?(Domain::VolumeCommand)
+
+        raise Domain::CommandParseError.new("unsupported CLI command")
       end
 
       private def format_response(command : Domain::Command, result : JSON::Any?) : String
@@ -115,8 +116,27 @@ module Obsctl
           format_obs_status(result)
         when Domain::ServerStatusCommand
           format_server_status(result)
+        when Domain::RecordStatusCommand
+          format_record_status(result)
         else
           result["message"]?.try(&.as_s?) || "ok"
+        end
+      end
+
+      private def format_record_status(result : JSON::Any) : String
+        lines = [] of String
+        lines << "recording: #{record_state_label(result)}"
+        lines << "timecode: #{result["timecode"]?.try(&.as_s?) || "-"}"
+        lines << "duration_ms: #{result["duration_ms"]?.try(&.as_i64?) || "-"}"
+        lines << "bytes: #{result["bytes"]?.try(&.as_i64?) || "-"}"
+        lines.join("\n")
+      end
+
+      private def record_state_label(result : JSON::Any) : String
+        case result["active"]?.try(&.as_bool?)
+        when true  then result["paused"]?.try(&.as_bool?) == true ? "paused" : "active"
+        when false then "stopped"
+        else            "-"
         end
       end
 

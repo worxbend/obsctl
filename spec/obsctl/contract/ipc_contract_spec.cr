@@ -37,14 +37,14 @@ describe "IPC public contract" do
     request = unix_client.request_payload.not_nil!
     encoded = Obsctl::IPC::Codec.new.encode(request).strip
 
-    normalized_json(encoded).should eq(normalized_json(contract_fixture_json("ipc_set_scene_request.json")))
+    normalized_json(encoded).should eq(normalized_json(contract_fixture_json("ipc/scene_request.json")))
     request.command?.should be_true
     request.command.not_nil!.name.should eq("set_scene")
     request.command.not_nil!.target.should eq("main")
   end
 
   it "decodes the frozen set-scene fixture into the typed request model" do
-    decoded = Obsctl::IPC::Codec.new.decode(contract_fixture_json("ipc_set_scene_request.json"))
+    decoded = Obsctl::IPC::Codec.new.decode(contract_fixture_json("ipc/scene_request.json"))
       .as(Obsctl::IPC::Request)
 
     decoded.id.should eq("req-000001")

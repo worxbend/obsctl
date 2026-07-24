@@ -277,7 +277,7 @@ describe Obsctl::CLI::ClientCommands do
       Obsctl::IPC::ErrorCode::SERVER_ERROR          => Obsctl::Domain::ExitCode::Failure,
     }
 
-    expected.keys.sort.should eq(Obsctl::IPC::ErrorCode::CODES.sort)
+    expected.keys.sort!.should eq(Obsctl::IPC::ErrorCode::CODES.sort)
     expected[Obsctl::IPC::ErrorCode::ALIAS_AMBIGUOUS].value.should eq(5)
 
     expected.each do |code, exit_code|

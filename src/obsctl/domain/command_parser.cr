@@ -7,85 +7,91 @@ module Obsctl
     class CommandParser
       MAX_TARGET_TOKEN_LENGTH = 256
 
+      # Commands taking no arguments, keyed by every spelling that reaches them.
+      NULLARY = {
+        "help"            => -> { HelpCommand.new.as(Command) },
+        "quit"            => -> { QuitCommand.new.as(Command) },
+        "exit"            => -> { QuitCommand.new.as(Command) },
+        "dump-config"     => -> { DumpConfigCommand.new.as(Command) },
+        "reload-config"   => -> { ReloadConfigCommand.new.as(Command) },
+        "status"          => -> { StatusCommand.new.as(Command) },
+        "server-status"   => -> { ServerStatusCommand.new.as(Command) },
+        "obs-status"      => -> { ObsStatusCommand.new.as(Command) },
+        "validate-config" => -> { ValidateConfigCommand.new.as(Command) },
+        "reconnect"       => -> { ReconnectCommand.new.as(Command) },
+        "shutdown-server" => -> { ShutdownServerCommand.new.as(Command) },
+        "connect"         => -> { ConnectCommand.new.as(Command) },
+        "disconnect"      => -> { DisconnectCommand.new.as(Command) },
+        "stream"          => -> { ToggleStreamCommand.new.as(Command) },
+      }
+
+      # Commands taking exactly one sanitized target token.
+      UNARY = {
+        "set-scene"        => ->(target : String) { SetSceneCommand.new(target).as(Command) },
+        "scene"            => ->(target : String) { SetSceneCommand.new(target).as(Command) },
+        "set-profile"      => ->(target : String) { SetProfileCommand.new(target).as(Command) },
+        "profile"          => ->(target : String) { SetProfileCommand.new(target).as(Command) },
+        "set-collection"   => ->(target : String) { SetSceneCollectionCommand.new(target).as(Command) },
+        "collection"       => ->(target : String) { SetSceneCollectionCommand.new(target).as(Command) },
+        "scene-collection" => ->(target : String) { SetSceneCollectionCommand.new(target).as(Command) },
+        "mute"             => ->(target : String) { MuteCommand.new(target).as(Command) },
+        "unmute"           => ->(target : String) { UnmuteCommand.new(target).as(Command) },
+        "toggle-mute"      => ->(target : String) { ToggleMuteCommand.new(target).as(Command) },
+      }
+
+      RECORD_ACTIONS = {
+        "start"  => -> { StartRecordCommand.new.as(Command) },
+        "stop"   => -> { StopRecordCommand.new.as(Command) },
+        "toggle" => -> { ToggleRecordCommand.new.as(Command) },
+        "pause"  => -> { PauseRecordCommand.new.as(Command) },
+        "resume" => -> { ResumeRecordCommand.new.as(Command) },
+        "status" => -> { RecordStatusCommand.new.as(Command) },
+      }
+
       # Parses one command line, including quoted arguments.
       def parse(input : String) : Command
         stripped = input.strip
         tokens = tokenize(stripped)
         raise CommandParseError.new("empty command") if tokens.empty?
 
-        command = sanitize_command(tokens[0])
-        command = command.lstrip('/')
-        command = command.downcase
+        command = sanitize_command(tokens[0]).lstrip('/').downcase
+
+        if build = NULLARY[command]?
+          expect_count(tokens, 1)
+          return build.call
+        end
+
+        if build = UNARY[command]?
+          expect_count(tokens, 2)
+          return build.call(sanitize_target(tokens[1]))
+        end
 
         case command
-        when "help"
-          expect_count(tokens, 1)
-          HelpCommand.new
-        when "quit", "exit"
-          expect_count(tokens, 1)
-          QuitCommand.new
-        when "dump-config"
-          expect_count(tokens, 1)
-          DumpConfigCommand.new
-        when "reload-config"
-          expect_count(tokens, 1)
-          ReloadConfigCommand.new
-        when "status"
-          expect_count(tokens, 1)
-          StatusCommand.new
-        when "server-status"
-          expect_count(tokens, 1)
-          ServerStatusCommand.new
-        when "obs-status"
-          expect_count(tokens, 1)
-          ObsStatusCommand.new
-        when "validate-config"
-          expect_count(tokens, 1)
-          ValidateConfigCommand.new
-        when "reconnect"
-          expect_count(tokens, 1)
-          ReconnectCommand.new
-        when "shutdown-server"
-          expect_count(tokens, 1)
-          ShutdownServerCommand.new
-        when "connect"
-          expect_count(tokens, 1)
-          ConnectCommand.new
-        when "disconnect"
-          expect_count(tokens, 1)
-          DisconnectCommand.new
-        when "set-scene", "scene"
-          expect_count(tokens, 2)
-          SetSceneCommand.new(sanitize_target(tokens[1]))
-        when "set-profile", "profile"
-          expect_count(tokens, 2)
-          SetProfileCommand.new(sanitize_target(tokens[1]))
-        when "set-collection", "collection", "scene-collection"
-          expect_count(tokens, 2)
-          SetSceneCollectionCommand.new(sanitize_target(tokens[1]))
-        when "mute"
-          expect_count(tokens, 2)
-          MuteCommand.new(sanitize_target(tokens[1]))
-        when "unmute"
-          expect_count(tokens, 2)
-          UnmuteCommand.new(sanitize_target(tokens[1]))
-        when "toggle-mute"
-          expect_count(tokens, 2)
-          ToggleMuteCommand.new(sanitize_target(tokens[1]))
-        when "vol", "volume"
-          expect_count(tokens, 3)
-          raise CommandParseError.new("volume percentage must not be quoted") if stripped.ends_with?('"')
-          percent = parse_percent(tokens[2])
-          VolumeCommand.new(sanitize_target(tokens[1]), percent)
-        when "stream"
-          expect_count(tokens, 1)
-          ToggleStreamCommand.new
-        when "rec", "record"
-          expect_count(tokens, 1)
-          ToggleRecordCommand.new
-        else
-          raise CommandParseError.new("unknown command: #{command}")
+        when "vol", "volume" then parse_volume(tokens, stripped)
+        when "rec", "record" then parse_record(tokens)
+        else                      raise CommandParseError.new("unknown command: #{command}")
         end
+      end
+
+      private def parse_volume(tokens : Array(String), stripped : String) : Command
+        expect_count(tokens, 3)
+        raise CommandParseError.new("volume percentage must not be quoted") if stripped.ends_with?('"')
+        VolumeCommand.new(sanitize_target(tokens[1]), parse_percent(tokens[2]))
+      end
+
+      # Bare `rec` keeps its original toggle behavior; a subcommand selects an
+      # explicit action.
+      private def parse_record(tokens : Array(String)) : Command
+        return ToggleRecordCommand.new if tokens.size == 1
+        raise CommandParseError.new("wrong argument count for #{tokens[0]}") if tokens.size > 2
+
+        action = sanitize_target(tokens[1]).downcase
+        build = RECORD_ACTIONS[action]?
+        unless build
+          raise CommandParseError.new("unknown record action: #{tokens[1]}; expected #{RECORD_ACTIONS.keys.join(", ")}")
+        end
+
+        build.call
       end
 
       private def expect_count(tokens : Array(String), expected : Int32) : Nil

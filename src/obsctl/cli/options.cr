@@ -8,6 +8,7 @@ module Obsctl
       log_level : String = "info",
       force : Bool = false,
       json : Bool = false,
+      version : Bool = false,
       command : String? = nil,
       args : Array(String) = [] of String
 
@@ -17,6 +18,7 @@ module Obsctl
         log_level = "info"
         force = false
         json = false
+        version = false
         command = nil.as(String?)
         args = [] of String
         parser = OptionParser.new do |opts|
@@ -25,6 +27,7 @@ module Obsctl
           opts.on("--log-level LEVEL", "debug|info|warn|error") { |level| log_level = level }
           opts.on("--force", "Overwrite files for commands that support it") { force = true }
           opts.on("--json", "Emit a JSON envelope for thin client commands") { json = true }
+          opts.on("-V", "--version", "Show the obsctl version") { version = true }
           opts.on("-h", "--help", "Show help") do
             puts opts
             exit 0
@@ -54,6 +57,7 @@ module Obsctl
           log_level: log_level,
           force: force,
           json: json,
+          version: version,
           command: command,
           args: args
         )

@@ -8,7 +8,7 @@ private class FailingSupervisor < Obsctl::Server::ObsSupervisor
     super(Obsctl::Config::Config.default, Obsctl::Server::StateStore.new)
   end
 
-  def with_client(&block : Obsctl::OBS::Client -> T) : T forall T
+  def with_client(&_block : Obsctl::OBS::Client -> T) : T forall T
     raise @failure
   end
 end
@@ -340,7 +340,7 @@ describe Obsctl::Server::CommandExecutor do
       response.result.not_nil!["message"].as_s.should eq("volume set: Desktop Audio 35%")
       obs.request_count.should eq(requests_before + 1)
       obs.input("Desktop Audio").not_nil!.volume_mul.should eq(0.35)
-      state.snapshot.audio_inputs.find(&.name.==("Desktop Audio")).not_nil!.volume_percent.should eq(35)
+      state.snapshot.audio_inputs.find!(&.name.==("Desktop Audio")).volume_percent.should eq(35)
     ensure
       supervisor.try(&.stop)
       obs.try(&.stop)
@@ -402,7 +402,7 @@ describe Obsctl::Server::CommandExecutor do
       end
     end
 
-    messages = logs_lock.synchronize { logs.map { |entry| entry["message"].as_s }.join("\n") }
+    messages = logs_lock.synchronize { logs.map(&.["message"].as_s).join("\n") }
     messages.should contain("OBS reconnect state publication failed")
     messages.should_not contain("supersecret")
     messages.should_not contain("abc123")

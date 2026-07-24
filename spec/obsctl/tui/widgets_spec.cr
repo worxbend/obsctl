@@ -90,12 +90,12 @@ describe Obsctl::TUI::Widgets::Logs do
     spans = Obsctl::TUI::Widgets::Logs.highlight_message(message, model)
     spans.map(&.content).join.should eq(message)
 
-    spans.find(&.content.==("Main")).not_nil!.style.foreground.should eq(model.theme.accent)
-    spans.find(&.content.==("Streaming")).not_nil!.style.foreground.should eq(model.theme.warning)
-    spans.find(&.content.==("switched")).not_nil!.style.foreground.should eq(model.theme.success)
-    spans.find(&.content.==("/scene")).not_nil!.style.foreground.should eq(model.theme.accent)
-    spans.find(&.content.==("42ms")).not_nil!.style.foreground.should eq(model.theme.info)
-    spans.find(&.content.==("OBS")).not_nil!.style.foreground.should eq(model.theme.accent_alt)
+    spans.find!(&.content.==("Main")).style.foreground.should eq(model.theme.accent)
+    spans.find!(&.content.==("Streaming")).style.foreground.should eq(model.theme.warning)
+    spans.find!(&.content.==("switched")).style.foreground.should eq(model.theme.success)
+    spans.find!(&.content.==("/scene")).style.foreground.should eq(model.theme.accent)
+    spans.find!(&.content.==("42ms")).style.foreground.should eq(model.theme.info)
+    spans.find!(&.content.==("OBS")).style.foreground.should eq(model.theme.accent_alt)
   end
 
   it "highlights quoted resources and respects resource word boundaries" do
@@ -105,11 +105,11 @@ describe Obsctl::TUI::Widgets::Logs do
       model
     )
 
-    spans.find(&.content.==("failed")).not_nil!.style.foreground.should eq(model.theme.danger)
-    spans.find(&.content.==("'Main'")).not_nil!.style.foreground.should eq(model.theme.accent)
-    spans.find(&.content.==("Mainframe")).not_nil!.style.foreground.should eq(model.theme.foreground)
-    spans.find(&.content.==("timeout")).not_nil!.style.foreground.should eq(model.theme.danger)
-    spans.find(&.content.==("Desktop")).not_nil!.style.foreground.should eq(model.theme.info)
+    spans.find!(&.content.==("failed")).style.foreground.should eq(model.theme.danger)
+    spans.find!(&.content.==("'Main'")).style.foreground.should eq(model.theme.accent)
+    spans.find!(&.content.==("Mainframe")).style.foreground.should eq(model.theme.foreground)
+    spans.find!(&.content.==("timeout")).style.foreground.should eq(model.theme.danger)
+    spans.find!(&.content.==("Desktop")).style.foreground.should eq(model.theme.info)
   end
 end
 
@@ -134,7 +134,7 @@ describe Obsctl::TUI::Widgets::Header do
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 110, 4))
     Obsctl::TUI::Widgets::Header.render(buffer.area, buffer, model)
 
-    title_colors = (3...38).compact_map { |x| buffer[x, 0].style.foreground }.uniq
+    title_colors = (3...38).compact_map { |x| buffer[x, 0].style.foreground }.uniq!
     title_colors.size.should be > 2
   end
 
@@ -390,6 +390,6 @@ describe Obsctl::TUI::Widgets::SceneMap do
     text.should contain("[Studio]")
     text.should contain("[ungrouped]")
     text.should contain("▶ Main")
-    text.index("[Studio]").not_nil!.should be < text.index("[ungrouped]").not_nil!
+    text.index!("[Studio]").should be < text.index!("[ungrouped]")
   end
 end
