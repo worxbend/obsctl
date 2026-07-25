@@ -21,9 +21,20 @@ jobs:
       fail-fast: false
       matrix:
         # 1.20.2 is the floor declared in shard.yml; latest catches upstream drift.
-        crystal:
-          - "1.20.2"
-          - latest
+        #
+        # Only the floor leg lints. Ameba analyses source, not the compiler, so
+        # running it twice over the same tree adds nothing — and its released
+        # version does not build on every future compiler, which would turn a
+        # tooling incompatibility into a red build for code that is fine. The
+        # latest leg answers the question it exists to answer: does obsctl still
+        # compile and pass its specs on the newest Crystal.
+        include:
+          - crystal: "1.20.2"
+            lint: true
+            shards_flags: ""
+          - crystal: latest
+            lint: false
+            shards_flags: "--production"
     env:
       CRYSTAL_CACHE_DIR: /tmp/obsctl-crystal-cache
     steps:
@@ -44,15 +55,18 @@ jobs:
             crystal-cache-${{ matrix.crystal }}-${{ hashFiles('shard.lock') }}-
             crystal-cache-${{ matrix.crystal }}-
 
-      # Not --production: ameba is a development dependency and its postinstall
-      # is what produces bin/ameba for the lint gate.
+      # The linting leg needs the development dependencies, because ameba's
+      # postinstall is what produces bin/ameba. The other leg skips them so an
+      # unbuildable dev dependency cannot fail the whole job before the build
+      # and specs have run.
       - name: Install shards
-        run: shards install
+        run: shards install ${{ matrix.shards_flags }}
 
       - name: Check formatting
         run: make format-check
 
       - name: Lint
+        if: matrix.lint
         run: make lint
 
       - name: Build
