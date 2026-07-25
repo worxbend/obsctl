@@ -144,21 +144,21 @@ module Obsctl
 
       def self.missing_sibling_repo_message(repo : String) : String
         <<-MESSAGE
-        obsctl-rs fixture compatibility is running in strict mode, but the sibling repository was not found at #{repo}.
-        Create or check out obsctl-rs at that path, then run #{BOOTSTRAP_HELPER} #{repo} to copy the Crystal contract fixtures.
-        Set #{SKIP_ENV}=1 to skip this optional compatibility check.
-        MESSAGE
+          obsctl-rs fixture compatibility is running in strict mode, but the sibling repository was not found at #{repo}.
+          Create or check out obsctl-rs at that path, then run #{BOOTSTRAP_HELPER} #{repo} to copy the Crystal contract fixtures.
+          Set #{SKIP_ENV}=1 to skip this optional compatibility check.
+          MESSAGE
       end
 
       def self.missing_fixture_root_message(repo : String) : String
         <<-MESSAGE
-        obsctl-rs fixture compatibility is running in strict mode and the sibling repository at #{repo} has no recognized contract fixture root.
-        Expected one of:
-        #{fixture_candidates(repo).map { |path| "  - #{path}" }.join("\n")}
-        Shared contract fixtures should live under that root with #{MANIFEST_FILENAME}, cli/human/, cli/json/, and ipc/.
-        Run #{BOOTSTRAP_HELPER} #{repo} to create the default spec/fixtures/contracts/ root.
-        Set #{SKIP_ENV}=1 to skip this optional compatibility check.
-        MESSAGE
+          obsctl-rs fixture compatibility is running in strict mode and the sibling repository at #{repo} has no recognized contract fixture root.
+          Expected one of:
+          #{fixture_candidates(repo).map { |path| "  - #{path}" }.join("\n")}
+          Shared contract fixtures should live under that root with #{MANIFEST_FILENAME}, cli/human/, cli/json/, and ipc/.
+          Run #{BOOTSTRAP_HELPER} #{repo} to create the default spec/fixtures/contracts/ root.
+          Set #{SKIP_ENV}=1 to skip this optional compatibility check.
+          MESSAGE
       end
 
       struct ContractManifest

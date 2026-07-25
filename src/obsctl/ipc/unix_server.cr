@@ -49,7 +49,7 @@ module Obsctl
         remove_stale_socket
         @server = UNIXServer.new(@socket_path)
         File.chmod(@socket_path, 0o600)
-      rescue ex : Socket::BindError
+      rescue Socket::BindError
         raise Domain::IpcConnectionFailed.new("obsctl server socket is already active: #{@socket_path}")
       end
 
@@ -74,7 +74,7 @@ module Obsctl
         socket = UNIXSocket.new(@socket_path)
         socket.close
         raise Domain::IpcConnectionFailed.new("obsctl server socket is already active: #{@socket_path}")
-      rescue ex : Socket::ConnectError | File::NotFoundError
+      rescue Socket::ConnectError | File::NotFoundError
         File.delete(@socket_path) if File.exists?(@socket_path)
       end
     end

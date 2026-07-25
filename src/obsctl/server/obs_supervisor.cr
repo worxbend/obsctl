@@ -168,7 +168,7 @@ module Obsctl
 
             disconnect_error = wait_for_disconnect(generation, client)
             next if client_detached?(client)
-            raise disconnect_error || Domain::ConnectionFailed.new("OBS WebSocket disconnected") unless stopped?(generation)
+            raise(disconnect_error || Domain::ConnectionFailed.new("OBS WebSocket disconnected")) unless stopped?(generation)
           rescue ex : Domain::ObsctlError
             break if stopped?(generation)
 
@@ -177,18 +177,9 @@ module Obsctl
             delay = policy.delay_for(attempt)
             warning = retry_warning(message, delay, attempt)
             publish_log("warn", disconnect_log_code(message), warning)
-            client.close if connected
-            @client_lock.synchronize { @client = nil if @client == client }
-            break if stopped?(generation) || !@config.reconnect.enabled
-            result = wait_for_reconnect_delay(delay, reconnect_signal, handled_request_epoch)
-            case result
-            when ReconnectSignal::WaitResult::Requested
-              # Explicit reconnect request consumed — retry immediately without incrementing backoff.
-            when ReconnectSignal::WaitResult::Cancelled
-              break # Stop-initiated cancel; exit the retry loop immediately.
-            when ReconnectSignal::WaitResult::TimedOut, ReconnectSignal::WaitResult::Interrupted
-              attempt += 1
-            end
+            next_attempt = settle_after_failure(generation, client, connected, delay, reconnect_signal, handled_request_epoch, attempt)
+            break unless next_attempt
+            attempt = next_attempt
           rescue ex
             break if stopped?(generation)
 
@@ -199,22 +190,45 @@ module Obsctl
             if @config.reconnect.enabled
               publish_log("warn", "obs_reconnect_scheduled", retry_warning(message, delay, attempt))
             end
-            client.close if connected
-            @client_lock.synchronize { @client = nil if @client == client }
-            break if stopped?(generation) || !@config.reconnect.enabled
-            result = wait_for_reconnect_delay(delay, reconnect_signal, handled_request_epoch)
-            case result
-            when ReconnectSignal::WaitResult::Requested
-              # Explicit reconnect request consumed — retry immediately without incrementing backoff.
-            when ReconnectSignal::WaitResult::Cancelled
-              break # Stop-initiated cancel; exit the retry loop immediately.
-            when ReconnectSignal::WaitResult::TimedOut, ReconnectSignal::WaitResult::Interrupted
-              attempt += 1
-            end
+
+            next_attempt = settle_after_failure(generation, client, connected, delay, reconnect_signal, handled_request_epoch, attempt)
+            break unless next_attempt
+            attempt = next_attempt
           end
         end
       ensure
         mark_stopped(generation)
+      end
+
+      # Releases a failed client and waits out the backoff before the next try.
+      #
+      # Returns the attempt counter to continue with, or nil when the retry loop
+      # should stop. Both rescue arms in `run` end this way; they differ only in
+      # how they describe the failure.
+      private def settle_after_failure(
+        generation : UInt64,
+        client : OBS::Client,
+        connected : Bool,
+        delay : Time::Span,
+        reconnect_signal : ReconnectSignal,
+        handled_request_epoch : UInt64,
+        attempt : Int32,
+      ) : Int32?
+        client.close if connected
+        @client_lock.synchronize { @client = nil if @client == client }
+        return if stopped?(generation) || !@config.reconnect.enabled
+
+        case wait_for_reconnect_delay(delay, reconnect_signal, handled_request_epoch)
+        when ReconnectSignal::WaitResult::Requested
+          # Explicit reconnect request consumed — retry immediately without
+          # incrementing backoff.
+          attempt
+        when ReconnectSignal::WaitResult::Cancelled
+          nil # Stop-initiated cancel; exit the retry loop immediately.
+        else
+          # TimedOut or Interrupted: follow the normal backoff path.
+          attempt + 1
+        end
       end
 
       private def wait_for_disconnect(generation : UInt64, client : OBS::Client) : Domain::ConnectionFailed?

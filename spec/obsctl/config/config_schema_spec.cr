@@ -44,15 +44,15 @@ describe Obsctl::Config::ConfigSchema do
 
   it "accepts explicit false boolean config values" do
     config = Obsctl::Config::Config.from_yaml(<<-YAML)
-    version: 1
-    server:
-      allow_remote_shutdown: false
-      start_embedded_if_missing: false
-    connection:
-      password_env: ""
-    reconnect:
-      enabled: false
-    YAML
+      version: 1
+      server:
+        allow_remote_shutdown: false
+        start_embedded_if_missing: false
+      connection:
+        password_env: ""
+      reconnect:
+        enabled: false
+      YAML
 
     config.server.allow_remote_shutdown.should be_false
     config.server.start_embedded_if_missing.should be_false

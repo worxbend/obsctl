@@ -12,10 +12,15 @@ module Obsctl
         @write_lock = Mutex.new
       end
 
+      # Bounds how long `read_message` waits; nil blocks indefinitely.
+      def read_timeout=(span : Time::Span?) : Nil
+        socket.read_timeout = span
+      end
+
       # Reads and decodes one message, returning nil when the peer closes.
       def read_message : Message?
         line = socket.gets
-        return nil unless line
+        return unless line
         @codec.decode(line)
       end
 

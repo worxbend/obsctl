@@ -1,11 +1,12 @@
 require "json"
 require "./options"
-require "./command_router"
 require "./client_commands"
+require "./completions"
 require "../config/config_loader"
 require "../config/config_writer"
 require "../config/config_schema"
 require "../domain/command_parser"
+require "../domain/command_registry"
 require "../domain/errors"
 require "../ipc/socket_path"
 require "../runtime/logger"
@@ -38,7 +39,11 @@ module Obsctl
           command_args, command_json = split_json_flag(options.args)
           json_output = options.json || command_json
 
-          dispatch(options, command_args, json_output, service_installer, stdout, stderr, tui_runner)
+          # `--quiet` withholds the human rendering only; an explicit `--json`
+          # request is the caller asking for output and still gets it.
+          effective_stdout = options.quiet && !json_output ? IO::Memory.new : stdout
+
+          dispatch(options, command_args, json_output, service_installer, effective_stdout, stderr, tui_runner)
         rescue ex
           report_failure(ex, json_output, stdout, stderr)
         end
@@ -57,6 +62,11 @@ module Obsctl
         command = options.command
         log_level = Runtime::LogLevel.parse(options.log_level)
 
+        if options.help || command == "help"
+          stdout.puts help_text(options)
+          return Domain::ExitCode::Success.value
+        end
+
         if options.version || command == "version"
           write_version(stdout, json_output)
           return 0
@@ -72,9 +82,10 @@ module Obsctl
         when "doctor"
           raise Domain::CommandParseError.new("wrong argument count for doctor") unless command_args.empty?
           run_doctor(options.config_path, stdout, json_output)
-        when "config" then run_config(command_args, options, stdout, json_output)
-        when "watch"  then run_watch(command_args, options, stdout)
-        when "server" then run_server(options, command_args, log_level, stderr)
+        when "config"      then run_config(command_args, options, stdout, json_output)
+        when "watch"       then run_watch(command_args, options, stdout)
+        when "completions" then run_completions(command_args, options, stdout)
+        when "server"      then run_server(options, command_args, log_level, stderr)
         when "service"
           run_service(command_args, service_installer, stdout)
         when nil, "tui"
@@ -134,13 +145,16 @@ module Obsctl
 
       # The thin-client path: everything that becomes a typed IPC command.
       private def self.run_client_command(command : String, command_args : Array(String), options : Options, stdout : IO, json_output : Bool) : Int32
-        parsed = Domain::CommandParser.new.parse(cli_to_palette(command, command_args))
-        client_commands = ClientCommands.new(IPC::UnixClient.new(client_socket_path(options.config_path)))
+        # argv is already split by the kernel; passing it straight through keeps
+        # names containing quotes, tabs, or backslashes intact.
+        parsed = Domain::CommandParser.new.parse([command] + command_args)
+        client = IPC::UnixClient.new(client_socket_path(options.config_path), timeout: options.timeout)
+        client_commands = ClientCommands.new(client, Palette.resolve(options.color, stdout))
 
         unless json_output
-          result = client_commands.execute(parsed)
-          stdout.puts result.message
-          return result.ok ? 0 : 1
+          # `execute` raises on any failure, so reaching here means success.
+          stdout.puts client_commands.execute(parsed).message
+          return Domain::ExitCode::Success.value
         end
 
         response = client_commands.request(parsed)
@@ -161,7 +175,6 @@ module Obsctl
         error = case ex
                 when Domain::ObsctlError     then ex
                 when OptionParser::Exception then Domain::CommandParseError.new(ex.message || "invalid option")
-                else                              nil
                 end
 
         unless error
@@ -209,6 +222,49 @@ module Obsctl
           stdout
         ).run
       end
+
+      private def self.run_completions(args : Array(String), options : Options, stdout : IO) : Int32
+        action = args[0]?
+        unless action
+          raise Domain::CommandParseError.new("missing shell; expected #{Completions::SHELLS.join(", ")}")
+        end
+
+        return run_completion_candidates(args[1..], options, stdout) if action == "candidates"
+
+        raise Domain::CommandParseError.new("wrong argument count for completions") if args.size > 1
+        stdout.puts Completions.render(action)
+        Domain::ExitCode::Success.value
+      end
+
+      # Lists live OBS names for shell completion, one per line.
+      #
+      # Runs on every Tab press, so an unreachable daemon prints nothing and
+      # still exits 0; a completion helper that fails loudly would spray errors
+      # into the user's command line.
+      private def self.run_completion_candidates(args : Array(String), options : Options, stdout : IO) : Int32
+        kind = args[0]?
+        unless kind
+          raise Domain::CommandParseError.new("missing kind; expected #{Completions::CANDIDATE_KINDS.join(", ")}")
+        end
+        raise Domain::CommandParseError.new("wrong argument count for completions candidates") if args.size > 1
+
+        Completions.candidates(kind, completion_snapshot(options)).each { |name| stdout.puts name }
+        Domain::ExitCode::Success.value
+      end
+
+      private def self.completion_snapshot(options : Options) : JSON::Any?
+        client = IPC::UnixClient.new(
+          client_socket_path(options.config_path),
+          timeout: options.timeout || COMPLETION_TIMEOUT
+        )
+        response = ClientCommands.new(client).request(Domain::ObsStatusCommand.new)
+        response.ok ? response.result : nil
+      rescue Domain::ObsctlError
+        nil
+      end
+
+      # Completion must never make the shell feel stuck.
+      COMPLETION_TIMEOUT = 2.seconds
 
       CONFIG_ACTIONS = ["explain", "diff", "migrate"]
 
@@ -347,68 +403,47 @@ module Obsctl
         {filtered, json}
       end
 
-      private def self.json_command?(command : String?) : Bool
-        case command
-        when "status", "obs-status", "server-status", "reconnect", "shutdown-server",
-             "scene", "mute", "unmute", "toggle-mute", "vol", "volume",
-             "profile", "collection", "scene-collection",
-             "stream", "rec", "record",
-             "dump-config", "reload-config", "validate-config", "doctor", "config", "watch"
-          true
-        else
-          false
+      # Commands the CLI handles itself rather than proxying to the daemon.
+      LOCAL_JSON_COMMANDS = ["validate-config", "doctor", "config", "watch"]
+
+      # Subcommands that never reach the command registry because they are
+      # served locally, listed here so `--help` covers the whole surface.
+      LOCAL_COMMANDS = [
+        {"init", "Write a default config file"},
+        {"doctor", "Run setup diagnostics"},
+        {"config explain|diff|migrate", "Inspect or migrate the config file"},
+        {"watch [--topics LIST]", "Stream daemon events as newline-delimited JSON"},
+        {"completions bash|zsh|fish", "Print a shell completion script"},
+        {"server [--headless]", "Run the local daemon in the foreground"},
+        {"service install|start|stop|restart|status|uninstall", "Manage the systemd --user unit"},
+        {"tui", "Open the dashboard (the default with no command)"},
+        {"version", "Show the obsctl version"},
+      ]
+
+      private def self.help_text(options : Options) : String
+        daemon = Domain::CommandRegistry.help_lines(Domain::CommandSurface::Cli)
+        width = LOCAL_COMMANDS.max_of { |name, _| name.size }
+        local = LOCAL_COMMANDS.map { |name, summary| "#{name.ljust(width)}  #{summary}" }
+
+        String.build do |io|
+          io << options.help_text << "\n\n"
+          io << "Daemon commands:\n"
+          daemon.each { |line| io << "  " << line << "\n" }
+          io << "\nLocal commands:\n"
+          local.each { |line| io << "  " << line << "\n" }
+          io << "\nNames accept an alias, a shortcut, or the exact OBS name."
         end
+      end
+
+      private def self.json_command?(command : String?) : Bool
+        return false unless command
+
+        LOCAL_JSON_COMMANDS.includes?(command) || Domain::CommandRegistry.json?(command)
       end
 
       private def self.json_unsupported_message(command : String?) : String
         name = command || "status"
         "JSON output is not supported for command: #{name}"
-      end
-
-      private def self.cli_to_palette(command : String, args : Array(String)) : String
-        case command
-        when "scene"
-          "/scene #{quote_arg(args[0]?)}"
-        when "profile"
-          "/profile #{quote_arg(args[0]?)}"
-        when "collection", "scene-collection"
-          "/collection #{quote_arg(args[0]?)}"
-        when "mute"
-          "/mute #{quote_arg(args[0]?)}"
-        when "unmute"
-          "/unmute #{quote_arg(args[0]?)}"
-        when "toggle-mute"
-          "/toggle-mute #{quote_arg(args[0]?)}"
-        when "volume"
-          "/vol #{quote_arg(args[0]?)} #{quote_arg(args[1]?)}"
-        when "vol"
-          "/vol #{quote_arg(args[0]?)} #{quote_arg(args[1]?)}"
-        when "status"
-          "/status"
-        when "server-status"
-          "/server-status"
-        when "obs-status"
-          "/obs-status"
-        when "validate-config"
-          "/validate-config"
-        when "reconnect"
-          "/reconnect"
-        when "shutdown-server"
-          "/shutdown-server"
-        when "dump-config"
-          "/dump-config"
-        else
-          "/#{command} #{args.map { |arg| quote_arg(arg) }.join(" ")}"
-        end.strip
-      end
-
-      private def self.quote_arg(value : String?) : String
-        raise Domain::CommandParseError.new("missing argument") unless value
-        if value.includes?(' ')
-          %("#{value.gsub("\"", "\\\"")}")
-        else
-          value
-        end
       end
 
       private def self.client_socket_path(config_path : String) : String

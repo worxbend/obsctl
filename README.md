@@ -11,7 +11,7 @@
 🎛️ **Control** · 📊 **Observe** · 🤖 **Automate** · 🔁 **Stay connected**
 
 [![Release](https://img.shields.io/github/v/release/worxbend/obsctl?display_name=tag&sort=semver&style=flat-square)](https://github.com/worxbend/obsctl/releases)
-[![Crystal](https://img.shields.io/badge/Crystal-%E2%89%A5%201.20.2-000000?style=flat-square&logo=crystal)](https://crystal-lang.org/)
+[![Crystal](https://img.shields.io/badge/Crystal-%E2%89%A5%201.21.0-000000?style=flat-square&logo=crystal)](https://crystal-lang.org/)
 [![obs-websocket](https://img.shields.io/badge/obs--websocket-5.x-302E31?style=flat-square&logo=obsstudio)](https://github.com/obsproject/obs-websocket)
 [![License](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](LICENSE)
 
@@ -55,7 +55,7 @@ daemon running as a user service.
 
 - Linux
 - OBS Studio with **obs-websocket 5.x** enabled
-- Crystal **1.20.2+** and Shards when building from source
+- Crystal **1.21.0+** and Shards when building from source
 - A UTF-8 terminal; a Nerd Font is recommended for the richest icon set
 
 ### 1. Build
@@ -199,6 +199,9 @@ obsctl record status --json
 # Event stream for scripts
 obsctl watch --topics state | jq -r '.data.current_scene'
 
+# Shell completions (bash, zsh, fish)
+obsctl completions bash > /etc/bash_completion.d/obsctl
+
 # Configuration and lifecycle
 obsctl validate-config
 obsctl dump-config
@@ -236,6 +239,22 @@ Failures use canonical error codes and matching process exit statuses, making
 them straightforward to handle in shell scripts and other tools. See the
 [command reference](docs/commands.md) for the full grammar, supported JSON
 commands, error codes, and status schema.
+
+### Scripting behavior
+
+Human output is decorated only when stdout is a terminal, so redirecting or
+piping gives you plain text; `NO_COLOR` and `--color=never` also disable it, and
+`--color=always` forces it back on. `-q`/`--quiet` drops the human message and
+leaves the exit code as the only signal, and `--timeout SECONDS` bounds a single
+daemon round trip. Streaming into a short-lived reader, as in
+`obsctl watch | head -5`, ends cleanly with exit `0`.
+
+Names are passed to the daemon exactly as the shell delivers them, so scenes and
+inputs containing quotes or backslashes work without special handling:
+
+```bash
+obsctl scene 'Camera "A"'
+```
 
 ## 🏗️ Architecture
 

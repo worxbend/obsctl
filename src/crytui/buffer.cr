@@ -32,7 +32,7 @@ module CryTUI
     end
 
     def []?(x : Int, y : Int) : Cell?
-      return nil unless x >= @area.left && x < @area.right && y >= @area.top && y < @area.bottom
+      return unless x >= @area.left && x < @area.right && y >= @area.top && y < @area.bottom
       @cells[index(x, y)]
     end
 
@@ -44,7 +44,7 @@ module CryTUI
         width = TextWidth.grapheme_width(symbol)
         next if width == 0
         break if written + width > limit
-        if cell = self[x + written, y]?
+        if self[x + written, y]?
           clear_wide_at(x + written, y)
           cell = self[x + written, y]
           cell.symbol = symbol

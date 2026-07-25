@@ -1,111 +1,59 @@
 require "./command"
+require "./command_registry"
 require "./errors"
 
 module Obsctl
   module Domain
-    # Parses CLI command text into typed command objects.
+    # Turns command input into typed command objects.
+    #
+    # There are two entry points because there are two kinds of caller. The CLI
+    # already has its arguments split by the kernel and passes them through
+    # untouched; the TUI palette has a single line of text and tokenizes first.
+    # Argument values never round-trip through a quoted string, so names
+    # containing quotes, tabs, or backslashes survive intact.
     class CommandParser
       MAX_TARGET_TOKEN_LENGTH = 256
 
-      # Commands taking no arguments, keyed by every spelling that reaches them.
-      NULLARY = {
-        "help"            => -> { HelpCommand.new.as(Command) },
-        "quit"            => -> { QuitCommand.new.as(Command) },
-        "exit"            => -> { QuitCommand.new.as(Command) },
-        "dump-config"     => -> { DumpConfigCommand.new.as(Command) },
-        "reload-config"   => -> { ReloadConfigCommand.new.as(Command) },
-        "status"          => -> { StatusCommand.new.as(Command) },
-        "server-status"   => -> { ServerStatusCommand.new.as(Command) },
-        "obs-status"      => -> { ObsStatusCommand.new.as(Command) },
-        "validate-config" => -> { ValidateConfigCommand.new.as(Command) },
-        "reconnect"       => -> { ReconnectCommand.new.as(Command) },
-        "shutdown-server" => -> { ShutdownServerCommand.new.as(Command) },
-        "connect"         => -> { ConnectCommand.new.as(Command) },
-        "disconnect"      => -> { DisconnectCommand.new.as(Command) },
-        "stream"          => -> { ToggleStreamCommand.new.as(Command) },
-      }
+      # One token, and whether the writer wrapped it in quotes.
+      record Token, value : String, quoted : Bool = false
 
-      # Commands taking exactly one sanitized target token.
-      UNARY = {
-        "set-scene"        => ->(target : String) { SetSceneCommand.new(target).as(Command) },
-        "scene"            => ->(target : String) { SetSceneCommand.new(target).as(Command) },
-        "set-profile"      => ->(target : String) { SetProfileCommand.new(target).as(Command) },
-        "profile"          => ->(target : String) { SetProfileCommand.new(target).as(Command) },
-        "set-collection"   => ->(target : String) { SetSceneCollectionCommand.new(target).as(Command) },
-        "collection"       => ->(target : String) { SetSceneCollectionCommand.new(target).as(Command) },
-        "scene-collection" => ->(target : String) { SetSceneCollectionCommand.new(target).as(Command) },
-        "mute"             => ->(target : String) { MuteCommand.new(target).as(Command) },
-        "unmute"           => ->(target : String) { UnmuteCommand.new(target).as(Command) },
-        "toggle-mute"      => ->(target : String) { ToggleMuteCommand.new(target).as(Command) },
-      }
-
-      RECORD_ACTIONS = {
-        "start"  => -> { StartRecordCommand.new.as(Command) },
-        "stop"   => -> { StopRecordCommand.new.as(Command) },
-        "toggle" => -> { ToggleRecordCommand.new.as(Command) },
-        "pause"  => -> { PauseRecordCommand.new.as(Command) },
-        "resume" => -> { ResumeRecordCommand.new.as(Command) },
-        "status" => -> { RecordStatusCommand.new.as(Command) },
-      }
+      # Parses an already-split argument vector, e.g. `["scene", "Main Camera"]`.
+      #
+      # Shell words arrive with their quoting already resolved, so nothing here
+      # is treated as quoted.
+      def parse(argv : Array(String)) : Command
+        parse_tokens(argv.map { |value| Token.new(value) })
+      end
 
       # Parses one command line, including quoted arguments.
       def parse(input : String) : Command
-        stripped = input.strip
-        tokens = tokenize(stripped)
+        parse_tokens(tokenize(input.strip))
+      end
+
+      private def parse_tokens(tokens : Array(Token)) : Command
         raise CommandParseError.new("empty command") if tokens.empty?
 
-        command = sanitize_command(tokens[0]).lstrip('/').downcase
+        name = sanitize_token(tokens[0].value, "command")
+        spec = CommandRegistry[name]?
+        raise CommandParseError.new("unknown command: #{CommandRegistry.normalize(name)}") unless spec
 
-        if build = NULLARY[command]?
-          expect_count(tokens, 1)
-          return build.call
+        arguments = tokens[1..]
+        spec.validate_arity!(arguments.map(&.value))
+        reject_quoted_numerics!(spec, arguments)
+
+        spec.build.call(arguments.map { |token| sanitize_token(token.value.strip, "target") })
+      end
+
+      # A percentage is a number, not a name, so quoting one is a mistake worth
+      # reporting rather than silently accepting. obsctl-rs rejects it too, and
+      # the contract fixtures pin both implementations to the same answer.
+      private def reject_quoted_numerics!(spec : CommandSpec, arguments : Array(Token)) : Nil
+        spec.arguments.each_with_index do |kind, index|
+          next unless kind.percent?
+          next unless arguments[index]?.try(&.quoted)
+
+          raise CommandParseError.new("volume percentage must not be quoted")
         end
-
-        if build = UNARY[command]?
-          expect_count(tokens, 2)
-          return build.call(sanitize_target(tokens[1]))
-        end
-
-        case command
-        when "vol", "volume" then parse_volume(tokens, stripped)
-        when "rec", "record" then parse_record(tokens)
-        else                      raise CommandParseError.new("unknown command: #{command}")
-        end
-      end
-
-      private def parse_volume(tokens : Array(String), stripped : String) : Command
-        expect_count(tokens, 3)
-        raise CommandParseError.new("volume percentage must not be quoted") if stripped.ends_with?('"')
-        VolumeCommand.new(sanitize_target(tokens[1]), parse_percent(tokens[2]))
-      end
-
-      # Bare `rec` keeps its original toggle behavior; a subcommand selects an
-      # explicit action.
-      private def parse_record(tokens : Array(String)) : Command
-        return ToggleRecordCommand.new if tokens.size == 1
-        raise CommandParseError.new("wrong argument count for #{tokens[0]}") if tokens.size > 2
-
-        action = sanitize_target(tokens[1]).downcase
-        build = RECORD_ACTIONS[action]?
-        unless build
-          raise CommandParseError.new("unknown record action: #{tokens[1]}; expected #{RECORD_ACTIONS.keys.join(", ")}")
-        end
-
-        build.call
-      end
-
-      private def expect_count(tokens : Array(String), expected : Int32) : Nil
-        return if tokens.size == expected
-
-        raise CommandParseError.new("wrong argument count for #{tokens[0]}")
-      end
-
-      private def sanitize_command(value : String) : String
-        sanitize_token(value, "command")
-      end
-
-      private def sanitize_target(value : String) : String
-        sanitize_token(value.strip, "target")
       end
 
       private def sanitize_token(value : String, label : String) : String
@@ -117,24 +65,30 @@ module Obsctl
         value
       end
 
-      private def parse_percent(value : String) : Int32
-        percent = value.to_i?
-        raise CommandParseError.new("volume must be an integer from 0 to 100") unless percent
-        unless 0 <= percent <= 100
-          raise CommandParseError.new("volume must be from 0 to 100")
-        end
-        percent
-      end
-
-      private def tokenize(input : String) : Array(String)
-        tokens = [] of String
-        current = ""
+      # Splits a palette line on unquoted whitespace.
+      #
+      # Inside double quotes a backslash escapes the next character, so a name
+      # may contain quotes and spaces. Outside quotes a backslash is literal,
+      # which keeps names like `Cam\Main` readable without doubling.
+      private def tokenize(input : String) : Array(Token)
+        tokens = [] of Token
+        current = String::Builder.new
+        length = 0
+        quoted = false
         in_quote = false
         escaped = false
 
+        flush = -> do
+          tokens << Token.new(current.to_s, quoted)
+          current = String::Builder.new
+          length = 0
+          quoted = false
+        end
+
         input.each_char do |char|
           if escaped
-            current += char
+            current << char
+            length += 1
             escaped = false
             next
           end
@@ -144,24 +98,27 @@ module Obsctl
             if in_quote
               escaped = true
             else
-              current += char
+              current << char
+              length += 1
             end
           when '"'
             in_quote = !in_quote
+            quoted = true
           when ' ', '\t'
             if in_quote
-              current += char
-            elsif current.size > 0
-              tokens << current
-              current = ""
+              current << char
+              length += 1
+            elsif length > 0 || quoted
+              flush.call
             end
           else
-            current += char
+            current << char
+            length += 1
           end
         end
 
         raise CommandParseError.new("unterminated quote") if in_quote
-        tokens << current if current.size > 0
+        flush.call if length > 0 || quoted
         tokens
       end
     end

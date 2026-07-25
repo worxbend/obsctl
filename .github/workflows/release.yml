@@ -11,7 +11,7 @@ permissions:
 env:
   # Matches the floor declared in shard.yml. The alpine image is multi-arch, so
   # the same tag builds on both the x86_64 and arm64 runners.
-  BUILD_IMAGE: crystallang/crystal:1.20.2-alpine
+  BUILD_IMAGE: crystallang/crystal:1.21.0-alpine
 
 jobs:
   build:

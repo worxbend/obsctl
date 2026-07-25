@@ -3,22 +3,15 @@ require "../domain/command"
 require "../domain/command_result"
 require "../domain/errors"
 require "../ipc/protocol"
+require "./color"
 
 module Obsctl
   module CLI
     class ClientCommands
-      RESET        = "\e[0m"
-      BOLD         = "\e[1m"
-      DIM          = "\e[2m"
-      GREEN        = "\e[32m"
-      RED          = "\e[31m"
-      YELLOW       = "\e[33m"
-      CYAN         = "\e[36m"
-      BLUE         = "\e[34m"
-      MAGENTA      = "\e[35m"
-      BRIGHT_WHITE = "\e[97m"
-
-      def initialize(@client : IPC::UnixClient = IPC::UnixClient.new)
+      def initialize(
+        @client : IPC::UnixClient = IPC::UnixClient.new,
+        @palette : Palette = Palette.monochrome,
+      )
         @sequence = 0
       end
 
@@ -45,7 +38,7 @@ module Obsctl
           raise Domain::IpcProtocolError.new("server returned an invalid error response")
         end
         response
-      rescue ex : Domain::IpcConnectionFailed
+      rescue Domain::IpcConnectionFailed
         raise Domain::ServerUnavailable.new
       end
 
@@ -65,45 +58,13 @@ module Obsctl
         IPC::Request.new(next_id, IPC::Request::TYPE_COMMAND, payload_for(command))
       end
 
-      # Commands carrying no argument, mapped to their IPC name.
-      NULLARY_PAYLOADS = {
-        Domain::StatusCommand         => "status",
-        Domain::ObsStatusCommand      => "get_obs_status",
-        Domain::ServerStatusCommand   => "get_server_status",
-        Domain::ValidateConfigCommand => "validate_config",
-        Domain::ReconnectCommand      => "reconnect_obs",
-        Domain::ShutdownServerCommand => "shutdown_server",
-        Domain::ToggleStreamCommand   => "toggle_stream",
-        Domain::ToggleRecordCommand   => "toggle_record",
-        Domain::StartRecordCommand    => "start_record",
-        Domain::StopRecordCommand     => "stop_record",
-        Domain::PauseRecordCommand    => "pause_record",
-        Domain::ResumeRecordCommand   => "resume_record",
-        Domain::RecordStatusCommand   => "record_status",
-        Domain::DumpConfigCommand     => "dump_config",
-        Domain::ReloadConfigCommand   => "reload_config",
-      }
-
-      # Commands carrying a single target, mapped to their IPC name.
-      TARGET_PAYLOADS = {
-        Domain::SetSceneCommand           => "set_scene",
-        Domain::SetProfileCommand         => "set_profile",
-        Domain::SetSceneCollectionCommand => "set_scene_collection",
-        Domain::MuteCommand               => "mute",
-        Domain::UnmuteCommand             => "unmute",
-        Domain::ToggleMuteCommand         => "toggle_mute",
-      }
-
+      # Commands carry their own IPC name and payload arguments, so there is no
+      # table to keep in step with `Domain::CommandRegistry`.
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
-        {% for type, name in NULLARY_PAYLOADS %}
-          return IPC::CommandPayload.new({{name}}) if command.is_a?({{type}})
-        {% end %}
-        {% for type, name in TARGET_PAYLOADS %}
-          return IPC::CommandPayload.new({{name}}, command.target) if command.is_a?({{type}})
-        {% end %}
-        return IPC::CommandPayload.new("set_volume", command.target, command.percent) if command.is_a?(Domain::VolumeCommand)
+        name = command.ipc_name
+        raise Domain::CommandParseError.new("unsupported CLI command") unless name
 
-        raise Domain::CommandParseError.new("unsupported CLI command")
+        IPC::CommandPayload.new(name, command.target, command.percent)
       end
 
       private def format_response(command : Domain::Command, result : JSON::Any?) : String
@@ -145,46 +106,52 @@ module Obsctl
         obs = result["obs"]?
         return format_obs_status(result) unless server && obs
 
+        bold = @palette.bold
+        reset = @palette.reset
         [
-          "#{BOLD}#{BLUE}── server ──────────────────────────#{RESET}",
+          "#{bold}#{@palette.blue}── server ──────────────────────────#{reset}",
           indent(format_server_status(server)),
-          "#{BOLD}#{CYAN}── obs ─────────────────────────────#{RESET}",
+          "#{bold}#{@palette.cyan}── obs ─────────────────────────────#{reset}",
           indent(format_obs_status(obs)),
         ].join('\n')
       end
 
       private def format_obs_status(result : JSON::Any) : String
+        dim = @palette.dim
+        reset = @palette.reset
+        heading = "#{@palette.bold}#{@palette.cyan}"
+
         lines = [] of String
         connected = result["connected"]?.try(&.as_bool?) || false
         if connected
-          lines << "#{GREEN}● connected#{RESET}"
+          lines << "#{@palette.green}● connected#{reset}"
         else
-          lines << "#{RED}○ disconnected#{RESET}"
+          lines << "#{@palette.red}○ disconnected#{reset}"
         end
-        lines << "current_scene: #{BRIGHT_WHITE}#{result["current_scene"]?.try(&.as_s?) || "-"}#{RESET}"
-        lines << "#{BOLD}#{CYAN}Scenes:#{RESET}"
+        lines << "current_scene: #{@palette.bright_white}#{result["current_scene"]?.try(&.as_s?) || "-"}#{reset}"
+        lines << "#{heading}Scenes:#{reset}"
         result["scenes"]?.try(&.as_a?).try do |scenes|
           scenes.each do |scene|
             active = scene["active"]?.try(&.as_bool?) || false
             if active
-              lines << "  #{BOLD}#{GREEN}▶ #{scene["name"].as_s}#{RESET}"
+              lines << "  #{@palette.bold}#{@palette.green}▶ #{scene["name"].as_s}#{reset}"
             else
               lines << "    #{scene["name"].as_s}"
             end
           end
         end
-        lines << "#{BOLD}#{CYAN}Audio:#{RESET}"
+        lines << "#{heading}Audio:#{reset}"
         result["audio_inputs"]?.try(&.as_a?).try do |inputs|
           inputs.each do |input|
             muted = input["muted"]?.try(&.as_bool?)
             volume_pct = input["volume_percent"]?.try(&.as_i?) || 0
             volume_bar = volume_bar(volume_pct)
             if muted.nil?
-              lines << "  #{DIM}? #{input["name"].as_s} unknown#{RESET}"
+              lines << "  #{dim}? #{input["name"].as_s} unknown#{reset}"
             elsif muted
-              lines << "  #{DIM}#{RED}✕ #{input["name"].as_s}#{RESET} #{DIM}muted#{RESET} #{volume_bar}"
+              lines << "  #{dim}#{@palette.red}✕ #{input["name"].as_s}#{reset} #{dim}muted#{reset} #{volume_bar}"
             else
-              lines << "  #{GREEN}♪#{RESET} #{input["name"].as_s} #{volume_bar}"
+              lines << "  #{@palette.green}♪#{reset} #{input["name"].as_s} #{volume_bar}"
             end
           end
         end
@@ -195,7 +162,9 @@ module Obsctl
         filled = (percent / 10).clamp(0, 10).to_i
         empty = 10 - filled
         bar = "█" * filled + "░" * empty
-        "#{DIM}[#{RESET}#{bar}#{DIM}]#{RESET} #{percent}%"
+        dim = @palette.dim
+        reset = @palette.reset
+        "#{dim}[#{reset}#{bar}#{dim}]#{reset} #{percent}%"
       end
 
       private def indent(text : String) : String

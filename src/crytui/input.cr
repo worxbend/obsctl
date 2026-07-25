@@ -126,7 +126,7 @@ module CryTUI
     end
 
     private def parse_escape : Tuple(KeyEvent, Int32)?
-      return nil if @pending.bytesize == 1
+      return if @pending.bytesize == 1
       sequences = {
         "\e[A"    => KeyEvent.new(KeyCode::Up),
         "\e[B"    => KeyEvent.new(KeyCode::Down),
@@ -148,7 +148,7 @@ module CryTUI
       if match = sequences.find { |sequence, _| @pending.starts_with?(sequence) }
         return {match[1], match[0].bytesize}
       end
-      return nil if sequences.any? { |sequence, _| sequence.starts_with?(@pending) }
+      return if sequences.any? { |sequence, _| sequence.starts_with?(@pending) }
 
       # Unknown complete CSI/SS3 sequences are consumed as Escape so malformed
       # input cannot permanently stall the parser.
@@ -156,7 +156,7 @@ module CryTUI
         if match = @pending.match(/\A\e(?:\[[0-9;?]*[ -\/]?[@-~]|O.)/)
           return {KeyEvent.new(KeyCode::Escape), match[0].bytesize}
         end
-        return nil
+        return
       end
 
       # Alt-modified printable character.

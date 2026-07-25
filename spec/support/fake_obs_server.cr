@@ -77,7 +77,7 @@ module Obsctl
       end
 
       def close_connections(
-        code : HTTP::WebSocket::CloseCode | Int32 | Nil = nil,
+        code : HTTP::WebSocket::CloseCode | Int32? = nil,
         message : String? = nil,
       ) : Nil
         sockets = @mutex.synchronize do
@@ -341,13 +341,11 @@ module Obsctl
           notify_request(request_type)
           if delay = @request_delays[request_type]?
             spawn do
-              begin
-                sleep delay
-                send_frame(websocket, response_frame(request))
-              rescue
-              ensure
-                notify_delayed_response(request_type)
-              end
+              sleep delay
+              send_frame(websocket, response_frame(request))
+            rescue
+            ensure
+              notify_delayed_response(request_type)
             end
           else
             send_frame(websocket, response_frame(request))

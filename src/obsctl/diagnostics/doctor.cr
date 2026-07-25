@@ -165,7 +165,7 @@ module Obsctl
             "no obsctl daemon is responding at #{@socket_path}",
             "run: obsctl server --headless (or: obsctl service install)"
           )
-          return nil
+          return
         end
 
         pid = daemon["pid"]?.try(&.as_i64?)

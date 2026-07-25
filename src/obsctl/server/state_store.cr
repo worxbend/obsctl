@@ -307,7 +307,7 @@ module Obsctl
       end
 
       private def self.stats_json(stats : OBS::State::ObsStats?)
-        return nil unless stats
+        return unless stats
         {
           cpu_usage_percent:            stats.cpu_usage_percent,
           memory_usage_mb:              stats.memory_usage_mb,

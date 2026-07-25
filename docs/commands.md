@@ -6,10 +6,31 @@ Global options:
 
 - `--config PATH`
 - `--log-level debug|info|warn|error`
+- `--color auto|always|never`
+- `--timeout SECONDS`
 - `--force`
 - `--json`
+- `-q`, `--quiet`
 - `-V`, `--version`
 - `-h`, `--help`
+
+Global options must precede the command. Everything after the command name
+belongs to that command, so a subcommand flag such as `--topics` or
+`--headless` is never intercepted by the global parser. `--json` is the one
+exception: it is also accepted after the command arguments.
+
+`--color` defaults to `auto`, which emits ANSI decoration only when stdout is a
+terminal. Redirected or piped output is plain, and `NO_COLOR` (any non-empty
+value) or `TERM=dumb` also disables it. `--color=always` forces decoration for
+a pager that understands it.
+
+`--quiet` suppresses human-readable stdout and leaves the exit code as the only
+signal. It does not suppress `--json` output, which is an explicit request for
+output, and it does not suppress warnings on stderr.
+
+`--timeout` bounds a single daemon round trip and reports `REQUEST_TIMEOUT`
+(exit `3`) when it elapses. Without it a command waits as long as the daemon
+takes.
 
 Required commands:
 
@@ -19,6 +40,9 @@ Required commands:
 - `obsctl config diff` (supports `--json`)
 - `obsctl config migrate [--dry-run]` (supports `--json`)
 - `obsctl watch [--topics state,events,logs]`
+- `obsctl completions bash|zsh|fish`
+- `obsctl completions candidates scenes|profiles|collections|audio`
+- `obsctl init [--force]`
 - `obsctl server`
 - `obsctl server --headless`
 - `obsctl status`
@@ -26,7 +50,9 @@ Required commands:
 - `obsctl server-status`
 - `obsctl reconnect`
 - `obsctl shutdown-server`
-- `obsctl scene <alias|shortcut|obs-name>`
+- `obsctl scene|set-scene <alias|shortcut|obs-name>`
+- `obsctl profile|set-profile <profile-name>`
+- `obsctl collection|set-collection|scene-collection <collection-name>`
 - `obsctl mute <audio-alias|shortcut|obs-name>`
 - `obsctl unmute <audio-alias|shortcut|obs-name>`
 - `obsctl toggle-mute <audio-alias|shortcut|obs-name>`
@@ -51,6 +77,9 @@ Required commands:
 - `/help`
 - `/set-scene <alias|shortcut|obs-name>`
 - `/scene <alias|shortcut|obs-name>`
+- `/profile <profile-name>`
+- `/collection <collection-name>`
+- `/themes` (also `/theme`, `/settings`)
 - `/mute <audio-alias|shortcut|obs-name>`
 - `/unmute <audio-alias|shortcut|obs-name>`
 - `/toggle-mute <audio-alias|shortcut|obs-name>`
@@ -68,7 +97,27 @@ Required commands:
 - `/disconnect`
 - `/quit`
 
-Quoted names are preserved: `/scene "Main Camera"`.
+Every command above is declared once, in `Domain::CommandRegistry`. The parser,
+the `--json` allowlist, palette completion, `--help`, and the generated shell
+completions all read that declaration, so the surfaces cannot disagree about
+which commands exist or what they accept.
+
+Non-interactive commands receive their arguments from the shell and pass them
+to the parser unchanged, so a scene or input name may contain quotes,
+backslashes, or any other character the shell delivers:
+
+```sh
+obsctl scene 'Camera "A"'
+obsctl mute 'Mic\Aux'
+```
+
+In the palette there is no shell to do the splitting, so the line is tokenized:
+whitespace separates arguments, double quotes group them, and inside quotes a
+backslash escapes the next character. Quoted names are preserved:
+`/scene "Main Camera"`. A volume percentage must not be quoted.
+
+Control characters are rejected in any argument, and an argument is limited to
+256 characters.
 
 `obsctl server` starts the foreground local server and owns the OBS WebSocket connection. `obsctl server --headless` runs the same server without interactive UI and is intended for a `systemd --user` service.
 
@@ -81,11 +130,12 @@ before either sink receives an entry.
 
 Non-interactive OBS control commands are IPC clients. They connect to the local Unix socket, send a typed command to the server, print the response, and exit. If the server is unavailable, they print startup/service instructions and exit `3`. `obsctl shutdown-server` is rejected unless `server.allow_remote_shutdown: true` is configured.
 
-`--json` is available for scriptable commands: `status`, `obs-status`,
-`server-status`, `reconnect`, `shutdown-server`, `scene`, `mute`, `unmute`,
-`toggle-mute`, `vol`/`volume`, `stream`, `rec`/`record`, `dump-config`, `reload-config`,
-`validate-config`, `doctor`, `config`, and `watch`. The flag can be placed before the command or after the
-command arguments:
+`--json` is available for every daemon command — `status`, `obs-status`,
+`server-status`, `reconnect`, `shutdown-server`, `scene`, `profile`,
+`collection`, `mute`, `unmute`, `toggle-mute`, `vol`/`volume`, `stream`,
+`rec`/`record`, `dump-config`, `reload-config`, `validate-config`, including
+every alias of each — plus the locally served `doctor`, `config`, and `watch`.
+The flag can be placed before the command or after the command arguments:
 
 ```sh
 obsctl --json status
@@ -163,9 +213,28 @@ reported by the daemon, including `0`, and renders `-` when an older daemon
 omits the field. JSON output preserves the daemon payload and does not
 synthesize the missing field.
 
+`obsctl completions <shell>` prints a completion script for `bash`, `zsh`, or
+`fish`. The script is generated from the command registry, so it always matches
+the binary that produced it.
+
+```sh
+obsctl completions bash > /etc/bash_completion.d/obsctl
+obsctl completions zsh  > "${fpath[1]}/_obsctl"
+obsctl completions fish > ~/.config/fish/completions/obsctl.fish
+```
+
+Scene, profile, collection, and audio-input names are completed from the
+running daemon. The scripts do that by calling `obsctl completions candidates
+<kind>`, which prints one name per line; obsctl parses its own JSON rather than
+asking each shell dialect to, because names can contain spaces, quotes, and
+commas. The helper is bounded by a short timeout and prints nothing when the
+daemon is unreachable, so completion never blocks or errors in the middle of a
+command line.
+
 `obsctl watch` streams daemon events to stdout as newline-delimited JSON, one
 self-describing object per line. It is the scripting counterpart to the TUI:
-consumers read it line-by-line without any framing logic.
+consumers read it line-by-line without any framing logic. Writing to a closed
+reader — `obsctl watch | head -5` — ends the stream normally and exits `0`.
 
 ```sh
 obsctl watch | jq -r 'select(.topic == "state") | .data.current_scene'

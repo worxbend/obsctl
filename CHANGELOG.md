@@ -12,6 +12,19 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Added
 
+- `obsctl completions bash|zsh|fish` prints a shell completion script generated
+  from the command registry, so it always matches the binary. Scene, profile,
+  collection, and audio-input names complete from the running daemon via
+  `obsctl completions candidates <kind>`, which is bounded by a short timeout
+  and stays silent when the daemon is unreachable.
+- `--color auto|always|never`. Human output is decorated only when stdout is a
+  terminal; `NO_COLOR` and `TERM=dumb` disable it as well.
+- `-q`/`--quiet` suppresses human output and leaves the exit code as the only
+  signal. `--json` output is unaffected.
+- `--timeout SECONDS` bounds a single daemon round trip, reporting
+  `REQUEST_TIMEOUT` and exit `3` when it elapses.
+- `--help` now lists every command with its usage and summary, not just the
+  global options.
 - `obsctl version`, `obsctl --version`, and `-V` report the binary version.
   Supports `--json`, which emits the standard envelope with a `version` field.
 - A CI workflow that runs formatting, lint, build, and specs on every push to
@@ -43,6 +56,35 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Changed
 
+- CI lints on the Crystal floor leg only, and the `latest` leg installs with
+  `--production`. Ameba analyses source rather than the compiler, so running it
+  twice over the same tree added nothing, while its released version (1.6.4)
+  does not build on current Crystal — `shards install` failed in postinstall,
+  which skipped the build and spec steps and reported a red build for code that
+  was fine. The `latest` leg now answers what it exists to answer: does obsctl
+  compile and pass its specs on the newest compiler.
+- The command set is declared once, in `Domain::CommandRegistry`. The parser,
+  the `--json` allowlist, palette completion, `--help`, the palette help text,
+  and the generated shell completions all read that declaration. It previously
+  lived in six hand-maintained lists that had already drifted apart, and a spec
+  now asserts the surfaces agree.
+- Commands carry their own IPC name and payload arguments, replacing the two
+  type-to-name tables in `CLI::ClientCommands` and the two in `TUI::Dispatcher`.
+  The dashboard's two deliberate divergences are declared as such.
+- Argument-count errors name the command and show its usage
+  (`wrong argument count for scene; usage: scene <scene>`) instead of a bare
+  `missing argument`.
+- `-h`/`--help` writes to the injected output stream and returns, instead of
+  writing to the process stdout and calling `exit 0` from inside the option
+  parser.
+- `OptionsParser` derives its argv splitting from the same flag declarations it
+  builds the parser from, replacing a hand-maintained list of which flags take
+  a value.
+- Config value types are declared with a single `config_value` field list that
+  produces the getters, the YAML mapping, and the initializer. The hand-written
+  YAML parsing helpers are gone; the canonical writer is kept deliberately,
+  because it defines the on-disk format `obsctl config migrate` converges to.
+  Emitted YAML is byte-identical.
 - Release binaries are now statically linked against musl, so they no longer
   depend on the host's glibc version.
 - `make lint` fails with an explanatory message when `bin/ameba` is missing.
@@ -59,6 +101,29 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Fixed
 
+- Scene and audio-input names containing a quote or a backslash reach the
+  daemon intact. The CLI used to rebuild its already-split arguments into a
+  quoted line and re-parse it, which rejected `obsctl scene 'quo"te'` outright
+  and silently rewrote `a\ b` to `a b`. Arguments now go straight from argv to
+  the parser. Control characters, tabs included, are still refused — that is
+  deliberate — but a tab now reports `target must not contain control
+  characters` rather than the misleading `wrong argument count`.
+- `--json` works for every spelling of a JSON-capable command. `set-scene`,
+  `set-profile`, and `set-collection` parsed fine but were rejected by the
+  hand-maintained allowlist.
+- `obsctl watch | head` exits `0` instead of printing
+  `write (...): Broken pipe` and exiting `1`. A closed reader is a normal end
+  of stream for a streaming command.
+- Human output no longer emits ANSI escapes when stdout is not a terminal, so
+  `obsctl status > file` and grep-based scripting see plain text.
+- `SIGTERM` and `SIGINT` shut the daemon down in order. Neither was trapped, so
+  the default disposition killed the process before `Server#stop` could close
+  the OBS WebSocket, log the stop, or remove the socket file — the exact path
+  `systemctl --user stop obsctl` takes.
+- Socket directories obsctl creates are `0700`. The `/tmp/obsctl-$UID/`
+  fallback sits in a world-writable parent and was created at the ambient
+  umask. A pre-existing directory owned by another user, writable by others,
+  and without the sticky bit is now refused rather than used.
 - The three flat contract fixtures at the root of `spec/fixtures/contracts/`
   are canonicalized into `cli/json/` and `ipc/`. Two were exact duplicates of
   existing canonical fixtures; the third, `cli_scene_error.json`, was the only
@@ -73,6 +138,12 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Removed
 
+- Six unreachable files: `src/obsctl/support/{result,time,json_helpers}.cr`,
+  `src/obsctl/runtime/{event_loop,scheduler}.cr`, and the self-described legacy
+  `src/obsctl/cli/command_router.cr`. All but the router were never required by
+  anything; the router was required but never instantiated.
+- `spec/obsctl/contract/` is merged into `spec/obsctl/contracts/`. Two
+  directories a letter apart, with no matching directory under `src/`.
 - `PLAN.md` and `scripts/agent-loop.sh`. The script had been dead since the
   Markdown control files it required were deleted, and `PLAN.md` pointed at a
   task queue under the gitignored `.agent-loop/`, so its roadmap was not

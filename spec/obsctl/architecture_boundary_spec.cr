@@ -9,7 +9,6 @@ private NORMAL_CLIENT_LAYER_GLOBS = [
   "src/obsctl/ipc/**/*.cr",
   "src/obsctl/domain/**/*.cr",
   "src/obsctl/tui/**/*.cr",
-  "src/obsctl/support/**/*.cr",
 ]
 private DIRECT_OBS_CLIENT_PATTERNS = [
   {name: "OBS client require", regex: /require\s+"(?:\.\.\/)+obs\/client"/},
@@ -71,7 +70,7 @@ private def usage_files(usages : Array(String)) : Array(String)
 end
 
 describe "daemon-first architecture boundary" do
-  it "keeps CLI, IPC, domain, and support layers off the OBS websocket client implementation" do
+  it "keeps CLI, IPC, domain, and TUI layers off the OBS websocket client implementation" do
     normal_client_files = src_files(NORMAL_CLIENT_LAYER_GLOBS)
 
     direct_obs_client_usages(normal_client_files).should eq([] of String)
