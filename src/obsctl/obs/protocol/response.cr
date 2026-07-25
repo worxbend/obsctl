@@ -15,7 +15,7 @@ module Obsctl
         # Parses a raw JSON frame and returns nil when it is not a response.
         def self.from_frame(frame : String) : self?
           root = JSON.parse(frame)
-          return nil unless root["op"].as_i == 7
+          return unless root["op"].as_i == 7
           data = root["d"]
           status = data["requestStatus"]
           new(

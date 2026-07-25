@@ -86,11 +86,9 @@ module Obsctl
           fail_all_pending(close_terminal_error(code, reason))
         end
         spawn do
-          begin
-            @ws.run
-          rescue ex
-            fail_all_pending(record_terminal_error(Domain::ConnectionFailed.new("OBS WebSocket reader failed")))
-          end
+          @ws.run
+        rescue
+          fail_all_pending(record_terminal_error(Domain::ConnectionFailed.new("OBS WebSocket reader failed")))
         end
         hello = read_system_frame
         identify(hello)
@@ -125,7 +123,7 @@ module Obsctl
           unless response.request_status.result
             raise Domain::ObsRequestFailed.new(request_type, response.request_status.comment || "request returned failure")
           end
-          return response
+          response
         when timeout(timeout)
           raise Domain::RequestTimeout.new(request_type)
         end
@@ -239,9 +237,10 @@ module Obsctl
 
       def profiles : NamedTuple(current: String?, names: Array(String))
         data = request(Requests::Studio::GET_PROFILE_LIST).response_data || JSON.parse("{}")
-        names = data["profiles"]?.try(&.as_a?).try(&.compact_map { |profile|
+        entries = data["profiles"]?.try(&.as_a?) || [] of JSON::Any
+        names = entries.compact_map do |profile|
           profile.as_s? || profile.as_h?.try { profile["profileName"]?.try(&.as_s?) }
-        }) || [] of String
+        end
         {current: data["currentProfileName"]?.try(&.as_s?), names: names}
       end
 
@@ -430,7 +429,7 @@ module Obsctl
 
       private def number(data : JSON::Any, key : String) : Float64?
         value = data[key]?
-        return nil unless value
+        return unless value
         value.as_f? || value.as_i?.try(&.to_f64)
       end
 
@@ -447,14 +446,14 @@ module Obsctl
           else
             @system_frames.send(frame)
           end
-        rescue ex
+        rescue
           if opcode == 7
             fail_response_parser_error
           else
             fail_malformed_frame
           end
         end
-      rescue ex
+      rescue
         fail_malformed_frame
       end
 
@@ -464,7 +463,7 @@ module Obsctl
 
         channel = @pending_lock.synchronize { @pending[response.request_id]? }
         send_pending(channel, response) if channel
-      rescue ex
+      rescue
         fail_response_parser_error
       end
 

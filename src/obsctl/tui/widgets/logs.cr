@@ -13,10 +13,10 @@ module Obsctl
           Collection
         end
 
-        DANGER_KEYWORDS  = %w(error failed failure disconnected unavailable denied invalid malformed timeout dropped closed fatal)
-        WARNING_KEYWORDS = %w(warning warn retry reconnect reconnecting muted stopped shutdown stale)
-        SUCCESS_KEYWORDS = %w(connected ready started active switched reloaded success enabled unmuted streaming recording complete)
-        SUBJECT_KEYWORDS = %w(obs scene profile collection audio input source stream record config daemon server command websocket)
+        DANGER_KEYWORDS  = %w[error failed failure disconnected unavailable denied invalid malformed timeout dropped closed fatal]
+        WARNING_KEYWORDS = %w[warning warn retry reconnect reconnecting muted stopped shutdown stale]
+        SUCCESS_KEYWORDS = %w[connected ready started active switched reloaded success enabled unmuted streaming recording complete]
+        SUBJECT_KEYWORDS = %w[obs scene profile collection audio input source stream record config daemon server command websocket]
 
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           visible = {area.height - 2, 0}.max

@@ -229,11 +229,9 @@ describe Obsctl::Server::ObsSupervisor do
     obs.assert_websocket_connection_closed(first_connection_id, 2.seconds)
     obs.next_identify(2.seconds).should_not be_nil
     wait_for_supervisor do
-      begin
-        supervisor.with_client { true }
-      rescue Obsctl::Domain::ObsUnavailable
-        false
-      end
+      supervisor.with_client { true }
+    rescue Obsctl::Domain::ObsUnavailable
+      false
     end
 
     obs.connection_attempt_count.should eq(2)

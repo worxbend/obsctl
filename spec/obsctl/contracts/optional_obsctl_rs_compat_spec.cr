@@ -22,19 +22,19 @@ end
 
 private def write_contract_manifest(root : String, fixture_paths : Array(String)) : Nil
   write_contract_fixture(root, "contract_manifest.yml", <<-YAML)
-  version: 1
-  fixture_root: spec/fixtures/contracts
-  required_directories:
-    - cli/human/
-    - cli/json/
-    - ipc/
-  recognized_rust_roots:
-    - spec/fixtures/contracts/
-    - tests/fixtures/contracts/
-    - fixtures/contracts/
-  fixtures:
-  #{fixture_paths.map { |path| "  - category: #{path.split("/")[0, 2].join("/")}\n    relative_path: #{path}\n    purpose: Test fixture.\n    behavior: current_daemon\n    contains_dropped_reconnect_diagnostic_logs: false" }.join("\n")}
-  YAML
+    version: 1
+    fixture_root: spec/fixtures/contracts
+    required_directories:
+      - cli/human/
+      - cli/json/
+      - ipc/
+    recognized_rust_roots:
+      - spec/fixtures/contracts/
+      - tests/fixtures/contracts/
+      - fixtures/contracts/
+    fixtures:
+    #{fixture_paths.map { |path| "  - category: #{path.split("/")[0, 2].join("/")}\n    relative_path: #{path}\n    purpose: Test fixture.\n    behavior: current_daemon\n    contains_dropped_reconnect_diagnostic_logs: false" }.join("\n")}
+    YAML
 end
 
 private def create_required_contract_directories(root : String) : Nil

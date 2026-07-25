@@ -22,7 +22,7 @@ module Obsctl
     module OptionalScalarStringConverter
       def self.from_yaml(ctx : YAML::ParseContext, node : YAML::Nodes::Node) : String?
         node.raise "Expected scalar, not #{node.class}" unless node.is_a?(YAML::Nodes::Scalar)
-        return nil if node.value.empty? && !quoted?(node)
+        return if node.value.empty? && !quoted?(node)
 
         node.value
       end
@@ -54,18 +54,18 @@ macro config_value(*fields)
 
   {% for field in fields %}
     {% if field.type.stringify == "String" %}
-      @[YAML::Field(key: {{field.var.stringify}}, converter: Obsctl::Config::ScalarStringConverter)]
+      @[YAML::Field(key: {{ field.var.stringify }}, converter: Obsctl::Config::ScalarStringConverter)]
     {% elsif field.type.stringify == "String?" %}
-      @[YAML::Field(key: {{field.var.stringify}}, converter: Obsctl::Config::OptionalScalarStringConverter)]
+      @[YAML::Field(key: {{ field.var.stringify }}, converter: Obsctl::Config::OptionalScalarStringConverter)]
     {% else %}
-      @[YAML::Field(key: {{field.var.stringify}})]
+      @[YAML::Field(key: {{ field.var.stringify }})]
     {% end %}
-    getter {{field.var.id}} : {{field.type}}{% unless field.value.is_a?(Nop) %} = {{field.value}}{% end %}
+    getter {{ field.var.id }} : {{ field.type }}{% unless field.value.is_a?(Nop) %} = {{ field.value }}{% end %}
   {% end %}
 
   def initialize(
     {% for field in fields %}
-      @{{field.var.id}} : {{field.type}}{% unless field.value.is_a?(Nop) %} = {{field.value}}{% end %},
+      @{{ field.var.id }} : {{ field.type }}{% unless field.value.is_a?(Nop) %} = {{ field.value }}{% end %},
     {% end %}
   )
   end

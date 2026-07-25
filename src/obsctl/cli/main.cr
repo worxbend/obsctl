@@ -175,7 +175,6 @@ module Obsctl
         error = case ex
                 when Domain::ObsctlError     then ex
                 when OptionParser::Exception then Domain::CommandParseError.new(ex.message || "invalid option")
-                else                              nil
                 end
 
         unless error

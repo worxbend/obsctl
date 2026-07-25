@@ -36,12 +36,10 @@ module Obsctl
         return false unless accepted
 
         spawn(name: "obsctl-best-effort-log-broadcast") do
-          begin
-            @broadcast.call(entry)
-          rescue
-          ensure
-            @lock.synchronize { @outstanding -= 1 }
-          end
+          @broadcast.call(entry)
+        rescue
+        ensure
+          @lock.synchronize { @outstanding -= 1 }
         end
 
         true

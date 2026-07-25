@@ -38,7 +38,7 @@ module Obsctl
         end
       rescue ex : JSON::ParseException
         raise Domain::IpcProtocolError.new("invalid IPC JSON: #{ex.message}")
-      rescue ex : TypeCastError | KeyError
+      rescue TypeCastError | KeyError
         raise Domain::IpcProtocolError.new("invalid IPC frame")
       end
 
@@ -94,7 +94,7 @@ module Obsctl
 
       private def optional_string_field(root : JSON::Any, key : String) : String?
         value = root[key]?
-        return nil unless value
+        return unless value
         text = value.as_s
         raise Domain::IpcProtocolError.new("IPC field #{key} cannot be empty") if text.empty?
         text

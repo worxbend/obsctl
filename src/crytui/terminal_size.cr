@@ -24,17 +24,17 @@ module CryTUI
     {% end %}
 
     def from(io : IO::FileDescriptor) : Rect?
-      return nil if GET_WINDOW_SIZE == 0
+      return if GET_WINDOW_SIZE == 0
       size = uninitialized LibTerminal::WindowSize
       result = LibTerminal.ioctl(io.fd, GET_WINDOW_SIZE, pointerof(size))
-      return nil unless result == 0 && size.columns > 0 && size.rows > 0
+      return unless result == 0 && size.columns > 0 && size.rows > 0
       Rect.new(0, 0, size.columns.to_i, size.rows.to_i)
     end
 
     def from_environment : Rect?
       columns = ENV["COLUMNS"]?.try(&.to_i?)
       lines = ENV["LINES"]?.try(&.to_i?)
-      return nil unless columns && lines && columns > 0 && lines > 0
+      return unless columns && lines && columns > 0 && lines > 0
       Rect.new(0, 0, columns, lines)
     end
   end

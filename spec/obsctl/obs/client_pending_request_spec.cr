@@ -47,20 +47,16 @@ describe Obsctl::OBS::Client do
       client.connect
 
       spawn do
-        begin
-          version_result.send(client.version["obsVersion"].as_s)
-        rescue ex
-          version_result.send(ex)
-        end
+        version_result.send(client.version["obsVersion"].as_s)
+      rescue ex
+        version_result.send(ex)
       end
       server.next_request.should eq("GetVersion")
 
       spawn do
-        begin
-          scene_result.send(client.current_scene || "")
-        rescue ex
-          scene_result.send(ex)
-        end
+        scene_result.send(client.current_scene || "")
+      rescue ex
+        scene_result.send(ex)
       end
       server.next_request.should eq("GetCurrentProgramScene")
 
@@ -84,12 +80,10 @@ describe Obsctl::OBS::Client do
     begin
       client.connect
       spawn do
-        begin
-          client.version
-          result.send(nil)
-        rescue ex
-          result.send(ex)
-        end
+        client.version
+        result.send(nil)
+      rescue ex
+        result.send(ex)
       end
 
       server.next_request.should eq("GetVersion")
@@ -162,12 +156,10 @@ describe Obsctl::OBS::Client do
     begin
       client.connect
       spawn do
-        begin
-          client.version
-          result.send(nil)
-        rescue ex
-          result.send(ex)
-        end
+        client.version
+        result.send(nil)
+      rescue ex
+        result.send(ex)
       end
 
       server.next_request.should eq("GetVersion")
@@ -200,12 +192,10 @@ describe Obsctl::OBS::Client do
     begin
       client.connect
       spawn do
-        begin
-          client.version
-          result.send(nil)
-        rescue ex
-          result.send(ex)
-        end
+        client.version
+        result.send(nil)
+      rescue ex
+        result.send(ex)
       end
 
       server.next_request.should eq("GetVersion")
@@ -268,12 +258,10 @@ describe Obsctl::OBS::Client do
     begin
       client.connect
       spawn do
-        begin
-          client.version
-          result.send(nil)
-        rescue ex
-          result.send(ex)
-        end
+        client.version
+        result.send(nil)
+      rescue ex
+        result.send(ex)
       end
 
       server.next_request.should eq("GetVersion")

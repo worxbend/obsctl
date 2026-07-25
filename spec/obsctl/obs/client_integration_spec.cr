@@ -161,12 +161,10 @@ describe Obsctl::OBS::Client do
     begin
       client.connect
       spawn do
-        begin
-          client.version
-          result.send(nil)
-        rescue ex
-          result.send(ex)
-        end
+        client.version
+        result.send(nil)
+      rescue ex
+        result.send(ex)
       end
 
       server.next_request.should eq("GetVersion")

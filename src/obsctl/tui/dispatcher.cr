@@ -178,7 +178,7 @@ module Obsctl
 
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
         {% for type, name in TUI_PAYLOAD_OVERRIDES %}
-          return IPC::CommandPayload.new({{name}}) if command.is_a?({{type}})
+          return IPC::CommandPayload.new({{ name }}) if command.is_a?({{ type }})
         {% end %}
 
         name = command.ipc_name
