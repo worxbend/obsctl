@@ -8,7 +8,7 @@ targets:
   obsctl:
     main: src/obsctl.cr
 
-crystal: ">= 1.20.2"
+crystal: ">= 1.21.0"
 
 license: MIT
 
@@ -20,4 +20,8 @@ dependencies:
 development_dependencies:
   ameba:
     github: crystal-ameba/ameba
-    version: ~> 1.6
+    # Pinned to a master commit: 1.6.4 is the newest release and it does not
+    # build on Crystal 1.21 (it calls Crystal::Lexer#next_string_array_token,
+    # which 1.21 removed). Move back to a version constraint once a release
+    # carrying crystal-ameba/ameba#866 exists.
+    commit: b50c1ffde626449c8fd32c1ae68813b2be2bb101

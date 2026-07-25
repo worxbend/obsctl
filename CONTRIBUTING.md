@@ -6,7 +6,7 @@ change has to pass, and the conventions the codebase already follows.
 ## Prerequisites
 
 - Linux
-- Crystal **1.20.2 or newer** and Shards
+- Crystal **1.21.0 or newer** and Shards
 - OBS Studio with **obs-websocket 5.x** for manual testing (the automated specs
   use an in-tree fake OBS server and do not need a running OBS)
 
@@ -17,8 +17,14 @@ shards install
 ```
 
 Run `shards install` without `--production`: `ameba` is a development
-dependency, and its postinstall step is what produces `bin/ameba` for the lint
-gate.
+dependency and the lint gate needs it. `make lint` compiles `bin/ameba` from
+the pinned checkout on first use and reuses it afterwards, so the first lint
+run in a fresh clone takes about half a minute.
+
+`ameba` is pinned to a master commit rather than a released version: 1.6.4 is
+the newest release and it does not build on Crystal 1.21. Move the pin back to
+a version constraint once a release carrying
+[ameba#866](https://github.com/crystal-ameba/ameba/pull/866) exists.
 
 ## Gates
 

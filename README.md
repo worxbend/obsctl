@@ -11,7 +11,7 @@
 🎛️ **Control** · 📊 **Observe** · 🤖 **Automate** · 🔁 **Stay connected**
 
 [![Release](https://img.shields.io/github/v/release/worxbend/obsctl?display_name=tag&sort=semver&style=flat-square)](https://github.com/worxbend/obsctl/releases)
-[![Crystal](https://img.shields.io/badge/Crystal-%E2%89%A5%201.20.2-000000?style=flat-square&logo=crystal)](https://crystal-lang.org/)
+[![Crystal](https://img.shields.io/badge/Crystal-%E2%89%A5%201.21.0-000000?style=flat-square&logo=crystal)](https://crystal-lang.org/)
 [![obs-websocket](https://img.shields.io/badge/obs--websocket-5.x-302E31?style=flat-square&logo=obsstudio)](https://github.com/obsproject/obs-websocket)
 [![License](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](LICENSE)
 
@@ -55,7 +55,7 @@ daemon running as a user service.
 
 - Linux
 - OBS Studio with **obs-websocket 5.x** enabled
-- Crystal **1.20.2+** and Shards when building from source
+- Crystal **1.21.0+** and Shards when building from source
 - A UTF-8 terminal; a Nerd Font is recommended for the richest icon set
 
 ### 1. Build
