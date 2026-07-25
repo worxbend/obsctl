@@ -20,16 +20,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 1.20.2 is the floor declared in shard.yml; latest catches upstream drift.
+        # 1.21.0 is the floor declared in shard.yml; latest catches upstream drift.
         #
         # Only the floor leg lints. Ameba analyses source, not the compiler, so
-        # running it twice over the same tree adds nothing — and its released
-        # version does not build on every future compiler, which would turn a
-        # tooling incompatibility into a red build for code that is fine. The
-        # latest leg answers the question it exists to answer: does obsctl still
-        # compile and pass its specs on the newest Crystal.
+        # running it twice over the same tree adds nothing, and the latest leg
+        # is then free of the development dependencies entirely. It answers the
+        # question it exists to answer: does obsctl still compile and pass its
+        # specs on the newest Crystal.
         include:
-          - crystal: "1.20.2"
+          - crystal: "1.21.0"
             lint: true
             shards_flags: ""
           - crystal: latest

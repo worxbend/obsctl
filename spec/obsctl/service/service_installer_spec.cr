@@ -4,7 +4,7 @@ require "../../../src/obsctl/service/service_installer"
 private class FakeSystemCommandRunner < Obsctl::Service::SystemCommandRunner
   getter calls = [] of Tuple(String, Array(String))
 
-  def initialize(@status : Process::Status = Process::Status.new(0))
+  def initialize(@status : Process::Status = Process::Status[0])
   end
 
   def run(command : String, args : Array(String)) : Process::Status
@@ -80,7 +80,7 @@ describe Obsctl::Service::ServiceInstaller do
     installer = Obsctl::Service::ServiceInstaller.new(
       service_path: "/tmp/obsctl.service",
       executable_path: "/tmp/obsctl",
-      runner: FakeSystemCommandRunner.new(Process::Status.new(1))
+      runner: FakeSystemCommandRunner.new(Process::Status[1])
     )
 
     expect_raises(Obsctl::Domain::ServiceInstallFailed, "systemctl --user start obsctl.service failed") do

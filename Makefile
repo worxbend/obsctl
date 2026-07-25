@@ -18,11 +18,17 @@ format:
 format-check:
 	$(CRYSTAL) tool format --check
 
-lint:
-	@if [ ! -x bin/ameba ]; then \
-		echo "ameba not found at bin/ameba; run 'shards install' first" >&2; \
+# ameba no longer ships a postinstall that produces bin/ameba, so build it here
+# from the pinned checkout. The binary is rebuilt only when the source changes.
+bin/ameba: lib/ameba/src/cli.cr
+	@if [ ! -d lib/ameba ]; then \
+		echo "lib/ameba is missing; run 'shards install' first" >&2; \
 		exit 1; \
 	fi
+	mkdir -p bin
+	$(CRYSTAL) build lib/ameba/src/cli.cr -o bin/ameba
+
+lint: bin/ameba
 	bin/ameba
 
 bootstrap-obsctl-rs-contract-fixtures:
