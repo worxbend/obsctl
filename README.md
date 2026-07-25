@@ -199,6 +199,9 @@ obsctl record status --json
 # Event stream for scripts
 obsctl watch --topics state | jq -r '.data.current_scene'
 
+# Shell completions (bash, zsh, fish)
+obsctl completions bash > /etc/bash_completion.d/obsctl
+
 # Configuration and lifecycle
 obsctl validate-config
 obsctl dump-config
@@ -236,6 +239,22 @@ Failures use canonical error codes and matching process exit statuses, making
 them straightforward to handle in shell scripts and other tools. See the
 [command reference](docs/commands.md) for the full grammar, supported JSON
 commands, error codes, and status schema.
+
+### Scripting behavior
+
+Human output is decorated only when stdout is a terminal, so redirecting or
+piping gives you plain text; `NO_COLOR` and `--color=never` also disable it, and
+`--color=always` forces it back on. `-q`/`--quiet` drops the human message and
+leaves the exit code as the only signal, and `--timeout SECONDS` bounds a single
+daemon round trip. Streaming into a short-lived reader, as in
+`obsctl watch | head -5`, ends cleanly with exit `0`.
+
+Names are passed to the daemon exactly as the shell delivers them, so scenes and
+inputs containing quotes or backslashes work without special handling:
+
+```bash
+obsctl scene 'Camera "A"'
+```
 
 ## 🏗️ Architecture
 

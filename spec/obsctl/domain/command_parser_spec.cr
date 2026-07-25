@@ -9,6 +9,42 @@ describe Obsctl::Domain::CommandParser do
     command.as(Obsctl::Domain::SetSceneCommand).target.should eq("Main Camera")
   end
 
+  # The CLI hands argv straight through instead of rebuilding a quoted line and
+  # re-parsing it. Names that used to be mangled or rejected by that round trip
+  # now reach the daemon byte for byte.
+  describe "argument vectors" do
+    {
+      "plain"            => "Main",
+      "with a space"     => "Main Camera",
+      "with a quote"     => %q(Cam "A"),
+      "with a backslash" => %q(Cam\Main),
+      "escaped space"    => %q(a\ b),
+      "trailing quote"   => %q(Camera"),
+      "unicode"          => "Café 📷",
+    }.each do |label, name|
+      it "passes a scene name #{label} through untouched" do
+        parser.parse(["scene", name]).as(Obsctl::Domain::SetSceneCommand).target.should eq(name)
+      end
+    end
+
+    it "parses aliases and multi-argument commands" do
+      parser.parse(["set-scene", "Main"]).should be_a(Obsctl::Domain::SetSceneCommand)
+      volume = parser.parse(["volume", "Desktop Audio", "65"]).as(Obsctl::Domain::VolumeCommand)
+      volume.target.should eq("Desktop Audio")
+      volume.percent.should eq(65)
+    end
+
+    it "still rejects control characters in a target" do
+      expect_raises(Obsctl::Domain::CommandParseError, /control characters/) do
+        parser.parse(["scene", "tab\there"])
+      end
+    end
+
+    it "rejects an empty vector" do
+      expect_raises(Obsctl::Domain::CommandParseError, /empty command/) { parser.parse([] of String) }
+    end
+  end
+
   it "validates volume range" do
     expect_raises(Obsctl::Domain::CommandParseError) do
       parser.parse("/vol mic 101")

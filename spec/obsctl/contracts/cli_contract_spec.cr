@@ -83,8 +83,31 @@ describe "CLI public contract" do
 
         received.receive.command.not_nil!.name.should eq("status")
         exit_code.should eq(0)
-        stdout.should eq("\e[1m\e[34m── server ──────────────────────────\e[0m\n  pid: 4242\n  uptime_seconds: 37\n  socket_path: /tmp/obsctl-contract/obsctl.sock\n  client_count: 2\n  dropped_reconnect_diagnostic_logs: 4\n  obs_connected: true\n  reconnecting: false\n  last_connected_at: 2026-06-20T12:00:00Z\n  last_disconnected_at: -\n  last_reconnect_attempt_at: 2026-06-20T11:59:59Z\n  last_connection_failed_at: -\n  last_error: -\n\e[1m\e[36m── obs ─────────────────────────────\e[0m\n  \e[32m● connected\e[0m\n  current_scene: \e[97mMain Camera\e[0m\n  \e[1m\e[36mScenes:\e[0m\n    \e[1m\e[32m▶ Main Camera\e[0m\n      Break\n  \e[1m\e[36mAudio:\e[0m\n    \e[32m♪\e[0m Mic/Aux \e[2m[\e[0m███████░░░\e[2m]\e[0m 72%\n")
+        # Non-terminal stdout is uncolored, so the frozen fixture is the plain
+        # form a pipe or a redirect sees.
+        stdout.should eq(File.read(File.join(CLI_CONTRACT_FIXTURE_DIR, "cli/human/status_success.txt")))
+        stdout.should_not contain("\e[")
         stderr.should eq("")
+      end
+    end
+  end
+
+  it "re-enables ANSI decoration for --color=always" do
+    envelope = cli_contract_fixture("cli/json/status_success.json")
+    response = cli_contract_response_from_envelope(envelope)
+
+    with_cli_contract_runtime do
+      with_cli_contract_daemon_response(response) do |received|
+        exit_code, stdout, _ = run_cli_contract(["--color=always", "status"])
+
+        received.receive.command.not_nil!.name.should eq("status")
+        exit_code.should eq(0)
+        stdout.should contain("\e[1m\e[34m── server ")
+        stdout.should contain("\e[32m● connected\e[0m")
+        # Stripping the decoration must reproduce the plain contract exactly.
+        stdout.gsub(/\e\[[0-9;]*m/, "").should eq(
+          File.read(File.join(CLI_CONTRACT_FIXTURE_DIR, "cli/human/status_success.txt"))
+        )
       end
     end
   end
