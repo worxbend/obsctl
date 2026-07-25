@@ -164,8 +164,7 @@ module Obsctl
           io << "_obsctl() {\n"
           io << "  local -a commands\n"
           io << "  commands=(\n"
-          Domain::CommandRegistry.help_lines(Domain::CommandSurface::Cli).each_with_index do |_, index|
-            spec = Domain::CommandRegistry.for_surface(Domain::CommandSurface::Cli)[index]
+          Domain::CommandRegistry.for_surface(Domain::CommandSurface::Cli).each do |spec|
             io << "    '" << spec.name << ":" << zsh_escape(spec.summary) << "'\n"
           end
           LOCAL_COMMANDS.each { |name| io << "    '" << name << ":local command'\n" }
