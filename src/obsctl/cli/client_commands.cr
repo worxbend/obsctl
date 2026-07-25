@@ -38,7 +38,7 @@ module Obsctl
           raise Domain::IpcProtocolError.new("server returned an invalid error response")
         end
         response
-      rescue ex : Domain::IpcConnectionFailed
+      rescue Domain::IpcConnectionFailed
         raise Domain::ServerUnavailable.new
       end
 

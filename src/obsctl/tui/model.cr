@@ -247,7 +247,7 @@ module Obsctl
 
       def revealed_last_result(characters_per_frame : Int32) : String?
         result = @last_result
-        return nil unless result
+        return unless result
         elapsed = (@anim.frame - @last_result_frame).to_i64
         result.each_grapheme.first(elapsed * characters_per_frame.clamp(1, Int32::MAX)).join
       end

@@ -74,9 +74,9 @@ module Obsctl
       end
 
       {% for name in %w[reset bold dim green red yellow cyan blue magenta bright_white] %}
-        # Returns the {{name.id}} escape sequence, or "" when color is disabled.
-        def {{name.id}} : String
-          @enabled ? {{name.upcase.id}} : ""
+        # Returns the {{ name.id }} escape sequence, or "" when color is disabled.
+        def {{ name.id }} : String
+          @enabled ? {{ name.upcase.id }} : ""
         end
       {% end %}
     end

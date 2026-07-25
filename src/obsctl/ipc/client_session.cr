@@ -20,7 +20,7 @@ module Obsctl
       # Reads and decodes one message, returning nil when the peer closes.
       def read_message : Message?
         line = socket.gets
-        return nil unless line
+        return unless line
         @codec.decode(line)
       end
 

@@ -143,9 +143,9 @@ module Obsctl
       end
 
       private def self.normalized(value : String?) : String?
-        return nil unless value
+        return unless value
         stripped = value.strip
-        return nil if stripped.empty?
+        return if stripped.empty?
         stripped.downcase
       end
     end

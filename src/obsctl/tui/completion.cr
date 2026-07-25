@@ -32,7 +32,7 @@ module Obsctl
       # Argument candidates for a command, driven by the kind its spec declares.
       private def candidates_for(command : String, model : Model) : Array(String)?
         spec = Domain::CommandRegistry[command]?
-        return nil unless spec
+        return unless spec
 
         case spec.arguments.first?
         when Domain::ArgumentKind::Scene

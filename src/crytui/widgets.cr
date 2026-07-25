@@ -27,13 +27,13 @@ module CryTUI
     end
 
     struct Block
-      getter title : String | Line | Nil
+      getter title : String | Line?
       getter borders : Borders
       getter style : Style
       getter border_style : Style
       getter border_set : BorderSet
 
-      def initialize(@title : String | Line | Nil = nil, @borders = Borders::All, @style = Style.new, @border_style = Style.new, @border_set = BorderSet::PLAIN)
+      def initialize(@title : String | Line? = nil, @borders = Borders::All, @style = Style.new, @border_style = Style.new, @border_set = BorderSet::PLAIN)
       end
 
       def inner(area : Rect) : Rect
@@ -128,7 +128,6 @@ module CryTUI
         when "┬"                then 0b1011
         when "┴"                then 0b0111
         when "┼"                then 0b1111
-        else                         nil
         end
       end
 

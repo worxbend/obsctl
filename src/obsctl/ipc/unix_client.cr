@@ -21,7 +21,7 @@ module Obsctl
       # Opens a persistent client session to the local server.
       def connect : ClientSession
         ClientSession.new(UNIXSocket.new(@socket_path), @codec)
-      rescue ex : File::NotFoundError | Socket::ConnectError
+      rescue File::NotFoundError | Socket::ConnectError
         raise Domain::IpcConnectionFailed.new("obsctl server is not running at #{@socket_path}")
       end
 

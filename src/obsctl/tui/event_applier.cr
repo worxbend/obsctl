@@ -104,7 +104,7 @@ module Obsctl
 
       private def parse_log(data : JSON::Any) : LogEntry?
         message = data["message"]?.try(&.as_s?)
-        return nil unless message
+        return unless message
         level = case data["level"]?.try(&.as_s?).try(&.downcase)
                 when "debug"           then Runtime::LogLevel::Debug
                 when "warn", "warning" then Runtime::LogLevel::Warn
@@ -134,10 +134,10 @@ module Obsctl
       # channel. Match the Rust adapter by displaying the loudest channel.
       private def meter_level(data : JSON::Any?) : Float64?
         channels = data.try(&.as_a?)
-        return nil unless channels
+        return unless channels
         channels.reduce(0.0) do |maximum, channel|
           magnitude = channel.as_a?.try(&.first?).try { |value| number(value) }
-          return nil unless magnitude && magnitude.finite? && magnitude >= 0.0
+          return unless magnitude && magnitude.finite? && magnitude >= 0.0
           Math.max(maximum, magnitude)
         end
       end

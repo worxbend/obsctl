@@ -136,7 +136,7 @@ describe Obsctl::CLI::Main do
           mute_exit_code.should eq(0)
           Obsctl::SpecSupport::CliCapture.exit_code(["--config", path, "vol", "desktop", "80"]).should eq(0)
 
-          server.input("Mic/Aux").try(&.muted).should eq(true)
+          server.input("Mic/Aux").try(&.muted).should be_true
           server.input("Desktop Audio").try(&.volume_mul).should eq(0.8)
         end
       end

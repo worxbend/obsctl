@@ -43,11 +43,9 @@ module Obsctl
         dead_sessions = [] of IPC::ClientSession
 
         subscriptions_for(topic).each do |subscription|
-          begin
-            subscription.session.write_message(event)
-          rescue IO::Error
-            dead_sessions << subscription.session
-          end
+          subscription.session.write_message(event)
+        rescue IO::Error
+          dead_sessions << subscription.session
         end
 
         dead_sessions.each { |session| remove(session) }

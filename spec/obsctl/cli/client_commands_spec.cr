@@ -69,29 +69,29 @@ describe Obsctl::CLI::ClientCommands do
 
   it "formats combined status with separate server and OBS sections" do
     result = JSON.parse(<<-JSON)
-    {
-      "server": {
-        "pid": 123,
-        "uptime_seconds": 9,
-        "socket_path": "/tmp/obsctl.sock",
-        "client_count": 2,
-        "dropped_reconnect_diagnostic_logs": 0,
-        "obs_connected": true,
-        "reconnecting": false,
-        "last_connected_at": "2026-06-20T12:00:00Z",
-        "last_disconnected_at": "2026-06-20T11:55:00Z",
-        "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
-        "last_connection_failed_at": "2026-06-20T11:58:00Z",
-        "last_error": null
-      },
-      "obs": {
-        "connected": true,
-        "current_scene": "Main Camera",
-        "scenes": [{"name":"Main Camera","active":true}],
-        "audio_inputs": [{"name":"Mic/Aux","muted":false,"volume_percent":72}]
+      {
+        "server": {
+          "pid": 123,
+          "uptime_seconds": 9,
+          "socket_path": "/tmp/obsctl.sock",
+          "client_count": 2,
+          "dropped_reconnect_diagnostic_logs": 0,
+          "obs_connected": true,
+          "reconnecting": false,
+          "last_connected_at": "2026-06-20T12:00:00Z",
+          "last_disconnected_at": "2026-06-20T11:55:00Z",
+          "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+          "last_connection_failed_at": "2026-06-20T11:58:00Z",
+          "last_error": null
+        },
+        "obs": {
+          "connected": true,
+          "current_scene": "Main Camera",
+          "scenes": [{"name":"Main Camera","active":true}],
+          "audio_inputs": [{"name":"Mic/Aux","muted":false,"volume_percent":72}]
+        }
       }
-    }
-    JSON
+      JSON
     response = Obsctl::IPC::Response.new("req-000001", true, result)
 
     output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
@@ -112,21 +112,21 @@ describe Obsctl::CLI::ClientCommands do
 
   it "formats daemon status with every reconnect timestamp field" do
     result = JSON.parse(<<-JSON)
-    {
-      "pid": 123,
-      "uptime_seconds": 9,
-      "socket_path": "/tmp/obsctl.sock",
-      "client_count": 2,
-      "dropped_reconnect_diagnostic_logs": 0,
-      "obs_connected": false,
-      "reconnecting": true,
-      "last_connected_at": "2026-06-20T12:00:00Z",
-      "last_disconnected_at": "2026-06-20T12:05:00Z",
-      "last_reconnect_attempt_at": "2026-06-20T12:06:00Z",
-      "last_connection_failed_at": "2026-06-20T12:07:00Z",
-      "last_error": "connection failed"
-    }
-    JSON
+      {
+        "pid": 123,
+        "uptime_seconds": 9,
+        "socket_path": "/tmp/obsctl.sock",
+        "client_count": 2,
+        "dropped_reconnect_diagnostic_logs": 0,
+        "obs_connected": false,
+        "reconnecting": true,
+        "last_connected_at": "2026-06-20T12:00:00Z",
+        "last_disconnected_at": "2026-06-20T12:05:00Z",
+        "last_reconnect_attempt_at": "2026-06-20T12:06:00Z",
+        "last_connection_failed_at": "2026-06-20T12:07:00Z",
+        "last_error": "connection failed"
+      }
+      JSON
     response = Obsctl::IPC::Response.new("req-000001", true, result)
 
     output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
@@ -142,29 +142,29 @@ describe Obsctl::CLI::ClientCommands do
 
   it "formats present non-zero drop telemetry in combined human status" do
     result = JSON.parse(<<-JSON)
-    {
-      "server": {
-        "pid": 123,
-        "uptime_seconds": 9,
-        "socket_path": "/tmp/obsctl.sock",
-        "client_count": 2,
-        "dropped_reconnect_diagnostic_logs": 7,
-        "obs_connected": true,
-        "reconnecting": false,
-        "last_connected_at": "2026-06-20T12:00:00Z",
-        "last_disconnected_at": null,
-        "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
-        "last_connection_failed_at": null,
-        "last_error": null
-      },
-      "obs": {
-        "connected": true,
-        "current_scene": "Main Camera",
-        "scenes": [],
-        "audio_inputs": []
+      {
+        "server": {
+          "pid": 123,
+          "uptime_seconds": 9,
+          "socket_path": "/tmp/obsctl.sock",
+          "client_count": 2,
+          "dropped_reconnect_diagnostic_logs": 7,
+          "obs_connected": true,
+          "reconnecting": false,
+          "last_connected_at": "2026-06-20T12:00:00Z",
+          "last_disconnected_at": null,
+          "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+          "last_connection_failed_at": null,
+          "last_error": null
+        },
+        "obs": {
+          "connected": true,
+          "current_scene": "Main Camera",
+          "scenes": [],
+          "audio_inputs": []
+        }
       }
-    }
-    JSON
+      JSON
     response = Obsctl::IPC::Response.new("req-000001", true, result)
 
     output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
@@ -176,21 +176,21 @@ describe Obsctl::CLI::ClientCommands do
 
   it "formats present non-zero drop telemetry in daemon human status" do
     result = JSON.parse(<<-JSON)
-    {
-      "pid": 123,
-      "uptime_seconds": 9,
-      "socket_path": "/tmp/obsctl.sock",
-      "client_count": 2,
-      "dropped_reconnect_diagnostic_logs": 11,
-      "obs_connected": false,
-      "reconnecting": true,
-      "last_connected_at": "2026-06-20T12:00:00Z",
-      "last_disconnected_at": "2026-06-20T12:05:00Z",
-      "last_reconnect_attempt_at": "2026-06-20T12:06:00Z",
-      "last_connection_failed_at": "2026-06-20T12:07:00Z",
-      "last_error": "connection failed"
-    }
-    JSON
+      {
+        "pid": 123,
+        "uptime_seconds": 9,
+        "socket_path": "/tmp/obsctl.sock",
+        "client_count": 2,
+        "dropped_reconnect_diagnostic_logs": 11,
+        "obs_connected": false,
+        "reconnecting": true,
+        "last_connected_at": "2026-06-20T12:00:00Z",
+        "last_disconnected_at": "2026-06-20T12:05:00Z",
+        "last_reconnect_attempt_at": "2026-06-20T12:06:00Z",
+        "last_connection_failed_at": "2026-06-20T12:07:00Z",
+        "last_error": "connection failed"
+      }
+      JSON
     response = Obsctl::IPC::Response.new("req-000001", true, result)
 
     output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
@@ -202,19 +202,19 @@ describe Obsctl::CLI::ClientCommands do
 
   it "renders missing drop telemetry as unknown for older daemon status payloads" do
     result = JSON.parse(<<-JSON)
-    {
-      "pid": 123,
-      "uptime_seconds": 9,
-      "socket_path": "/tmp/obsctl.sock",
-      "client_count": 2,
-      "obs_connected": true,
-      "reconnecting": false,
-      "last_connected_at": "2026-06-20T12:00:00Z",
-      "last_disconnected_at": null,
-      "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
-      "last_error": null
-    }
-    JSON
+      {
+        "pid": 123,
+        "uptime_seconds": 9,
+        "socket_path": "/tmp/obsctl.sock",
+        "client_count": 2,
+        "obs_connected": true,
+        "reconnecting": false,
+        "last_connected_at": "2026-06-20T12:00:00Z",
+        "last_disconnected_at": null,
+        "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+        "last_error": null
+      }
+      JSON
     response = Obsctl::IPC::Response.new("req-000001", true, result)
 
     output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))
@@ -227,27 +227,27 @@ describe Obsctl::CLI::ClientCommands do
 
   it "renders missing drop telemetry as unknown for older combined status payloads" do
     result = JSON.parse(<<-JSON)
-    {
-      "server": {
-        "pid": 123,
-        "uptime_seconds": 9,
-        "socket_path": "/tmp/obsctl.sock",
-        "client_count": 2,
-        "obs_connected": true,
-        "reconnecting": false,
-        "last_connected_at": "2026-06-20T12:00:00Z",
-        "last_disconnected_at": null,
-        "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
-        "last_error": null
-      },
-      "obs": {
-        "connected": true,
-        "current_scene": "Main Camera",
-        "scenes": [],
-        "audio_inputs": []
+      {
+        "server": {
+          "pid": 123,
+          "uptime_seconds": 9,
+          "socket_path": "/tmp/obsctl.sock",
+          "client_count": 2,
+          "obs_connected": true,
+          "reconnecting": false,
+          "last_connected_at": "2026-06-20T12:00:00Z",
+          "last_disconnected_at": null,
+          "last_reconnect_attempt_at": "2026-06-20T11:59:59Z",
+          "last_error": null
+        },
+        "obs": {
+          "connected": true,
+          "current_scene": "Main Camera",
+          "scenes": [],
+          "audio_inputs": []
+        }
       }
-    }
-    JSON
+      JSON
     response = Obsctl::IPC::Response.new("req-000001", true, result)
 
     output = Obsctl::CLI::ClientCommands.new(FakeClientCommandsUnixClient.new(response))

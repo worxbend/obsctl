@@ -89,13 +89,13 @@ module Obsctl
         return action(ActionKind::Quit) if character == 'q' || (character == 'c' && control)
         return action(ActionKind::OpenPalette) if character == ':' || (character && model.command_palette_prefix.includes?(character))
 
-        return nil unless character
+        return unless character
         SIMPLE_KEYS[character]?.try { |kind| action(kind) }
       end
 
       # Control plus an arrow or hjkl moves focus between panes.
       private def pane_focus_key(key : CryTUI::KeyEvent) : Action?
-        return nil unless key.modifiers.control?
+        return unless key.modifiers.control?
 
         character = key.character
         return action(ActionKind::FocusPaneLeft) if key.code.left? || character == 'h'
@@ -113,7 +113,7 @@ module Obsctl
       end
 
       private def activation_key(model : Model, key : CryTUI::KeyEvent) : Action?
-        return nil unless key.code.enter?
+        return unless key.code.enter?
 
         return action(ActionKind::ActivateScene) if model.focus.scenes?
         return action(ActionKind::ActivateProfile) if model.focus.profiles?
@@ -122,7 +122,7 @@ module Obsctl
       end
 
       private def audio_key(model : Model, key : CryTUI::KeyEvent) : Action?
-        return nil unless model.focus.audio?
+        return unless model.focus.audio?
 
         character = key.character
         return action(ActionKind::ToggleMute) if character == 'm'

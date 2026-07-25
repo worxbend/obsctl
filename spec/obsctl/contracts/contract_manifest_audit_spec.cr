@@ -18,19 +18,19 @@ end
 
 private def write_audit_manifest(root : String, entries : String) : Nil
   File.write(File.join(root, "contract_manifest.yml"), <<-YAML)
-  version: 1
-  fixture_root: spec/fixtures/contracts
-  required_directories:
-    - cli/human/
-    - cli/json/
-    - ipc/
-  recognized_rust_roots:
-    - spec/fixtures/contracts/
-  behaviors:
-    current_daemon: Fixture represents the current daemon and CLI contract.
-  fixtures:
-  #{entries}
-  YAML
+    version: 1
+    fixture_root: spec/fixtures/contracts
+    required_directories:
+      - cli/human/
+      - cli/json/
+      - ipc/
+    recognized_rust_roots:
+      - spec/fixtures/contracts/
+    behaviors:
+      current_daemon: Fixture represents the current daemon and CLI contract.
+    fixtures:
+    #{entries}
+    YAML
 end
 
 private def audit_entry(path : String, category : String? = nil, behavior : String = "current_daemon", telemetry : Bool = false) : String
@@ -40,7 +40,7 @@ private def audit_entry(path : String, category : String? = nil, behavior : Stri
       purpose: Test fixture.
       behavior: #{behavior}
       contains_dropped_reconnect_diagnostic_logs: #{telemetry}
-  ENTRY
+    ENTRY
 end
 
 describe Obsctl::SpecSupport::ContractManifestAudit do

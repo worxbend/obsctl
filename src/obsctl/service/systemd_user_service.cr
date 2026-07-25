@@ -18,20 +18,20 @@ module Obsctl
       # Renders the complete service unit file.
       def render : String
         <<-SERVICE
-        [Unit]
-        Description=obsctl OBS WebSocket control daemon
-        After=network.target graphical-session.target
-        StartLimitIntervalSec=0
+          [Unit]
+          Description=obsctl OBS WebSocket control daemon
+          After=network.target graphical-session.target
+          StartLimitIntervalSec=0
 
-        [Service]
-        Type=simple
-        ExecStart=#{escaped_executable_path} server --headless
-        Restart=on-failure
-        RestartSec=10
+          [Service]
+          Type=simple
+          ExecStart=#{escaped_executable_path} server --headless
+          Restart=on-failure
+          RestartSec=10
 
-        [Install]
-        WantedBy=graphical-session.target
-        SERVICE
+          [Install]
+          WantedBy=graphical-session.target
+          SERVICE
       end
 
       private def self.home(env) : String

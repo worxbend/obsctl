@@ -25,7 +25,7 @@ module Obsctl
       def next_event : IPC::Event?
         loop do
           message = @session.read_message
-          return nil unless message
+          return unless message
           if event = message.as?(IPC::Event)
             return event
           end
