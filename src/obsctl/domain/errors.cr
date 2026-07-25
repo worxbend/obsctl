@@ -43,8 +43,12 @@ module Obsctl
 
     # Raised when obs-websocket authentication fails.
     class AuthenticationFailed < ObsctlError
-      def initialize(message = "OBS authentication failed")
-        super(message, ExitCode::Connection)
+      DEFAULT_MESSAGE = "OBS authentication failed"
+
+      # Accepts a nilable message because most call sites forward
+      # `some_exception.message`, which is `String?`.
+      def initialize(message : String? = nil)
+        super(message || DEFAULT_MESSAGE, ExitCode::Connection)
       end
     end
 
@@ -64,15 +68,19 @@ module Obsctl
 
     # Raised when the local server is alive but OBS is currently disconnected.
     class ObsUnavailable < ObsctlError
-      def initialize(message = "OBS is unavailable")
-        super(message, ExitCode::Connection)
+      DEFAULT_MESSAGE = "OBS is unavailable"
+
+      def initialize(message : String? = nil)
+        super(message || DEFAULT_MESSAGE, ExitCode::Connection)
       end
     end
 
     # Raised when a thin client cannot reach the local obsctl server.
     class ServerUnavailable < ObsctlError
-      def initialize(message = "obsctl server is not running")
-        super(message, ExitCode::Connection)
+      DEFAULT_MESSAGE = "obsctl server is not running"
+
+      def initialize(message : String? = nil)
+        super(message || DEFAULT_MESSAGE, ExitCode::Connection)
       end
     end
 
