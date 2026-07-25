@@ -1,77 +1,114 @@
 require "yaml"
 require "../domain/errors"
+require "./config_value"
 
 module Obsctl
   module Config
     # Reconnect policy loaded from the top-level `reconnect` config section.
-    record ReconnectConfig,
-      enabled : Bool = true,
-      endless : Bool = true,
-      initial_delay_ms : Int32 = 500,
-      max_delay_ms : Int32 = 10_000,
-      multiplier : Float64 = 1.8,
-      jitter_ms : Int32 = 250
+    struct ReconnectConfig
+      config_value(
+        enabled : Bool = true,
+        endless : Bool = true,
+        initial_delay_ms : Int32 = 500,
+        max_delay_ms : Int32 = 10_000,
+        multiplier : Float64 = 1.8,
+        jitter_ms : Int32 = 250,
+      )
+    end
 
     # Local daemon options that affect server IPC and lifecycle behavior.
-    record ServerConfig,
-      socket_path : String? = nil,
-      pid_file : String? = nil,
-      allow_remote_shutdown : Bool = false,
-      start_embedded_if_missing : Bool = true
+    struct ServerConfig
+      config_value(
+        socket_path : String? = nil,
+        pid_file : String? = nil,
+        allow_remote_shutdown : Bool = false,
+        start_embedded_if_missing : Bool = true,
+      )
+    end
 
     # obs-websocket connection settings read only by server or embedded clients.
-    record ConnectionConfig,
-      host : String = "127.0.0.1",
-      port : Int32 = 4455,
-      password_env : String? = "OBS_WEBSOCKET_PASSWORD",
-      password : String? = nil,
-      connect_timeout_ms : Int32 = 3000,
-      request_timeout_ms : Int32 = 2500,
-      reconnect : ReconnectConfig? = nil
+    struct ConnectionConfig
+      DEFAULT_PASSWORD_ENV = "OBS_WEBSOCKET_PASSWORD"
+
+      config_value(
+        host : String = "127.0.0.1",
+        port : Int32 = 4455,
+        # Three states, not two: absent means "use the conventional variable",
+        # while a present-but-empty value means "there is no env password".
+        password_env : String? = DEFAULT_PASSWORD_ENV,
+        password : String? = nil,
+        connect_timeout_ms : Int32 = 3000,
+        request_timeout_ms : Int32 = 2500,
+        # Legacy home of the reconnect policy, promoted by `Config`.
+        reconnect : ReconnectConfig? = nil,
+      )
+
+      def after_initialize : Nil
+        # `password_env:` with no value parses as nil; the config model spells
+        # that "no environment password" as the empty string.
+        @password_env = "" if @password_env.nil?
+      end
+    end
 
     # User configuration for one OBS scene and its local aliases.
-    record SceneConfig,
-      name : String,
-      alias : String? = nil,
-      shortcut : String? = nil,
-      group : String? = nil,
-      stale : Bool = false,
-      hidden : Bool = false
+    struct SceneConfig
+      config_value(
+        name : String,
+        alias : String? = nil,
+        shortcut : String? = nil,
+        group : String? = nil,
+        stale : Bool = false,
+        hidden : Bool = false,
+      )
+    end
 
     # User configuration for one OBS audio input and its local aliases.
-    record AudioInputConfig,
-      name : String,
-      alias : String? = nil,
-      shortcut : String? = nil,
-      kind : String = "input",
-      stale : Bool = false
+    struct AudioInputConfig
+      config_value(
+        name : String,
+        alias : String? = nil,
+        shortcut : String? = nil,
+        kind : String = "input",
+        stale : Bool = false,
+      )
+    end
 
     # Collection of configured OBS audio inputs.
-    record AudioConfig, inputs : Array(AudioInputConfig) = [] of AudioInputConfig
+    struct AudioConfig
+      config_value(inputs : Array(AudioInputConfig) = [] of AudioInputConfig)
+    end
 
-    record CustomThemeConfig,
-      bg : String? = nil,
-      accent : String? = nil,
-      accent_alt : String? = nil,
-      fg : String? = nil,
-      muted : String? = nil,
-      border : String? = nil,
-      border_focus : String? = nil,
-      success : String? = nil,
-      warning : String? = nil,
-      danger : String? = nil,
-      info : String? = nil,
-      highlight_bg : String? = nil,
-      highlight_fg : String? = nil
+    # Optional overrides for any subset of the semantic color palette.
+    struct CustomThemeConfig
+      config_value(
+        bg : String? = nil,
+        accent : String? = nil,
+        accent_alt : String? = nil,
+        fg : String? = nil,
+        muted : String? = nil,
+        border : String? = nil,
+        border_focus : String? = nil,
+        success : String? = nil,
+        warning : String? = nil,
+        danger : String? = nil,
+        info : String? = nil,
+        highlight_bg : String? = nil,
+        highlight_fg : String? = nil,
+      )
+    end
 
-    record UiConfig,
-      refresh_interval_ms : Int32 = 250,
-      command_palette_prefix : String = "/",
-      advanced_ui : Bool = true,
-      show_icons : Bool = true,
-      theme : String = "default",
-      custom_theme : CustomThemeConfig? = nil,
-      locale : String? = nil
+    # Dashboard appearance and behavior.
+    struct UiConfig
+      config_value(
+        refresh_interval_ms : Int32 = 250,
+        command_palette_prefix : String = "/",
+        advanced_ui : Bool = true,
+        show_icons : Bool = true,
+        theme : String = "default",
+        custom_theme : CustomThemeConfig? = nil,
+        locale : String? = nil,
+      )
+    end
 
     # Parsed obsctl configuration with canonical top-level server and reconnect sections.
     class Config
@@ -84,6 +121,23 @@ module Obsctl
         "audio",
         "ui",
       }
+
+      # The document exactly as it appears on disk.
+      #
+      # Kept separate from `Config` because the two differ in one place: on
+      # disk `reconnect` may be absent, at which point the legacy
+      # `connection.reconnect` supplies it, whereas `Config` always has one.
+      private struct Document
+        include YAML::Serializable
+
+        getter version : Int32 = 1
+        getter server : ServerConfig = ServerConfig.new
+        getter connection : ConnectionConfig = ConnectionConfig.new
+        getter reconnect : ReconnectConfig? = nil
+        getter scenes : Array(SceneConfig) = [] of SceneConfig
+        getter audio : AudioConfig = AudioConfig.new
+        getter ui : UiConfig = UiConfig.new
+      end
 
       property version : Int32
       property server : ServerConfig
@@ -117,28 +171,56 @@ module Obsctl
       # Parses YAML into the typed config model and rejects unsupported top-level
       # keys so writes cannot silently discard user data.
       def self.from_yaml(yaml : String) : self
-        any = YAML.parse(yaml)
-        root = any.as_h
-        reject_unknown_top_level_keys!(root)
-        server = parse_server(root["server"]?)
-        connection = parse_connection(root["connection"]?, include_legacy_reconnect: false)
-        reconnect = parse_reconnect(root["reconnect"]?, root["connection"]?)
-        scenes = parse_scenes(root["scenes"]?)
-        audio = parse_audio(root["audio"]?)
-        ui = parse_ui(root["ui"]?)
+        reject_unknown_top_level_keys!(yaml)
+
+        document = Document.from_yaml(yaml)
         new(
-          version: root["version"]?.try(&.as_i).try(&.to_i32) || 1,
-          server: server,
-          connection: connection,
-          reconnect: reconnect,
-          scenes: scenes,
-          audio: audio,
-          ui: ui,
+          version: document.version,
+          server: document.server,
+          # A top-level `reconnect` outranks the legacy nested one, so the
+          # nested copy is dropped before `initialize` can promote it.
+          connection: document.reconnect ? without_legacy_reconnect(document.connection) : document.connection,
+          reconnect: document.reconnect || ReconnectConfig.new,
+          scenes: document.scenes,
+          audio: document.audio,
+          ui: document.ui,
         )
+      rescue ex : YAML::ParseException
+        raise Domain::ConfigInvalid.new("invalid YAML: #{ex.message}")
+      end
+
+      private def self.without_legacy_reconnect(connection : ConnectionConfig) : ConnectionConfig
+        ConnectionConfig.new(
+          host: connection.host,
+          port: connection.port,
+          password_env: connection.password_env,
+          password: connection.password,
+          connect_timeout_ms: connection.connect_timeout_ms,
+          request_timeout_ms: connection.request_timeout_ms,
+          reconnect: nil,
+        )
+      end
+
+      private def self.reject_unknown_top_level_keys!(yaml : String) : Nil
+        root = YAML.parse(yaml).as_h?
+        return unless root
+
+        root.each_key do |key|
+          field = key.as_s?
+          unless field && ALLOWED_TOP_LEVEL_KEYS.includes?(field)
+            raise Domain::ConfigInvalid.new("unsupported top-level config field: #{key}")
+          end
+        end
       end
 
       # Writes the config in the canonical schema, including top-level
       # `server` and `reconnect` sections.
+      #
+      # Written by hand rather than derived from the field declarations because
+      # this is the on-disk format `obsctl config migrate` converges a file
+      # towards: key order is fixed, `socket_path` and `pid_file` are emitted
+      # even when empty so the keys are discoverable, and flags that are off
+      # are left out. Those are format decisions, not serializer defaults.
       def to_yaml(io : IO) : Nil
         YAML.build(io) do |yaml|
           yaml.mapping do
@@ -253,166 +335,6 @@ module Obsctl
           yaml.scalar value
         else
           yaml.scalar nil
-        end
-      end
-
-      private def self.parse_connection(value : YAML::Any?, include_legacy_reconnect : Bool = true) : ConnectionConfig
-        hash = value.try(&.as_h?) || {} of YAML::Any => YAML::Any
-        ConnectionConfig.new(
-          host: string(hash, "host", "127.0.0.1"),
-          port: int(hash, "port", 4455),
-          password_env: password_env(hash),
-          password: string_or_nil(hash, "password"),
-          connect_timeout_ms: int(hash, "connect_timeout_ms", 3000),
-          request_timeout_ms: int(hash, "request_timeout_ms", 2500),
-          reconnect: include_legacy_reconnect ? reconnect_from_connection(hash) : nil
-        )
-      end
-
-      private def self.parse_server(value : YAML::Any?) : ServerConfig
-        hash = value.try(&.as_h?) || {} of YAML::Any => YAML::Any
-        ServerConfig.new(
-          socket_path: string_or_nil(hash, "socket_path"),
-          pid_file: string_or_nil(hash, "pid_file"),
-          allow_remote_shutdown: bool(hash, "allow_remote_shutdown", false),
-          start_embedded_if_missing: bool(hash, "start_embedded_if_missing", true)
-        )
-      end
-
-      private def self.parse_reconnect(value : YAML::Any?, connection : YAML::Any?) : ReconnectConfig
-        hash = value.try(&.as_h?)
-        hash ||= connection.try(&.as_h?).try { |connection_hash| connection_hash["reconnect"]?.try(&.as_h?) }
-        hash ||= {} of YAML::Any => YAML::Any
-        ReconnectConfig.new(
-          enabled: bool(hash, "enabled", true),
-          endless: bool(hash, "endless", true),
-          initial_delay_ms: int(hash, "initial_delay_ms", 500),
-          max_delay_ms: int(hash, "max_delay_ms", 10_000),
-          multiplier: float(hash, "multiplier", 1.8),
-          jitter_ms: int(hash, "jitter_ms", 250)
-        )
-      end
-
-      private def self.reconnect_from_connection(hash : Hash(YAML::Any, YAML::Any)) : ReconnectConfig?
-        reconnect_hash = hash["reconnect"]?.try(&.as_h?)
-        return nil unless reconnect_hash
-
-        ReconnectConfig.new(
-          enabled: bool(reconnect_hash, "enabled", true),
-          endless: bool(reconnect_hash, "endless", true),
-          initial_delay_ms: int(reconnect_hash, "initial_delay_ms", 500),
-          max_delay_ms: int(reconnect_hash, "max_delay_ms", 10_000),
-          multiplier: float(reconnect_hash, "multiplier", 1.8),
-          jitter_ms: int(reconnect_hash, "jitter_ms", 250)
-        )
-      end
-
-      private def self.parse_scenes(value : YAML::Any?) : Array(SceneConfig)
-        array(value).map do |item|
-          hash = item.as_h
-          SceneConfig.new(
-            name: required_string(hash, "name"),
-            alias: string_or_nil(hash, "alias"),
-            shortcut: string_or_nil(hash, "shortcut"),
-            group: string_or_nil(hash, "group"),
-            stale: bool(hash, "stale", false),
-            hidden: bool(hash, "hidden", false)
-          )
-        end
-      end
-
-      private def self.parse_audio(value : YAML::Any?) : AudioConfig
-        hash = value.try(&.as_h?) || {} of YAML::Any => YAML::Any
-        inputs = array(hash["inputs"]?).map do |item|
-          input = item.as_h
-          AudioInputConfig.new(
-            name: required_string(input, "name"),
-            alias: string_or_nil(input, "alias"),
-            shortcut: string_or_nil(input, "shortcut"),
-            kind: string(input, "kind", "input"),
-            stale: bool(input, "stale", false)
-          )
-        end
-        AudioConfig.new(inputs)
-      end
-
-      private def self.parse_ui(value : YAML::Any?) : UiConfig
-        hash = value.try(&.as_h?) || {} of YAML::Any => YAML::Any
-        UiConfig.new(
-          refresh_interval_ms: int(hash, "refresh_interval_ms", 250),
-          command_palette_prefix: string(hash, "command_palette_prefix", "/"),
-          advanced_ui: bool(hash, "advanced_ui", true),
-          show_icons: bool(hash, "show_icons", true),
-          theme: string(hash, "theme", "default"),
-          custom_theme: parse_custom_theme(hash["custom_theme"]?),
-          locale: string_or_nil(hash, "locale")
-        )
-      end
-
-      private def self.parse_custom_theme(value : YAML::Any?) : CustomThemeConfig?
-        return nil unless value
-        hash = value.as_h
-        CustomThemeConfig.new(
-          bg: string_or_nil(hash, "bg"), accent: string_or_nil(hash, "accent"),
-          accent_alt: string_or_nil(hash, "accent_alt"), fg: string_or_nil(hash, "fg"),
-          muted: string_or_nil(hash, "muted"), border: string_or_nil(hash, "border"),
-          border_focus: string_or_nil(hash, "border_focus"), success: string_or_nil(hash, "success"),
-          warning: string_or_nil(hash, "warning"), danger: string_or_nil(hash, "danger"),
-          info: string_or_nil(hash, "info"), highlight_bg: string_or_nil(hash, "highlight_bg"),
-          highlight_fg: string_or_nil(hash, "highlight_fg")
-        )
-      end
-
-      private def self.array(value : YAML::Any?) : Array(YAML::Any)
-        value.try(&.as_a?) || [] of YAML::Any
-      end
-
-      private def self.string(hash, key, fallback)
-        string_or_nil(hash, key) || fallback
-      end
-
-      private def self.required_string(hash, key)
-        string_or_nil(hash, key) || raise Domain::ConfigInvalid.new("missing required config field: #{key}")
-      end
-
-      private def self.string_or_nil(hash, key)
-        value = hash[YAML::Any.new(key)]?
-        return nil unless value
-
-        value.as_s? || value.as_i?.try(&.to_s)
-      end
-
-      private def self.int(hash, key, fallback)
-        hash[YAML::Any.new(key)]?.try(&.as_i).try(&.to_i32) || fallback
-      end
-
-      private def self.float(hash, key, fallback)
-        value = hash[YAML::Any.new(key)]?
-        return fallback unless value
-        value.as_f? || value.as_i?.try(&.to_f64) || fallback
-      end
-
-      private def self.bool(hash, key, fallback)
-        value = hash[YAML::Any.new(key)]?
-        return fallback unless value
-
-        parsed = value.as_bool?
-        parsed.nil? ? fallback : parsed
-      end
-
-      private def self.password_env(hash) : String?
-        key = YAML::Any.new("password_env")
-        return "OBS_WEBSOCKET_PASSWORD" unless hash.has_key?(key)
-
-        string_or_nil(hash, "password_env") || ""
-      end
-
-      private def self.reject_unknown_top_level_keys!(root : Hash(YAML::Any, YAML::Any)) : Nil
-        root.each_key do |key|
-          field = key.as_s?
-          unless field && ALLOWED_TOP_LEVEL_KEYS.includes?(field)
-            raise Domain::ConfigInvalid.new("unsupported top-level config field: #{key}")
-          end
         end
       end
     end

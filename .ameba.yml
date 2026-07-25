@@ -18,9 +18,15 @@ Lint/NotNil:
 # Specs pre-declare `x = nil.as(T?)` before a begin/ensure block so the
 # variable is in scope for cleanup. Ameba reads the declaration as useless,
 # but removing it breaks the ensure block.
+#
+# config.cr declares its value types through the `config_value` macro, whose
+# arguments are type declarations with defaults (`show_icons : Bool = true`).
+# Ameba reads the call site rather than the expansion, so every field looks
+# like an assignment to an unused local.
 Lint/UselessAssign:
   Excluded:
     - spec/**/*.cr
+    - src/obsctl/config/config.cr
 
 # Enforced as a ratchet, not at ameba's default of 10.
 #

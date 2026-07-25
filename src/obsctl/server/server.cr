@@ -38,6 +38,8 @@ module Obsctl
           log_broadcast: log_broadcast
         )
         @ipc = IPC::UnixServer.new(@socket_path)
+        @stopped = false
+        @stop_lock = Mutex.new
       end
 
       getter socket_path
@@ -45,6 +47,7 @@ module Obsctl
       # Starts the OBS supervisor and blocks in the Unix socket accept loop.
       def run : Int32
         log("info", "server_start", "obsctl server starting socket=#{@socket_path}")
+        trap_signals
         @supervisor.start
         @ipc.listen(->handle_session(IPC::ClientSession))
         0
@@ -53,10 +56,34 @@ module Obsctl
       end
 
       # Stops OBS supervision, closes IPC listeners, and removes the socket.
+      #
+      # Idempotent: a signal and the `run` ensure block both reach here, and the
+      # accept loop unwinds through `ensure` once the listener closes.
       def stop : Nil
+        @stop_lock.synchronize do
+          return if @stopped
+          @stopped = true
+        end
+
         @supervisor.stop
         @ipc.close
         log("info", "server_stop", "obsctl server stopped socket=#{@socket_path}")
+      end
+
+      # Converts termination signals into an orderly shutdown.
+      #
+      # Without this the default disposition kills the process outright: the
+      # `run` ensure block never executes, so the OBS WebSocket is dropped
+      # without a close frame and the socket file is left on disk for the next
+      # start to clean up. `systemctl --user stop` takes exactly this path.
+      private def trap_signals : Nil
+        {Signal::TERM, Signal::INT}.each do |signal|
+          signal.trap do
+            log("info", "server_signal", "received #{signal}, shutting down")
+            stop
+            exit 0
+          end
+        end
       end
 
       private def broadcast_log(entry : JSON::Any) : Nil

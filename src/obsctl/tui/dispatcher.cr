@@ -143,11 +143,11 @@ module Obsctl
       private def dispatch_palette(input : String) : ActionOutcome
         normalized = input.strip.downcase
         return ActionOutcome.new(quit: true) if normalized == "/quit" || normalized == "/exit"
-        if {"/themes", "/theme", "/settings"}.includes?(normalized)
+        if SETTINGS_ALIASES.includes?(normalized)
           return handle(Action.new(ActionKind::OpenSettings))
         end
         if normalized == "/help"
-          return ActionOutcome.new(message: "Commands: /scene /profile /collection /mute /unmute /toggle-mute /vol /stream /rec [start|stop|toggle|pause|resume|status] /status /obs-status /server-status /reload-config /dump-config /validate-config /themes /reconnect /quit")
+          return ActionOutcome.new(message: palette_help)
         end
         parsed = Domain::CommandParser.new.parse(input)
         command(payload_for(parsed))
@@ -155,46 +155,36 @@ module Obsctl
         ActionOutcome.new(message: "error: #{ex.message}")
       end
 
-      # Commands carrying no argument, mapped to their IPC name.
-      NULLARY_PAYLOADS = {
-        Domain::StatusCommand         => "get_snapshot",
-        Domain::ObsStatusCommand      => "get_obs_status",
-        Domain::ServerStatusCommand   => "get_server_status",
-        Domain::ValidateConfigCommand => "validate_config",
-        Domain::ReconnectCommand      => "reconnect_obs",
-        Domain::ConnectCommand        => "reconnect_obs",
-        Domain::ShutdownServerCommand => "shutdown_server",
-        Domain::DumpConfigCommand     => "dump_config",
-        Domain::ReloadConfigCommand   => "reload_config",
-        Domain::ToggleStreamCommand   => "toggle_stream",
-        Domain::ToggleRecordCommand   => "toggle_record",
-        Domain::StartRecordCommand    => "start_record",
-        Domain::StopRecordCommand     => "stop_record",
-        Domain::PauseRecordCommand    => "pause_record",
-        Domain::ResumeRecordCommand   => "resume_record",
-        Domain::RecordStatusCommand   => "record_status",
-      }
+      # `/themes` is a dashboard-only view, so it has no registry entry and is
+      # appended to the generated list.
+      SETTINGS_ALIASES = ["/themes", "/theme", "/settings"]
 
-      # Commands carrying a single target, mapped to their IPC name.
-      TARGET_PAYLOADS = {
-        Domain::SetSceneCommand           => "set_scene",
-        Domain::SetProfileCommand         => "set_profile",
-        Domain::SetSceneCollectionCommand => "set_scene_collection",
-        Domain::MuteCommand               => "mute",
-        Domain::UnmuteCommand             => "unmute",
-        Domain::ToggleMuteCommand         => "toggle_mute",
+      private def palette_help : String
+        usages = Domain::CommandRegistry
+          .for_surface(Domain::CommandSurface::Palette)
+          .map { |spec| "/#{spec.usage}" }
+        "Commands: #{(usages << SETTINGS_ALIASES.first).join(' ')}"
+      end
+
+      # Where the dashboard deliberately asks for something other than the
+      # command's default IPC name.
+      #
+      # `/status` in the palette should refresh the panels rather than print a
+      # report, and `/connect` is a request to re-establish the OBS link.
+      TUI_PAYLOAD_OVERRIDES = {
+        Domain::StatusCommand  => "get_snapshot",
+        Domain::ConnectCommand => "reconnect_obs",
       }
 
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
-        {% for type, name in NULLARY_PAYLOADS %}
+        {% for type, name in TUI_PAYLOAD_OVERRIDES %}
           return IPC::CommandPayload.new({{name}}) if command.is_a?({{type}})
         {% end %}
-        {% for type, name in TARGET_PAYLOADS %}
-          return IPC::CommandPayload.new({{name}}, command.target) if command.is_a?({{type}})
-        {% end %}
-        return IPC::CommandPayload.new("set_volume", command.target, command.percent) if command.is_a?(Domain::VolumeCommand)
 
-        raise Domain::CommandParseError.new("unsupported TUI command")
+        name = command.ipc_name
+        raise Domain::CommandParseError.new("unsupported TUI command") unless name
+
+        IPC::CommandPayload.new(name, command.target, command.percent)
       end
 
       private def command(payload : IPC::CommandPayload) : ActionOutcome

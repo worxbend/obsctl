@@ -71,8 +71,9 @@ module Obsctl
             # output faithful to what the user asked for.
             next unless @topics.includes?(event.topic)
 
-            @stdout.puts(line_for(event))
-            @stdout.flush
+            # A closed reader (`obsctl watch | head`) is a normal end of stream
+            # for a streaming command, not a failure worth reporting.
+            break unless write_line(line_for(event))
             emitted += 1
 
             if limit = @limit
@@ -84,6 +85,23 @@ module Obsctl
         end
 
         Domain::ExitCode::Success.value
+      end
+
+      # Writes one line, reporting false when the reader has gone away.
+      private def write_line(line : String) : Bool
+        @stdout.puts(line)
+        @stdout.flush
+        true
+      rescue ex : IO::Error
+        raise ex unless broken_pipe?(ex)
+        false
+      end
+
+      # Crystal surfaces EPIPE as a plain `IO::Error` whose OS error carries
+      # the cause, so the errno is the only reliable discriminator.
+      private def broken_pipe?(error : IO::Error) : Bool
+        os_error = error.os_error
+        os_error == Errno::EPIPE
       end
 
       # One flat object per event; `data` is null when the event carries none.

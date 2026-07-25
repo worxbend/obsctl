@@ -579,7 +579,8 @@ describe Obsctl::CLI::Main do
       envelope = parse_single_json(stdout)
       envelope["ok"].as_bool.should be_false
       envelope["error"]["code"].as_s.should eq(Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR)
-      envelope["error"]["message"].as_s.should contain("missing argument")
+      envelope["error"]["message"].as_s.should contain("wrong argument count for scene")
+      envelope["error"]["message"].as_s.should contain("usage: scene <scene>")
       envelope["exit_code"].as_i.should eq(exit_code)
     end
   end
