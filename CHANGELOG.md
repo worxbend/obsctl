@@ -56,6 +56,13 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Changed
 
+- CI lints on the Crystal floor leg only, and the `latest` leg installs with
+  `--production`. Ameba analyses source rather than the compiler, so running it
+  twice over the same tree added nothing, while its released version (1.6.4)
+  does not build on current Crystal — `shards install` failed in postinstall,
+  which skipped the build and spec steps and reported a red build for code that
+  was fine. The `latest` leg now answers what it exists to answer: does obsctl
+  compile and pass its specs on the newest compiler.
 - The command set is declared once, in `Domain::CommandRegistry`. The parser,
   the `--json` allowlist, palette completion, `--help`, the palette help text,
   and the generated shell completions all read that declaration. It previously
