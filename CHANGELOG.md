@@ -101,11 +101,13 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Fixed
 
-- Scene and audio-input names containing a quote, a tab, or a backslash reach
-  the daemon intact. The CLI used to rebuild its already-split arguments into a
+- Scene and audio-input names containing a quote or a backslash reach the
+  daemon intact. The CLI used to rebuild its already-split arguments into a
   quoted line and re-parse it, which rejected `obsctl scene 'quo"te'` outright
   and silently rewrote `a\ b` to `a b`. Arguments now go straight from argv to
-  the parser.
+  the parser. Control characters, tabs included, are still refused — that is
+  deliberate — but a tab now reports `target must not contain control
+  characters` rather than the misleading `wrong argument count`.
 - `--json` works for every spelling of a JSON-capable command. `set-scene`,
   `set-profile`, and `set-collection` parsed fine but were rejected by the
   hand-maintained allowlist.
