@@ -48,7 +48,7 @@ The TUI accepts 29 built-in themes matching the Rust reference. Set `theme:
 custom` and add any subset of `custom_theme` colors (`bg`, `accent`,
 `accent_alt`, `fg`, `muted`, `border`, `border_focus`, `success`, `warning`,
 `danger`, `info`, `highlight_bg`, and `highlight_fg`) as six-digit RGB hex.
-Missing or invalid custom values fall back to the default Claude palette.
+Missing or invalid custom values fall back to the default Ember palette.
 
 The TUI supports `en` and `uk` for the localized header and connection
 surface, matching the Rust reference. Set `ui.locale`, or override it for one

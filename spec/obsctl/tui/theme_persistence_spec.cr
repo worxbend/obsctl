@@ -11,7 +11,7 @@ describe Obsctl::TUI::ThemePersistence do
         command_palette_prefix: ":",
         advanced_ui: false,
         show_icons: false,
-        theme: "claude",
+        theme: "ember",
         locale: "uk"
       )
     )

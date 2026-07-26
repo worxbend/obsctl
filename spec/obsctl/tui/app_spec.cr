@@ -90,7 +90,7 @@ describe Obsctl::TUI::App do
     settings = backend.buffer.lines.join("\n")
     settings.should contain("Settings // Appearance")
     settings.should contain("Themes // 29 palettes")
-    settings.should contain("Preview: Claude")
+    settings.should contain("Preview: Ember")
   end
 
   it "reflows the dashboard through repeated terminal shrink and expansion" do

@@ -33,8 +33,8 @@ module Obsctl
       info : CryTUI::Color,
       highlight_background : CryTUI::Color,
       highlight_foreground : CryTUI::Color do
-      CLAUDE           = palette("claude", "Claude", %w[1B1916 D97757 E8C59E ECE8E1 8A867D 4A4640 D97757 87B37B E0B44C E06C5F 7BA9C7 D97757 1B1916])
-      CODEX            = palette("codex", "Codex", %w[0A1412 37E0B0 8AB4FF E3E8E6 6B7674 2A3331 37E0B0 37E0B0 F2C94C F25F5F 8AB4FF 37E0B0 0A1412])
+      EMBER            = palette("ember", "Ember", %w[1B1916 D97757 E8C59E ECE8E1 8A867D 4A4640 D97757 87B37B E0B44C E06C5F 7BA9C7 D97757 1B1916])
+      SLATE            = palette("slate", "Slate", %w[0A1412 37E0B0 8AB4FF E3E8E6 6B7674 2A3331 37E0B0 37E0B0 F2C94C F25F5F 8AB4FF 37E0B0 0A1412])
       BTOP             = palette("btop", "Btop", %w[0A140A 6AE05A F0E050 D4E6D4 5A6A5A 304030 6AE05A 6AE05A F0E050 E05050 50C0E0 6AE05A 0A140A])
       NORD             = palette("nord", "Nord", %w[2E3440 88C0D0 81A1C1 E5E9F0 616E88 3B4252 88C0D0 A3BE8C EBCB8B BF616A 81A1C1 88C0D0 2E3440])
       DRACULA          = palette("dracula", "Dracula", %w[282A36 BD93F9 FF79C6 F8F8F2 6272A4 3A3D52 BD93F9 50FA7B F1FA8C FF5555 8BE9FD BD93F9 1E1F29])
@@ -63,15 +63,25 @@ module Obsctl
       ZENBURN          = palette("zenburn", "Zenburn", %w[3F3F3F DCA3A3 8CD0D3 DCDCCC 7F9F7F 5F5F5F DCA3A3 7F9F7F F0DFAF CC9393 8CD0D3 DCA3A3 3F3F3F])
       MONO             = new("mono", "Mono (TTY-safe)", CryTUI::Color::RESET, CryTUI::Color::WHITE, CryTUI::Color::GRAY, CryTUI::Color::WHITE, CryTUI::Color::DARK_GRAY, CryTUI::Color::DARK_GRAY, CryTUI::Color::WHITE, CryTUI::Color::GREEN, CryTUI::Color::YELLOW, CryTUI::Color::RED, CryTUI::Color::CYAN, CryTUI::Color::WHITE, CryTUI::Color::BLACK)
 
-      ALL = [CLAUDE, CODEX, BTOP, NORD, DRACULA, GRUVBOX, SOLARIZED_DARK, MONOKAI, ONE_DARK, TOKYO_NIGHT, CATPPUCCIN_MOCHA, ROSE_PINE, KANAGAWA_WAVE, EVERFOREST_DARK, AYU_MIRAGE, GITHUB_DARK, SOLARIZED_LIGHT, CATPPUCCIN_LATTE, GITHUB_LIGHT, ROSE_PINE_DAWN, NIGHT_OWL, MATERIAL_OCEAN, HORIZON, ICEBERG, MOONFLY, SYNTHWAVE_84, MATRIX, ZENBURN, MONO]
+      ALL = [EMBER, SLATE, BTOP, NORD, DRACULA, GRUVBOX, SOLARIZED_DARK, MONOKAI, ONE_DARK, TOKYO_NIGHT, CATPPUCCIN_MOCHA, ROSE_PINE, KANAGAWA_WAVE, EVERFOREST_DARK, AYU_MIRAGE, GITHUB_DARK, SOLARIZED_LIGHT, CATPPUCCIN_LATTE, GITHUB_LIGHT, ROSE_PINE_DAWN, NIGHT_OWL, MATERIAL_OCEAN, HORIZON, ICEBERG, MOONFLY, SYNTHWAVE_84, MATRIX, ZENBURN, MONO]
+
+      # Theme ids that were renamed, kept resolvable so an existing
+      # config.yml naming the old id still selects the same palette.
+      RENAMED_IDS = {
+        "claude" => "ember",
+        "codex"  => "slate",
+      }
 
       def self.default : Theme
-        CLAUDE
+        EMBER
       end
 
       def self.by_id(id : String) : Theme
-        return default if id.downcase == "default"
-        ALL.find { |theme| theme.id.downcase == id.downcase } || default
+        wanted = id.downcase
+        return default if wanted == "default"
+
+        wanted = RENAMED_IDS[wanted]? || wanted
+        ALL.find { |theme| theme.id == wanted } || default
       end
 
       def self.resolve(id : String, custom : CustomThemeSpec? = nil) : Theme

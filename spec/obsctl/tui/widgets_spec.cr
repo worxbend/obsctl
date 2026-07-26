@@ -230,7 +230,7 @@ end
 describe Obsctl::TUI::Theme do
   it "resolves built-in themes and parses custom hex colors safely" do
     Obsctl::TUI::Theme.by_id("Nord").should eq(Obsctl::TUI::Theme::NORD)
-    Obsctl::TUI::Theme.by_id("unknown").should eq(Obsctl::TUI::Theme::CLAUDE)
+    Obsctl::TUI::Theme.by_id("unknown").should eq(Obsctl::TUI::Theme::EMBER)
     Obsctl::TUI::Theme.parse_hex("#12abEF").should eq(CryTUI::Color.rgb(0x12, 0xAB, 0xEF))
     Obsctl::TUI::Theme.parse_hex("nope").should be_nil
   end

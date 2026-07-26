@@ -56,6 +56,9 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Changed
 
+- The `claude` and `codex` themes are renamed to `ember` and `slate`. `ember`
+  remains the default. Both old ids still resolve to the same palette, so an
+  existing `config.yml` keeps working and needs no edit.
 - CI lints on the Crystal floor leg only, and the `latest` leg installs with
   `--production`. Ameba analyses source rather than the compiler, so running it
   twice over the same tree added nothing, while its released version (1.6.4)
