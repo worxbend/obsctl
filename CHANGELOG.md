@@ -10,6 +10,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-26
+
 ### Added
 
 - `obsctl completions bash|zsh|fish` prints a shell completion script generated
@@ -28,7 +30,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 - `obsctl version`, `obsctl --version`, and `-V` report the binary version.
   Supports `--json`, which emits the standard envelope with a `version` field.
 - A CI workflow that runs formatting, lint, build, and specs on every push to
-  `master` and every pull request, against both Crystal 1.20.2 and latest.
+  `master` and every pull request, against both the declared Crystal floor and
+  the latest release.
 - `.ameba.yml`, making the lint configuration explicit. Every disabled rule and
   per-path exclusion carries a comment explaining why.
 - `make check` runs all four gates; `make format-check` runs the formatter in
@@ -90,9 +93,10 @@ development; the `Unreleased` section below becomes that version at tag time.
   Emitted YAML is byte-identical.
 - Release binaries are now statically linked against musl, so they no longer
   depend on the host's glibc version.
-- `make lint` fails with an explanatory message when `bin/ameba` is missing.
-  It previously printed a notice and exited successfully, which meant the lint
-  gate silently passed on any machine without ameba installed.
+- `make lint` builds `bin/ameba` from the pinned checkout when it is absent,
+  and fails loudly if the checkout itself is missing. It previously printed a
+  notice and exited successfully, so the lint gate silently passed on any
+  machine without ameba installed.
 - Version is `0.3.0`: `shard.yml` still read `0.1.0` when `v0.2.0` was tagged,
   and master has since reintroduced the full TUI.
 - `Metrics/CyclomaticComplexity` is enforced at 25 rather than disabled. The
@@ -168,6 +172,7 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/worxbend/obsctl/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/worxbend/obsctl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/worxbend/obsctl/releases/tag/v0.1.0
