@@ -41,7 +41,7 @@ daemon running as a user service.
 
 | | Capability | What it gives you |
 | --- | --- | --- |
-| 🎛️ | **Live terminal dashboard** | Scenes, audio, profiles, collections, output state, telemetry, logs, and a command palette in one responsive view. |
+| 🎛️ | **Live terminal dashboard** | Scenes, audio, profiles, collections, output state, telemetry, stream health, logs, and a command palette in one responsive view. |
 | ⚡ | **Fast interactions** | Optimistic UI updates, debounced volume changes, incremental rendering, and safe terminal resize reflow. |
 | 🧠 | **One OBS connection** | A local daemon owns the WebSocket, eliminating competing CLI/TUI connections and centralizing reconnect behavior. |
 | 🤖 | **Automation-ready CLI** | Stable commands, JSON envelopes, canonical error codes, and meaningful exit statuses for scripts and CI. |
@@ -124,6 +124,28 @@ obsctl dump-config
 The TUI is a thin local client: it subscribes to daemon state, OBS events, and
 logs, then renders them through CryTUI. It does **not** open another OBS
 WebSocket connection.
+
+### Stream health
+
+While the stream is live, a **Stats** pane opens beside the logs with the
+numbers that tell you whether viewers are seeing a clean feed:
+
+```text
+├ 📡  Logs // Event Stream  02   live daemon feed ─┬ 📊  Stats  352   dropped frames ──────────────┤
+│ ● 21:14:02 INFO  obs_connected  connected to OBS │ ⚡ 59.94 fps  █████▇██  ⏱ 1.42 ms             │
+│ ▲ 21:14:09 WARN  obs_event  scene switched -> 'M │ ▸ RENDER missed     12 / 128,400   0.01%      │
+│                                                  │ ▸ OUTPUT skipped   340 / 128,000   0.27%      │
+│                                                  │ ◆ HEALTH         nominal  · budget 9%         │
+```
+
+Active FPS is graphed against the best rate seen this session, so a 30 fps
+profile reads as healthy at 30. Average frame render time is colored by how
+much of a single frame's budget it consumes. Frames missed to rendering lag and
+skipped to encoding lag each carry their drop ratio, scored the way the OBS
+stats dock scores them — under 1% is nominal, 5% or more is critical — and the
+verdict line reports the worst of the three signals. On a narrow terminal the
+rows abbreviate, and below 80 columns the pane yields its space back to the
+logs.
 
 ### Keyboard map
 

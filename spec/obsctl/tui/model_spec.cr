@@ -12,9 +12,9 @@ private def tui_snapshot
   )
 end
 
-private def telemetry_snapshot(cpu : Float64, bitrate : Float64)
+private def telemetry_snapshot(cpu : Float64, bitrate : Float64, fps : Float64 = 60.0)
   tui_snapshot.copy_with(
-    stats: Obsctl::OBS::State::ObsStats.new(cpu_usage_percent: cpu),
+    stats: Obsctl::OBS::State::ObsStats.new(cpu_usage_percent: cpu, active_fps: fps),
     stream_bitrate_kbps: bitrate
   )
 end
@@ -80,15 +80,17 @@ describe Obsctl::TUI::Model do
     model.logs.first.message.should eq("line 10")
   end
 
-  it "caps rolling CPU and bitrate telemetry at 32 samples" do
+  it "caps rolling CPU, bitrate, and FPS telemetry at 32 samples" do
     model = Obsctl::TUI::Model.new
     40.times do |sample|
-      model.snapshot = telemetry_snapshot(sample.to_f64, sample.to_f64 * 100)
+      model.snapshot = telemetry_snapshot(sample.to_f64, sample.to_f64 * 100, fps: 60.0 - sample)
       model.record_metric_sample
     end
     model.cpu_history.size.should eq(32)
     model.cpu_history.first.should eq(8.0)
     model.bitrate_history.last.should eq(3900.0)
+    model.fps_history.size.should eq(32)
+    model.fps_history.last.should eq(21.0)
   end
 
   it "reveals command results by Unicode grapheme" do

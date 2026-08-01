@@ -109,6 +109,7 @@ module Obsctl
       property meter_levels : Hash(String, Float64)
       property cpu_history : Array(Float64)
       property bitrate_history : Array(Float64)
+      property fps_history : Array(Float64)
       property anim : AnimClock
       property scene_flash : Tuple(String, UInt64)?
       property view : View
@@ -135,6 +136,7 @@ module Obsctl
         @meter_levels = {} of String => Float64
         @cpu_history = [] of Float64
         @bitrate_history = [] of Float64
+        @fps_history = [] of Float64
         @anim = AnimClock.new
         @scene_flash = nil
         @view = View::Main
@@ -209,11 +211,12 @@ module Obsctl
       def record_metric_sample
         if current_stats = stats
           @cpu_history << current_stats.cpu_usage_percent
+          @fps_history << current_stats.active_fps
         end
         if bitrate = stream_bitrate_kbps
           @bitrate_history << bitrate
         end
-        [@cpu_history, @bitrate_history].each do |history|
+        [@cpu_history, @bitrate_history, @fps_history].each do |history|
           history.shift(history.size - 32) if history.size > 32
         end
       end

@@ -5,6 +5,7 @@ require "../../../src/obsctl/tui/widgets/audio"
 require "../../../src/obsctl/tui/widgets/connection"
 require "../../../src/obsctl/tui/widgets/live_bar"
 require "../../../src/obsctl/tui/widgets/command_palette"
+require "../../../src/obsctl/tui/widgets/stats"
 require "../../../src/obsctl/tui/widgets/dashboard"
 require "../../../src/obsctl/tui/widgets/settings"
 require "../../../src/obsctl/tui/widgets/splash"
@@ -35,6 +36,48 @@ end
 
 private def rendered_text(buffer : CryTUI::Buffer)
   buffer.lines.join("\n")
+end
+
+private def streaming_model
+  model = widget_model
+  model.snapshot = model.snapshot.not_nil!.copy_with(
+    output: Obsctl::OBS::State::OutputState.new(streaming: true, recording: false),
+    stats: Obsctl::OBS::State::ObsStats.new(
+      cpu_usage_percent: 3.2,
+      memory_usage_mb: 742.0,
+      active_fps: 59.94,
+      average_frame_render_time_ms: 1.42,
+      render_skipped_frames: 12_i64,
+      render_total_frames: 128_400_i64,
+      output_skipped_frames: 340_i64,
+      output_total_frames: 128_000_i64
+    ),
+    stream_bitrate_kbps: 5_842.0,
+    stream_duration_ms: 1_845_000_i64
+  )
+  model.fps_history = [59.94, 59.9, 59.94]
+  model
+end
+
+# Locates the cell a rendered substring starts at. A wide symbol occupies two
+# cells but contributes one character to `Buffer#lines`, so a string index into
+# a rendered row does not line up with its column.
+private def first_cell_of(buffer : CryTUI::Buffer, needle : String) : CryTUI::Cell
+  (0...buffer.area.height).each do |row|
+    columns = [] of Int32
+    text = String.build do |io|
+      (0...buffer.area.width).each do |column|
+        cell = buffer[buffer.area.x + column, buffer.area.y + row]
+        next if cell.continuation?
+        cell.symbol.each_char { columns << buffer.area.x + column }
+        io << cell.symbol
+      end
+    end
+    if index = text.index(needle)
+      return buffer[columns[index], buffer.area.y + row]
+    end
+  end
+  raise "#{needle.inspect} was not rendered"
 end
 
 describe Obsctl::TUI::Widgets::LiveBar do
@@ -110,6 +153,93 @@ describe Obsctl::TUI::Widgets::Logs do
     spans.find!(&.content.==("Mainframe")).style.foreground.should eq(model.theme.foreground)
     spans.find!(&.content.==("timeout")).style.foreground.should eq(model.theme.danger)
     spans.find!(&.content.==("Desktop")).style.foreground.should eq(model.theme.info)
+  end
+end
+
+describe Obsctl::TUI::Widgets::Stats do
+  it "renders frame counters, drop ratios, and a nominal verdict" do
+    model = streaming_model
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 48, 8))
+
+    Obsctl::TUI::Widgets::Stats.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+    text.should contain("Stats")
+    text.should contain("59.94 fps")
+    text.should contain("1.42 ms")
+    text.should contain("RENDER missed")
+    text.should contain("12 / 128,400")
+    text.should contain("0.01%")
+    text.should contain("OUTPUT skipped")
+    text.should contain("340 / 128,000")
+    text.should contain("0.27%")
+    text.should contain("nominal")
+    # Badge counts every frame OBS gave up on, render and encode together.
+    text.should contain("352")
+  end
+
+  it "colors a lagging stream by the worst of its drop ratios and frame budget" do
+    model = streaming_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(stats: Obsctl::OBS::State::ObsStats.new(
+      active_fps: 41.2,
+      average_frame_render_time_ms: 19.8,
+      render_skipped_frames: 4_100_i64,
+      render_total_frames: 128_400_i64,
+      output_skipped_frames: 9_800_i64,
+      output_total_frames: 128_000_i64
+    ))
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 48, 8))
+
+    Obsctl::TUI::Widgets::Stats.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+    text.should contain("3.19%")
+    text.should contain("7.66%")
+    text.should contain("critical")
+    text.should contain("budget 82%")
+
+    # 3.19% is over the 1% warning line, 7.66% over the 5% danger line, a rate
+    # well below the session best is danger on its own, and 19.8 ms of a 24 ms
+    # frame is past the 80% budget.
+    first_cell_of(buffer, "3.19%").style.foreground.should eq(model.theme.warning)
+    first_cell_of(buffer, "7.66%").style.foreground.should eq(model.theme.danger)
+    first_cell_of(buffer, "41.20").style.foreground.should eq(model.theme.danger)
+    first_cell_of(buffer, "19.80 ms").style.foreground.should eq(model.theme.danger)
+    first_cell_of(buffer, "critical").style.foreground.should eq(model.theme.danger)
+  end
+
+  it "abbreviates every row when the pane is too narrow for totals" do
+    model = streaming_model
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 40, 8))
+
+    Obsctl::TUI::Widgets::Stats.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+    text.should contain("59.94 fps")
+    text.should contain("render")
+    text.should contain("output")
+    text.should contain("0.27%")
+    text.should_not contain("128,000")
+    text.should_not contain("budget")
+  end
+
+  it "waits instead of reporting zeroes before the first telemetry sample" do
+    model = streaming_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(stats: nil)
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 48, 8))
+
+    Obsctl::TUI::Widgets::Stats.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+    text.should contain("waiting for OBS telemetry")
+    text.should_not contain("nominal")
+  end
+
+  it "reports unknown ratios rather than a perfect score before OBS composites a frame" do
+    model = streaming_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(
+      stats: Obsctl::OBS::State::ObsStats.new(active_fps: 60.0, average_frame_render_time_ms: 0.4)
+    )
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 48, 8))
+
+    Obsctl::TUI::Widgets::Stats.render(buffer.area, buffer, model)
+    rendered_text(buffer).should contain("--")
   end
 end
 
@@ -285,6 +415,31 @@ describe Obsctl::TUI::DashboardLayout do
     areas.profiles.height.should eq(8)
     areas.logs.height.should eq(8)
     areas.palette.height.should eq(5)
+    areas.stats.should be_nil
+  end
+
+  it "gives the stats pane a column of the logs row on request" do
+    areas = Obsctl::TUI::DashboardLayout.compute(CryTUI::Rect.new(0, 0, 120, 40), stats_pane: true)
+    stats = areas.stats.not_nil!
+
+    areas.logs.width.should eq(72)
+    stats.width.should eq(49)
+    stats.x.should eq(areas.logs.right - 1)
+    stats.right.should eq(120)
+    stats.y.should eq(areas.logs.y)
+    stats.height.should eq(areas.logs.height)
+  end
+
+  it "narrows the stats pane before it narrows the logs" do
+    Obsctl::TUI::DashboardLayout.compute(CryTUI::Rect.new(0, 0, 200, 40), stats_pane: true).stats.not_nil!.width.should eq(49)
+    Obsctl::TUI::DashboardLayout.compute(CryTUI::Rect.new(0, 0, 84, 40), stats_pane: true).stats.not_nil!.width.should eq(41)
+  end
+
+  it "drops the stats pane rather than squeezing both panes into a narrow row" do
+    areas = Obsctl::TUI::DashboardLayout.compute(CryTUI::Rect.new(0, 0, 79, 40), stats_pane: true)
+
+    areas.stats.should be_nil
+    areas.logs.width.should eq(79)
   end
 end
 
@@ -312,6 +467,36 @@ describe Obsctl::TUI::Widgets::Dashboard do
     buffer[areas.logs.right - 1, areas.logs.y].symbol.should eq("┤")
     buffer[areas.palette.right - 1, areas.palette.y].symbol.should eq("┤")
     buffer[areas.palette.right - 1, areas.palette.bottom - 1].symbol.should eq("╯")
+  end
+
+  it "opens the stats pane beside the logs once the stream is live" do
+    model = streaming_model
+    model.logs << Obsctl::TUI::LogEntry.new(Obsctl::Runtime::LogLevel::Info, "stream started", "obs_event", Time.utc)
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 40))
+
+    Obsctl::TUI::Widgets::Dashboard.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+    text.should contain("Logs // Event Stream")
+    text.should contain("Stats")
+    text.should contain("RENDER missed")
+    text.should contain("stream started")
+
+    areas = Obsctl::TUI::DashboardLayout.compute(buffer.area, stats_pane: true)
+    stats = areas.stats.not_nil!
+    buffer[stats.x, stats.y].symbol.should eq("┬")
+    buffer[stats.right - 1, stats.y].symbol.should eq("┤")
+  end
+
+  it "leaves the logs at full width while the stream is offline" do
+    model = streaming_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(output: Obsctl::OBS::State::OutputState.new(streaming: false, recording: true))
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 40))
+
+    Obsctl::TUI::Widgets::Dashboard.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+    text.should contain("Logs // Event Stream")
+    text.should_not contain("RENDER missed")
+    text.should_not contain("dropped frames")
   end
 end
 
