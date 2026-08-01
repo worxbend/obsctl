@@ -10,6 +10,41 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ## [Unreleased]
 
+### Added
+
+- A **Stats** pane in the TUI, beside the logs, that appears while the stream is
+  live. It reports active FPS with a rolling sparkline, average frame render
+  time as a share of the frame budget, and the frames OBS missed to rendering
+  lag and skipped to encoding lag, each with its drop ratio. Values are colored
+  by severity — under 1% dropped is nominal, 5% or more is critical — and the
+  panel summarizes the worst of them as one verdict. It reads the `GetStats`
+  sample the daemon already polls, so it adds no OBS traffic, and it gives up
+  its column when the terminal is too narrow for both panes.
+
+### Fixed
+
+- A single input with no audio track — an image, colour, or silent browser
+  source — no longer stops the daemon from working at all. `GetInputList`
+  returns every input, and OBS answers a mute or volume read on a non-audio one
+  with "The specified input does not support audio.", which failed the entire
+  state snapshot. The supervisor read that as a lost connection and reconnected
+  forever, so the daemon never became usable. Inputs whose audio state OBS will
+  not report are now left out of the audio matrix instead.
+- A failed OBS request is no longer logged as `obs_disconnected`. It logs as
+  `obs_request_failed`, so a refused request is not mistaken for a network
+  fault.
+- Streaming or recording started outside obsctl — from the OBS UI or another
+  obs-websocket client — is now reflected in daemon state, so the dashboard
+  shows `LIVE` and the CLI reports it. The daemon's Identify mask omitted the
+  `Outputs` category, and obs-websocket only delivers an event to clients
+  subscribed to its category, so `StreamStateChanged` and `RecordStateChanged`
+  never arrived and their handlers never ran. State only looked correct when
+  obsctl itself issued the toggle, or after a daemon restart.
+- Profile and scene-collection changes made outside obsctl now reach the
+  dashboard too. The same missing-category bug applied to `Config` events.
+- Output state is also reconciled from the periodic telemetry poll, so it
+  converges within one poll interval even if an event is never delivered.
+
 ## [0.3.0] - 2026-07-26
 
 ### Added
