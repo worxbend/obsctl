@@ -34,13 +34,14 @@ module SiteFrames
     SHOWCASED.each do |id|
       theme = Obsctl::TUI::Theme.by_id(id)
       buffer = render_frame(theme)
+      ground = swatch(theme.background, "#101010")
       # The whole palette travels with the frame: the site restyles itself from
       # these, so the page and the terminal in it are always the same theme.
       frames[id] = {
         "label"       => theme.label,
-        "html"        => to_html(buffer),
-        "statsHtml"   => to_html(render_stats(theme)),
-        "background"  => swatch(theme.background, "#101010"),
+        "html"        => to_html(buffer, ground),
+        "statsHtml"   => to_html(render_stats(theme), ground),
+        "background"  => ground,
         "accent"      => swatch(theme.accent, "#d97757"),
         "accentAlt"   => swatch(theme.accent_alt, "#e8c59e"),
         "foreground"  => swatch(theme.foreground, "#f0f0f0"),
@@ -155,7 +156,7 @@ module SiteFrames
   # So every run containing a non-ASCII glyph is emitted as an inline-block of
   # exactly as many `ch` as it occupies cells. ASCII needs no such box: in a
   # monospace face it is already one advance per character.
-  private def to_html(buffer : CryTUI::Buffer) : String
+  private def to_html(buffer : CryTUI::Buffer, ground : String) : String
     String.build do |io|
       (0...buffer.area.height).each do |row|
         io << "<span class=\"row\">"
@@ -191,7 +192,7 @@ module SiteFrames
           next if cell.continuation?
 
           symbol = cell.symbol.empty? ? " " : cell.symbol
-          css = cell_css(cell)
+          css = cell_css(cell, ground)
           ascii = symbol.ascii_only?
           flush.call if css != run_css || ascii != run_ascii
           run_css = css
@@ -220,7 +221,7 @@ module SiteFrames
     css_color(color) || fallback
   end
 
-  private def cell_css(cell : CryTUI::Cell) : String?
+  private def cell_css(cell : CryTUI::Cell, ground : String) : String?
     style = cell.style
     foreground = style.foreground
     background = style.background
@@ -230,7 +231,12 @@ module SiteFrames
     if color = foreground.try { |value| css_color(value) }
       declarations << "color:#{color}"
     end
-    if color = background.try { |value| css_color(value) }
+    # The dashboard paints the theme background onto every cell, but the frame
+    # already sits on it. Repeating it per cell makes each row an opaque strip
+    # that paints over the descenders hanging down from the row above, which
+    # reads as text clipped along its baseline. Only a genuine highlight -- a
+    # selected row, a badge -- gets a background of its own.
+    if (color = background.try { |value| css_color(value) }) && color != ground
       declarations << "background:#{color}"
     end
     declarations << "font-weight:700" if style.modifiers.bold?
