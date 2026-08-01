@@ -10,6 +10,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-01
+
 ### Added
 
 - A **Stats** pane in the TUI, beside the logs, that appears while the stream is
@@ -207,7 +209,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/worxbend/obsctl/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/worxbend/obsctl/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/worxbend/obsctl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/worxbend/obsctl/releases/tag/v0.1.0
