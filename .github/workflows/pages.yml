@@ -1,0 +1,66 @@
+name: Pages
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Only the deployment needs write access, and only to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A newer commit should win, but never by cancelling a deploy midway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy microsite
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # site/frames.js is generated from the widget code by
+      # scripts/render_site_frames.cr. It is committed so the deploy needs no
+      # Crystal toolchain, but a stale copy would quietly ship a dashboard that
+      # no longer matches the binary, so fail loudly instead.
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: "1.21.0"
+
+      - name: Install shards
+        run: shards install --production
+
+      - name: Check the rendered frames are current
+        run: |
+          cp site/frames.js /tmp/frames.committed.js
+          make site-frames
+          if ! diff -q /tmp/frames.committed.js site/frames.js >/dev/null; then
+            echo "::error::site/frames.js is stale. Run 'make site-frames' and commit the result." >&2
+            diff /tmp/frames.committed.js site/frames.js | head -20 >&2
+            exit 1
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

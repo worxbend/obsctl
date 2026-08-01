@@ -1,6 +1,6 @@
 CRYSTAL ?= crystal
 
-.PHONY: build test format format-check lint check bootstrap-obsctl-rs-contract-fixtures contract-rs-compat run release
+.PHONY: build test format format-check lint check bootstrap-obsctl-rs-contract-fixtures contract-rs-compat run release site-frames
 
 # Every gate CI enforces, in the order a contributor should hit them.
 check: format-check lint build test
@@ -43,3 +43,9 @@ run:
 release:
 	mkdir -p bin
 	$(CRYSTAL) build --release src/obsctl.cr -o bin/obsctl
+
+# Redraws the microsite's terminal frames from the real widget code. Run after
+# changing a widget or a theme; the Pages workflow fails if the committed
+# frames no longer match.
+site-frames:
+	$(CRYSTAL) run scripts/render_site_frames.cr

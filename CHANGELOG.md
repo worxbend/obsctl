@@ -10,6 +10,15 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ## [Unreleased]
 
+### Added
+
+- A microsite at <https://worxbend.github.io/obsctl/>, published from `site/`
+  by the `Pages` workflow. The terminal frames on it are not screenshots:
+  `scripts/render_site_frames.cr` renders the real widget code into a CryTUI
+  buffer and serialises the cells to HTML, and the page restyles itself from
+  the same theme palettes it uses to paint them. `make site-frames` regenerates
+  them, and the deploy fails if the committed frames are stale.
+
 ## [0.4.0] - 2026-08-01
 
 ### Added

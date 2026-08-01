@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>obsctl — your OBS control room, in the terminal</title>
+<meta name="description" content="A Crystal TUI, an automation-friendly CLI, and a local daemon that owns the single OBS WebSocket connection. Control OBS Studio from the terminal." />
+<meta name="color-scheme" content="dark light" />
+<link rel="icon" href="obsctl-logo.svg" type="image/svg+xml" />
+<meta property="og:title" content="obsctl — your OBS control room, in the terminal" />
+<meta property="og:description" content="A Crystal TUI, an automation-friendly CLI, and a resilient local daemon for OBS Studio." />
+<meta property="og:type" content="website" />
+<style>
+/* ------------------------------------------------------------------ *
+ * obsctl microsite
+ *
+ * The palette is not invented here. Every colour is a real obsctl theme,
+ * shipped from src/obsctl/tui/theme.cr through site/frames.js, and the
+ * switcher restyles this page with the same values it uses to paint the
+ * terminal. The page and the product are always wearing the same theme.
+ * ------------------------------------------------------------------ */
+
+:root {
+  /* Ember, obsctl's default theme. Replaced at runtime by the switcher. */
+  --ground: #1b1916;
+  --ink: #ece8e1;
+  --muted: #8a867d;
+  --accent: #d97757;
+  --accent-alt: #e8c59e;
+  --border: #4a4640;
+  --success: #87b37b;
+  --warning: #e0b44c;
+  --danger: #e06c5f;
+  --info: #7ba9c7;
+
+  /* Derived so a light theme lifts and a dark theme deepens, with no
+     per-theme special casing. */
+  --panel: color-mix(in srgb, var(--ground) 93%, var(--ink) 7%);
+  --raised: color-mix(in srgb, var(--ground) 87%, var(--ink) 13%);
+  --hairline: color-mix(in srgb, var(--border) 55%, transparent);
+  --hairline-strong: color-mix(in srgb, var(--border) 90%, transparent);
+  --ink-dim: color-mix(in srgb, var(--ink) 72%, var(--ground));
+
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+
+  --rail: 4.25rem;
+  --gutter: clamp(1.25rem, 4vw, 4rem);
+  --measure: 65ch;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  transition: background 320ms ease, color 320ms ease;
+}
+
+/* The whole page tints during a theme change, the way a console flickers
+   when you swap a look. */
+body.reskin { animation: reskin 340ms ease; }
+@keyframes reskin {
+  0%   { filter: brightness(1.32) saturate(.4); }
+  40%  { filter: brightness(.88); }
+  100% { filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.reskin { animation: none; }
+}
+
+a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { color: var(--accent-alt); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; margin: 0; }
+
+/* -- structure -------------------------------------------------------- */
+
+.wrap {
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.band { padding-block: clamp(3.5rem, 8vw, 7rem); border-top: 1px solid var(--hairline); }
+.band:first-of-type { border-top: 0; }
+
+/* Section head as a channel strip: label, rule, then the content. */
+.strip {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+.strip__label {
+  font-family: var(--mono);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.strip__rule { height: 1px; background: var(--hairline-strong); }
+
+.lede {
+  max-width: var(--measure);
+  color: var(--ink-dim);
+  font-size: 1.02rem;
+}
+.lede + .lede { margin-top: .85rem; }
+
+/* -- tally rail ------------------------------------------------------- */
+
+.rail {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--hairline);
+}
+.rail__inner {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  height: var(--rail);
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.mark {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.mark svg { width: 26px; height: 26px; display: block; }
+
+/* An on-air tally. It is lit because the frame beside it is a live stream. */
+.tally {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  font-family: var(--mono);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  padding: .3rem .6rem;
+}
+.tally__dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 70%, transparent);
+  animation: tally 2.4s ease-out infinite;
+}
+@keyframes tally {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 65%, transparent); }
+  70%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .tally__dot { animation: none; } }
+
+.rail__nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  font-family: var(--mono);
+  font-size: .78rem;
+  letter-spacing: .04em;
+}
+.rail__nav a { color: var(--muted); text-decoration: none; }
+.rail__nav a:hover { color: var(--ink); }
+@media (max-width: 860px) { .rail__nav .opt { display: none; } }
+
+/* -- hero ------------------------------------------------------------- */
+
+.hero { padding-top: clamp(2.75rem, 6vw, 5rem); padding-bottom: clamp(2rem, 4vw, 3rem); }
+
+.hero__grid {
+  display: grid;
+  gap: clamp(1.75rem, 4vw, 3.5rem);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+}
+@media (min-width: 1080px) {
+  .hero__grid { grid-template-columns: minmax(0, 27rem) minmax(0, 1fr); }
+}
+
+.hero h1 {
+  font-size: clamp(3.1rem, 9vw, 5.1rem);
+  line-height: .92;
+  letter-spacing: -.045em;
+  margin-bottom: 1.1rem;
+}
+.hero h1 .dim { color: var(--muted); }
+.hero__tag {
+  font-family: var(--mono);
+  font-size: clamp(1rem, 2.1vw, 1.18rem);
+  line-height: 1.45;
+  color: var(--accent-alt);
+  margin: 0 0 1.15rem;
+  max-width: 26ch;
+}
+.hero__body { color: var(--ink-dim); margin: 0 0 1.75rem; max-width: 46ch; }
+
+.cta { display: flex; flex-wrap: wrap; gap: .7rem; align-items: center; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  font-family: var(--mono);
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  padding: .68rem 1.05rem;
+  text-decoration: none;
+  border: 1px solid var(--hairline-strong);
+  color: var(--ink);
+  background: var(--panel);
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+.btn:hover { border-color: var(--accent); color: var(--ink); transform: translateY(-1px); }
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ground);
+}
+.btn--primary:hover { background: var(--accent-alt); border-color: var(--accent-alt); color: var(--ground); }
+
+/* -- terminal --------------------------------------------------------- */
+
+.term {
+  border: 1px solid var(--hairline-strong);
+  background: var(--ground);
+  overflow: hidden;
+}
+.term__bar {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .5rem .8rem;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: .7rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.term__lamps { display: flex; gap: .35rem; }
+.term__lamps i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+.term__scroll { overflow-x: auto; padding: .55rem .7rem; }
+
+/* The frame is pre-rendered character data: never wrap it, never let the
+   page scroll sideways because of it. */
+.frame {
+  display: block;
+  font-family: var(--mono);
+  font-size: clamp(6.2px, 0.79vw, 11.4px);
+  line-height: 1.34;
+  white-space: pre;
+  margin: 0;
+  width: max-content;
+  min-width: 100%;
+  tab-size: 1;
+}
+.frame .row { display: block; }
+
+/* Page-load: the console paints itself, top to bottom, once. */
+.frame--boot .row {
+  opacity: 0;
+  animation: paint 260ms ease forwards;
+}
+@keyframes paint { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .frame--boot .row { opacity: 1; animation: none; }
+}
+
+.term__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1.1rem;
+  padding: .6rem .8rem;
+  border-top: 1px solid var(--hairline);
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: .7rem;
+  color: var(--muted);
+}
+.term__foot b { color: var(--ink-dim); font-weight: 700; }
+
+/* -- theme switcher --------------------------------------------------- */
+
+.themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: center;
+}
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  border: 1px solid var(--hairline-strong);
+  background: var(--panel);
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: .76rem;
+  padding: .42rem .7rem;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+.swatch:hover { border-color: var(--accent); color: var(--ink); }
+.swatch[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); background: var(--raised); }
+.swatch__chips { display: flex; }
+.swatch__chips i { width: 9px; height: 16px; display: block; }
+
+/* -- capability modules ----------------------------------------------- */
+
+.modules {
+  display: grid;
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+}
+.module { background: var(--ground); padding: 1.6rem 1.5rem; }
+.module h3 {
+  font-size: .95rem;
+  letter-spacing: -.01em;
+  margin-bottom: .55rem;
+  color: var(--ink);
+}
+.module p { margin: 0; color: var(--ink-dim); font-size: .93rem; }
+.module__tag {
+  display: block;
+  font-family: var(--mono);
+  font-size: .64rem;
+  font-weight: 700;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: .9rem;
+}
+
+/* -- code ------------------------------------------------------------- */
+
+.code {
+  border: 1px solid var(--hairline-strong);
+  background: var(--panel);
+  overflow-x: auto;
+  padding: 1rem 1.1rem;
+  margin: 0;
+}
+.code code {
+  font-family: var(--mono);
+  font-size: .82rem;
+  line-height: 1.75;
+  white-space: pre;
+  display: block;
+  color: var(--ink-dim);
+}
+.c-prompt { color: var(--accent); }
+.c-cmd { color: var(--ink); font-weight: 700; }
+.c-arg { color: var(--accent-alt); }
+.c-flag { color: var(--info); }
+.c-out { color: var(--muted); }
+.c-key { color: var(--info); }
+.c-str { color: var(--success); }
+.c-num { color: var(--warning); }
+.c-comment { color: var(--muted); font-style: italic; }
+
+.split {
+  display: grid;
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@media (min-width: 980px) {
+  .split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .split--narrow { grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); }
+}
+
+/* -- exit code table -------------------------------------------------- */
+
+.codes { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .8rem; }
+.codes caption {
+  text-align: left;
+  font-size: .64rem;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-bottom: .7rem;
+}
+.codes th, .codes td { text-align: left; padding: .48rem .7rem; border-bottom: 1px solid var(--hairline); }
+.codes th { color: var(--muted); font-weight: 400; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; }
+.codes td:first-child { color: var(--warning); font-variant-numeric: tabular-nums; width: 3.5rem; }
+.codes td:nth-child(2) { color: var(--ink); }
+.codes td:last-child { color: var(--ink-dim); }
+.codes tr:last-child td { border-bottom: 0; }
+
+/* -- signal path ------------------------------------------------------ */
+
+.path {
+  display: grid;
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+.node { background: var(--ground); padding: 1.3rem 1.25rem; position: relative; }
+.node__role {
+  font-family: var(--mono);
+  font-size: .62rem;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: block;
+  margin-bottom: .5rem;
+}
+.node__name { font-family: var(--mono); font-weight: 700; font-size: .95rem; color: var(--ink); display: block; margin-bottom: .5rem; }
+.node p { margin: 0; font-size: .86rem; color: var(--ink-dim); }
+.node--owner { background: var(--raised); }
+.node--owner .node__name { color: var(--accent); }
+.link {
+  font-family: var(--mono);
+  font-size: .66rem;
+  letter-spacing: .1em;
+  color: var(--muted);
+  display: block;
+  margin-top: .8rem;
+  padding-top: .6rem;
+  border-top: 1px dashed var(--hairline-strong);
+}
+
+/* -- install ---------------------------------------------------------- */
+
+.steps { display: grid; gap: 1.4rem; }
+.step__head {
+  font-family: var(--mono);
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: .6rem;
+}
+
+/* -- footer ----------------------------------------------------------- */
+
+.foot {
+  border-top: 1px solid var(--hairline);
+  padding-block: 2.5rem 3.5rem;
+  font-family: var(--mono);
+  font-size: .78rem;
+  color: var(--muted);
+}
+.foot__grid { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: baseline; }
+.foot a { color: var(--muted); text-decoration: none; }
+.foot a:hover { color: var(--accent); }
+.foot__spacer { margin-left: auto; }
+
+.sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+</style>
+</head>
+<body>
+
+<header class="rail">
+  <div class="rail__inner">
+    <a class="mark" href="#top">
+      <svg viewBox="0 0 512 512" aria-hidden="true">
+        <path d="M256 24 457 140v232L256 488 55 372V140L256 24Z" fill="none" stroke="currentColor" stroke-width="26" opacity=".55"/>
+        <rect x="130" y="150" width="252" height="212" rx="26" fill="none" stroke="currentColor" stroke-width="24"/>
+        <path d="m186 236 42 34-42 34" fill="none" stroke="currentColor" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M258 304h68" stroke="currentColor" stroke-width="26" stroke-linecap="round"/>
+      </svg>
+      obsctl
+    </a>
+    <span class="tally"><span class="tally__dot"></span>On air</span>
+    <nav class="rail__nav" aria-label="Sections">
+      <a href="#console">Console</a>
+      <a href="#automation">CLI</a>
+      <a href="#health" class="opt">Health</a>
+      <a href="#signal" class="opt">Architecture</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/worxbend/obsctl">GitHub&nbsp;↗</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- The thesis: the actual product, painting itself on load. -->
+  <section class="wrap hero">
+    <div class="hero__grid">
+      <div>
+        <h1>obsctl<span class="dim">.</span></h1>
+        <p class="hero__tag">Your OBS control room — right inside the terminal.</p>
+        <p class="hero__body">
+          A Crystal TUI, an automation-friendly CLI, and a local daemon that owns
+          the single OBS WebSocket connection — so your scripts, your dashboard,
+          and your stream never fight over it.
+        </p>
+        <div class="cta">
+          <a class="btn btn--primary" href="#install">Get started</a>
+          <a class="btn" href="https://github.com/worxbend/obsctl">Source</a>
+          <a class="btn" href="https://github.com/worxbend/obsctl/releases">Releases</a>
+        </div>
+      </div>
+
+      <figure class="term" style="margin:0">
+        <figcaption class="term__bar">
+          <span class="term__lamps">
+            <i style="background:var(--danger)"></i>
+            <i style="background:var(--warning)"></i>
+            <i style="background:var(--success)"></i>
+          </span>
+          <span>obsctl — broadcast command center</span>
+        </figcaption>
+        <div class="term__scroll">
+          <pre class="frame frame--boot" id="hero-frame" aria-label="The obsctl terminal dashboard during a live stream"></pre>
+        </div>
+        <div class="term__foot">
+          <span><b>Live</b> render</span>
+          <span>Not a screenshot — this frame is drawn by the real widget code</span>
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <!-- The risk: the switcher reskins the entire page, not just the terminal. -->
+  <section class="wrap band" id="console">
+    <div class="strip">
+      <span class="strip__label">Console</span>
+      <span class="strip__rule"></span>
+    </div>
+
+    <div class="split split--narrow">
+      <div>
+        <h2 style="font-size:1.5rem;letter-spacing:-.02em;margin-bottom:.9rem">Pick a look.<br />The whole room changes.</h2>
+        <p class="lede">
+          obsctl ships 29 built-in themes, and custom themes can override any
+          subset of the palette. These eight are rendered above — and the
+          page you are reading restyles itself from the same values, because
+          there is only one palette and both are using it.
+        </p>
+        <p class="lede">
+          Press <code style="font-family:var(--mono);color:var(--accent)">Ctrl-T</code>
+          or <code style="font-family:var(--mono);color:var(--accent)">F2</code>
+          in the running TUI to open the appearance lab.
+        </p>
+      </div>
+      <div class="themes" id="themes" role="group" aria-label="Theme switcher"></div>
+    </div>
+  </section>
+
+  <section class="wrap band">
+    <div class="strip">
+      <span class="strip__label">What you get</span>
+      <span class="strip__rule"></span>
+    </div>
+
+    <div class="modules">
+      <article class="module">
+        <span class="module__tag">Dashboard</span>
+        <h3>Everything on one screen</h3>
+        <p>Scenes, audio matrix, profiles, collections, output state, telemetry,
+        stream health, a live log feed, and a command palette — in one responsive view.</p>
+      </article>
+      <article class="module">
+        <span class="module__tag">Daemon</span>
+        <h3>One OBS connection</h3>
+        <p>A local daemon owns the WebSocket and holds authoritative state. The TUI
+        and every CLI call are thin clients over a Unix socket. No competing handshakes.</p>
+      </article>
+      <article class="module">
+        <span class="module__tag">Automation</span>
+        <h3>Built for scripts</h3>
+        <p>Stable command grammar, one JSON envelope per invocation, canonical error
+        codes, and exit statuses that mean something in a shell conditional.</p>
+      </article>
+      <article class="module">
+        <span class="module__tag">Resilience</span>
+        <h3>Survives OBS restarts</h3>
+        <p>Bounded reconnect backoff, explicit reconnect control, state subscriptions,
+        and diagnostics that redact passwords and auth strings from every sink.</p>
+      </article>
+      <article class="module">
+        <span class="module__tag">Interface</span>
+        <h3>Made for humans</h3>
+        <p>29 themes, custom colours, Unicode and ASCII modes, English and Ukrainian
+        UI surfaces, and keyboard-first navigation throughout.</p>
+      </article>
+      <article class="module">
+        <span class="module__tag">CryTUI</span>
+        <h3>Its own TUI library</h3>
+        <p>An in-tree immediate-mode Crystal library inspired by Ratatui, tested
+        against memory, ANSI, and real PTY backends.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap band" id="automation">
+    <div class="strip">
+      <span class="strip__label">Automation</span>
+      <span class="strip__rule"></span>
+    </div>
+
+    <p class="lede" style="margin-bottom:2rem">
+      The same command grammar drives the palette and the shell. Aliases, shortcuts,
+      exact OBS names, and case-insensitive names all resolve; quote anything with spaces.
+    </p>
+
+    <div class="split">
+      <div>
+        <pre class="code"><code><span class="c-comment"># Scenes, audio, outputs</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> scene <span class="c-arg">main</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> volume <span class="c-arg">"Desktop Audio"</span> <span class="c-num">70</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> toggle-mute <span class="c-arg">mic</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> record start
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> stream
+
+<span class="c-comment"># Follow daemon state from a script</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> watch <span class="c-flag">--topics</span> state \
+    | jq -r <span class="c-arg">'.data.current_scene'</span>
+<span class="c-out">Main Camera</span>
+
+<span class="c-comment"># Run it as a user service</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> service install
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> service start</code></pre>
+      </div>
+
+      <div>
+        <pre class="code"><code><span class="c-comment"># One envelope per invocation, on stdout</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> scene <span class="c-arg">main</span> <span class="c-flag">--json</span>
+{
+  <span class="c-key">"ok"</span>: <span class="c-num">true</span>,
+  <span class="c-key">"result"</span>: { <span class="c-key">"message"</span>: <span class="c-str">"scene set: Main Camera"</span> },
+  <span class="c-key">"error"</span>: <span class="c-num">null</span>,
+  <span class="c-key">"exit_code"</span>: <span class="c-num">0</span>
+}
+
+<span class="c-comment"># Failures are structured too</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> scene <span class="c-arg">nope</span> <span class="c-flag">--json</span>; <span class="c-cmd">echo</span> $?
+{
+  <span class="c-key">"ok"</span>: <span class="c-num">false</span>,
+  <span class="c-key">"result"</span>: <span class="c-num">null</span>,
+  <span class="c-key">"error"</span>: { <span class="c-key">"code"</span>: <span class="c-str">"SCENE_NOT_FOUND"</span>, … },
+  <span class="c-key">"exit_code"</span>: <span class="c-num">4</span>
+}
+<span class="c-out">4</span></code></pre>
+
+        <table class="codes" style="margin-top:1.5rem">
+          <caption>Exit statuses</caption>
+          <thead><tr><th scope="col">Code</th><th scope="col">Class</th><th scope="col">Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>Success</td><td>The command did what it said</td></tr>
+            <tr><td>1</td><td>Failure</td><td>Unclassified failure</td></tr>
+            <tr><td>2</td><td>Config</td><td>Missing or invalid configuration</td></tr>
+            <tr><td>3</td><td>Connection</td><td>Daemon or OBS unavailable</td></tr>
+            <tr><td>4</td><td>ObsRequest</td><td>OBS refused the request</td></tr>
+            <tr><td>5</td><td>CommandParse</td><td>The command could not be parsed</td></tr>
+            <tr><td>6</td><td>Ipc</td><td>Local IPC protocol error</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap band" id="health">
+    <div class="strip">
+      <span class="strip__label">Stream health</span>
+      <span class="strip__rule"></span>
+    </div>
+
+    <div class="split split--narrow">
+      <div>
+        <h2 style="font-size:1.5rem;letter-spacing:-.02em;margin-bottom:.9rem">Know before your viewers do.</h2>
+        <p class="lede">
+          While the stream is live, a stats panel opens beside the logs with the
+          numbers that actually predict a bad broadcast: frames missed to rendering
+          lag, frames skipped to encoding lag, and how much of each frame's budget
+          the compositor is burning.
+        </p>
+        <p class="lede">
+          Drop ratios are scored the way the OBS stats dock scores them — under 1%
+          nominal, 5% or more critical — and FPS is judged against the best rate seen
+          this session, so a 30 fps profile reads as healthy at 30.
+        </p>
+      </div>
+      <figure class="term" style="margin:0">
+        <figcaption class="term__bar">
+          <span class="term__lamps"><i style="background:var(--success)"></i></span>
+          <span>Stats — stream health</span>
+        </figcaption>
+        <div class="term__scroll">
+          <pre class="frame" id="stats-frame" style="font-size:clamp(9px,1.35vw,15px)" aria-label="The obsctl stream health panel"></pre>
+        </div>
+        <div class="term__foot"><span>Reads the telemetry the daemon already polls — <b>no extra OBS traffic</b></span></div>
+      </figure>
+    </div>
+  </section>
+
+  <section class="wrap band" id="signal">
+    <div class="strip">
+      <span class="strip__label">Signal path</span>
+      <span class="strip__rule"></span>
+    </div>
+
+    <p class="lede" style="margin-bottom:2rem">
+      One process owns the OBS connection. Everything else is a local client, so
+      state, reconnects, validation, and secret handling all live in one place —
+      and control never leaves your machine.
+    </p>
+
+    <div class="path">
+      <div class="node">
+        <span class="node__role">Source</span>
+        <span class="node__name">OBS Studio</span>
+        <p>obs-websocket 5.x, on localhost.</p>
+        <span class="link">↓ WebSocket</span>
+      </div>
+      <div class="node node--owner">
+        <span class="node__role">Connection owner</span>
+        <span class="node__name">obsctl server</span>
+        <p>Holds the single socket and the authoritative state snapshot. Supervises reconnects.</p>
+        <span class="link">↓ Unix socket · newline-delimited JSON</span>
+      </div>
+      <div class="node">
+        <span class="node__role">Client</span>
+        <span class="node__name">TUI dashboard</span>
+        <p>Subscribes to state, events, and logs. Opens no OBS connection of its own.</p>
+        <span class="link">↑ subscribe</span>
+      </div>
+      <div class="node">
+        <span class="node__role">Client</span>
+        <span class="node__name">CLI &amp; scripts</span>
+        <p>Short-lived processes. One request, one envelope, one exit code.</p>
+        <span class="link">↑ command</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap band" id="install">
+    <div class="strip">
+      <span class="strip__label">Install</span>
+      <span class="strip__rule"></span>
+    </div>
+
+    <div class="split">
+      <div class="steps">
+        <div>
+          <div class="step__head">Prebuilt binary</div>
+          <p class="lede" style="margin-bottom:.8rem">
+            Static musl builds for <code style="font-family:var(--mono)">linux-amd64</code> and
+            <code style="font-family:var(--mono)">linux-arm64</code>, published with
+            <code style="font-family:var(--mono)">SHA256SUMS.txt</code> — they do not depend on your glibc.
+          </p>
+          <pre class="code"><code><span class="c-prompt">$</span> <span class="c-cmd">tar</span> xzf obsctl-v0.4.0-linux-amd64.tar.gz
+<span class="c-prompt">$</span> <span class="c-cmd">install</span> <span class="c-flag">-Dm755</span> obsctl ~/.local/bin/obsctl</code></pre>
+        </div>
+
+        <div>
+          <div class="step__head">From source</div>
+          <pre class="code"><code><span class="c-prompt">$</span> <span class="c-cmd">git</span> clone https://github.com/worxbend/obsctl.git
+<span class="c-prompt">$</span> <span class="c-cmd">cd</span> obsctl &amp;&amp; <span class="c-cmd">shards</span> install
+<span class="c-prompt">$</span> <span class="c-cmd">make</span> release</code></pre>
+          <p class="lede" style="margin-top:.8rem;font-size:.9rem">Needs Linux, Crystal 1.21+, and Shards.</p>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div>
+          <div class="step__head">First run</div>
+          <pre class="code"><code><span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> init
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> validate-config
+<span class="c-prompt">$</span> <span class="c-cmd">export</span> OBS_WEBSOCKET_PASSWORD=<span class="c-str">'…'</span>
+
+<span class="c-comment"># one terminal: the daemon</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> server <span class="c-flag">--headless</span>
+
+<span class="c-comment"># another: the control room</span>
+<span class="c-prompt">$</span> <span class="c-cmd">obsctl</span></code></pre>
+          <p class="lede" style="margin-top:.8rem;font-size:.9rem">
+            Config lives at <code style="font-family:var(--mono)">~/.config/obsctl/config.yml</code>.
+            Secrets belong in environment variables — a plaintext password in the file
+            earns you a warning.
+          </p>
+        </div>
+        <div>
+          <div class="step__head">Docs</div>
+          <p class="lede" style="font-size:.92rem">
+            <a href="https://github.com/worxbend/obsctl/blob/master/docs/commands.md">Command grammar</a> ·
+            <a href="https://github.com/worxbend/obsctl/blob/master/docs/config.md">Configuration</a> ·
+            <a href="https://github.com/worxbend/obsctl/blob/master/docs/protocol.md">IPC protocol</a> ·
+            <a href="https://github.com/worxbend/obsctl/blob/master/CHANGELOG.md">Changelog</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  <div class="foot__grid">
+    <span>obsctl — MIT licensed</span>
+    <a href="https://github.com/worxbend/obsctl">github.com/worxbend/obsctl</a>
+    <a href="https://github.com/worxbend/obsctl/blob/master/SECURITY.md">Security</a>
+    <span class="foot__spacer">Built with Crystal, escape sequences, and an unreasonable love for reliable broadcast controls.</span>
+  </div>
+</footer>
+
+<script src="frames.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var frames = window.OBSCTL_FRAMES || {};
+  var ids = Object.keys(frames);
+  if (!ids.length) return;
+
+  var heroFrame = document.getElementById("hero-frame");
+  var statsFrame = document.getElementById("stats-frame");
+  var switcher = document.getElementById("themes");
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Palette keys in frames.js -> the custom properties this page styles from.
+  var TOKENS = {
+    background: "--ground",
+    foreground: "--ink",
+    muted: "--muted",
+    accent: "--accent",
+    accentAlt: "--accent-alt",
+    border: "--border",
+    success: "--success",
+    warning: "--warning",
+    danger: "--danger",
+    info: "--info"
+  };
+
+  function apply(id, animate) {
+    var theme = frames[id];
+    if (!theme) return;
+
+    for (var key in TOKENS) {
+      if (theme[key]) document.documentElement.style.setProperty(TOKENS[key], theme[key]);
+    }
+
+    heroFrame.innerHTML = theme.html;
+    statsFrame.innerHTML = theme.statsHtml;
+
+    Array.prototype.forEach.call(switcher.children, function (button) {
+      button.setAttribute("aria-pressed", String(button.dataset.theme === id));
+    });
+
+    try { localStorage.setItem("obsctl-theme", id); } catch (e) { /* private mode */ }
+
+    if (animate && !reduceMotion) {
+      document.body.classList.remove("reskin");
+      void document.body.offsetWidth;
+      document.body.classList.add("reskin");
+    }
+  }
+
+  ids.forEach(function (id) {
+    var theme = frames[id];
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "swatch";
+    button.dataset.theme = id;
+    button.setAttribute("aria-pressed", "false");
+
+    var chips = document.createElement("span");
+    chips.className = "swatch__chips";
+    [theme.accent, theme.accentAlt, theme.success, theme.warning].forEach(function (color) {
+      var chip = document.createElement("i");
+      chip.style.background = color;
+      chips.appendChild(chip);
+    });
+
+    button.appendChild(chips);
+    button.appendChild(document.createTextNode(theme.label));
+    button.addEventListener("click", function () { apply(id, true); });
+    switcher.appendChild(button);
+  });
+
+  // Respect the viewer's light/dark preference by choosing an obsctl theme
+  // that matches it, rather than bolting a second palette onto the product's.
+  function preferred() {
+    var stored;
+    try { stored = localStorage.getItem("obsctl-theme"); } catch (e) { stored = null; }
+    if (stored && frames[stored]) return stored;
+    var light = window.matchMedia("(prefers-color-scheme: light)").matches;
+    if (light && frames["github-light"]) return "github-light";
+    return frames["ember"] ? "ember" : ids[0];
+  }
+
+  apply(preferred(), false);
+
+  // Paint the hero frame row by row, once, like a console coming up.
+  if (!reduceMotion) {
+    var rows = heroFrame.querySelectorAll(".row");
+    var step = 900 / Math.max(rows.length, 1);
+    Array.prototype.forEach.call(rows, function (row, index) {
+      row.style.animationDelay = (index * step).toFixed(1) + "ms";
+    });
+  } else {
+    heroFrame.classList.remove("frame--boot");
+  }
+})();
+</script>
+</body>
+</html>

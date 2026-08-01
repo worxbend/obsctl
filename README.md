@@ -15,7 +15,7 @@
 [![obs-websocket](https://img.shields.io/badge/obs--websocket-5.x-302E31?style=flat-square&logo=obsstudio)](https://github.com/obsproject/obs-websocket)
 [![License](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](LICENSE)
 
-[Get started](#-quick-start) · [Explore the TUI](#-the-control-room) · [Automate with the CLI](#-cli--automation) · [Read the docs](#-documentation)
+[**Visit the site**](https://worxbend.github.io/obsctl/) · [Get started](#-quick-start) · [Explore the TUI](#-the-control-room) · [Automate with the CLI](#-cli--automation) · [Read the docs](#-documentation)
 
 </div>
 
