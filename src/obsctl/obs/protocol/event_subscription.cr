@@ -36,7 +36,13 @@ module Obsctl
             UI |
             CANVASES
 
-        SERVER_DEFAULT = GENERAL | SCENES | INPUTS
+        # Every category the supervisor's event handler acts on. obs-websocket
+        # only delivers an event to clients subscribed to its category, so a
+        # missing bit here silently turns the matching handler arm into dead
+        # code: `OUTPUTS` is what carries `StreamStateChanged`, and without it
+        # a stream started from the OBS UI or another client never reached
+        # daemon state. Keep this in sync with `ObsSupervisor#apply_event`.
+        SERVER_DEFAULT = GENERAL | CONFIG | SCENES | INPUTS | OUTPUTS
       end
     end
   end

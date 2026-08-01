@@ -265,7 +265,14 @@ module Obsctl
                       (bytes - previous_bytes).to_f64 * 8.0 / 1000.0 / elapsed
                     end
                   end
-        @state.update_stats(sample.stats, bitrate, sample.stream_duration_ms, sample.record_duration_ms)
+        # The poll also reconciles output state. Events are the fast path, but
+        # this is what guarantees convergence if one is ever missed: `drain_events`
+        # runs before this in the same fiber, so the answer can never be older
+        # than the last event applied.
+        @state.update_stats(
+          sample.stats, bitrate, sample.stream_duration_ms, sample.record_duration_ms,
+          streaming: sample.stream_active, recording: sample.record_active
+        )
         current
       rescue ex : Domain::ObsctlError
         publish_log("warn", "obs_stats_poll_failed", public_message(ex.message, "failed to poll OBS telemetry"))
@@ -469,6 +476,11 @@ module Obsctl
           "obs_malformed_frame"
         when /closed cleanly/
           "obs_closed_cleanly"
+        when /\AOBS request failed for /
+          # The socket is fine; OBS refused one request. Logging this as a
+          # disconnect sends operators looking for a network fault that is not
+          # there.
+          "obs_request_failed"
         when /disconnected/
           "obs_disconnected"
         else

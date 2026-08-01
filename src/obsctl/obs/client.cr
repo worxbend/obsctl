@@ -24,6 +24,7 @@ module Obsctl
     record TelemetrySample,
       stats : State::ObsStats,
       stream_active : Bool,
+      record_active : Bool,
       stream_bytes : Int64?,
       stream_duration_ms : Int64?,
       record_duration_ms : Int64?
@@ -274,6 +275,7 @@ module Obsctl
         TelemetrySample.new(
           stats: stats,
           stream_active: stream_active,
+          record_active: record_active,
           stream_bytes: stream["outputBytes"]?.try(&.as_i64?),
           stream_duration_ms: stream_active ? stream["outputDuration"]?.try(&.as_i64?) : nil,
           record_duration_ms: record_active ? record["outputDuration"]?.try(&.as_i64?) : nil
@@ -299,20 +301,37 @@ module Obsctl
 
       # Fetches only the audio input list for targeted state updates.
       def audio_snapshot : Array(State::AudioState)
-        input_names.map do |name|
-          configured = @config.audio.inputs.find { |input| input.name == name }
-          muted = input_muted(name)
-          volume = input_volume(name)
-          State::AudioState.new(
-            name: name,
-            alias: configured.try(&.alias),
-            shortcut: configured.try(&.shortcut),
-            muted: muted,
-            volume_mul: volume[:mul],
-            volume_db: volume[:db],
-            volume_percent: volume[:percent]
-          )
-        end
+        input_names.compact_map { |name| audio_state_for(name) }
+      end
+
+      # Reads one input's audio state, or nil when OBS will not report it.
+      #
+      # `GetInputList` returns every input, not only the audible ones: image,
+      # color, and silent browser sources are all in there, and OBS answers a
+      # mute or volume read on them with "The specified input does not support
+      # audio." Letting that escape fails the whole snapshot, which the
+      # supervisor reads as a lost connection — so a single non-audio source in
+      # the scene collection put the daemon in an endless reconnect loop and
+      # left it permanently unusable.
+      #
+      # Any per-input read failure is treated the same way. An input OBS will
+      # not describe is one obsctl cannot control, and dropping it from the
+      # audio matrix is always better than dropping the OBS connection.
+      private def audio_state_for(name : String) : State::AudioState?
+        configured = @config.audio.inputs.find { |input| input.name == name }
+        muted = input_muted(name)
+        volume = input_volume(name)
+        State::AudioState.new(
+          name: name,
+          alias: configured.try(&.alias),
+          shortcut: configured.try(&.shortcut),
+          muted: muted,
+          volume_mul: volume[:mul],
+          volume_db: volume[:db],
+          volume_percent: volume[:percent]
+        )
+      rescue Domain::ObsRequestFailed
+        nil
       end
 
       # Fetches a full state snapshot for publication to local IPC clients.
@@ -330,20 +349,7 @@ module Obsctl
             hidden: configured.try(&.hidden) || false
           )
         end
-        audio = input_names.map do |name|
-          configured = @config.audio.inputs.find { |input| input.name == name }
-          muted = input_muted(name)
-          volume = input_volume(name)
-          State::AudioState.new(
-            name: name,
-            alias: configured.try(&.alias),
-            shortcut: configured.try(&.shortcut),
-            muted: muted,
-            volume_mul: volume[:mul],
-            volume_db: volume[:db],
-            volume_percent: volume[:percent]
-          )
-        end
+        audio = input_names.compact_map { |name| audio_state_for(name) }
         profile_data = profiles
         collection_data = scene_collections
         output = output_details

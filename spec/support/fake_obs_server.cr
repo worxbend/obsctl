@@ -2,16 +2,27 @@ require "http/server"
 require "http/web_socket"
 require "json"
 require "../../src/obsctl/config/config"
+require "../../src/obsctl/obs/protocol/event_subscription"
 
 module Obsctl
   module SpecSupport
     class FakeObsServer
+      # `audio: false` models an input with no audio track — an image, colour,
+      # or silent browser source. `GetInputList` still returns it, but OBS
+      # refuses to report its mute or volume.
       record AudioInput,
         name : String,
         kind : String = "input",
         muted : Bool = false,
         volume_mul : Float64 = 1.0,
-        volume_db : Float64 = 0.0
+        volume_db : Float64 = 0.0,
+        audio : Bool = true
+
+      # Verbatim from obs-websocket 5.x: `RequestStatus::InvalidResourceState`
+      # and the comment it returns for a mute or volume read on an input with
+      # no audio track.
+      AUDIO_UNSUPPORTED_CODE    = 604
+      AUDIO_UNSUPPORTED_COMMENT = "The specified input does not support audio."
 
       getter host : String
       getter port : Int32
@@ -35,6 +46,11 @@ module Obsctl
       @closed_websocket_connection_notifications = Channel(Int64).new(16)
       @connection_or_identify_notifications = Channel(String).new(16)
       @websockets = [] of HTTP::WebSocket
+      # Real obs-websocket delivers an event only to clients whose Identify
+      # subscribed to its category, so the fake filters the same way. Without
+      # that, a spec proves a handler runs without proving the daemon ever
+      # receives the event.
+      @event_subscriptions = {} of HTTP::WebSocket => Int64
 
       def initialize(
         @scenes : Array(String) = ["Main Camera", "Screen Share", "BRB"],
@@ -284,12 +300,42 @@ module Obsctl
 
       def emit_current_scene_changed(scene_name : String) : Nil
         @mutex.synchronize { @current_scene = scene_name if @scenes.includes?(scene_name) }
-        broadcast_event("CurrentProgramSceneChanged", {"sceneName" => scene_name})
+        broadcast_event("CurrentProgramSceneChanged", {"sceneName" => scene_name}, OBS::Protocol::EventSubscription::SCENES)
       end
 
       def emit_input_mute_changed(input_name : String, muted : Bool) : Nil
         @mutex.synchronize { update_input(input_name, muted: muted) }
-        broadcast_event("InputMuteStateChanged", {"inputName" => input_name, "inputMuted" => muted})
+        broadcast_event("InputMuteStateChanged", {"inputName" => input_name, "inputMuted" => muted}, OBS::Protocol::EventSubscription::INPUTS)
+      end
+
+      # Streaming toggled outside obsctl, as the OBS UI or another client would
+      # do it: OBS's own state moves and the event follows.
+      def emit_stream_state_changed(active : Bool) : Nil
+        @mutex.synchronize { @streaming = active }
+        broadcast_event(
+          "StreamStateChanged",
+          {"outputActive" => active, "outputState" => active ? "OBS_WEBSOCKET_OUTPUT_STARTED" : "OBS_WEBSOCKET_OUTPUT_STOPPED"},
+          OBS::Protocol::EventSubscription::OUTPUTS
+        )
+      end
+
+      def emit_record_state_changed(active : Bool) : Nil
+        @mutex.synchronize { @recording = active }
+        broadcast_event(
+          "RecordStateChanged",
+          {"outputActive" => active, "outputState" => active ? "OBS_WEBSOCKET_OUTPUT_STARTED" : "OBS_WEBSOCKET_OUTPUT_STOPPED"},
+          OBS::Protocol::EventSubscription::OUTPUTS
+        )
+      end
+
+      # Moves OBS's output state without announcing it, standing in for an
+      # event obsctl never gets: a dropped frame, or an OBS build that does not
+      # send one. Only the periodic telemetry poll can notice this.
+      def set_output_state(streaming : Bool? = nil, recording : Bool? = nil) : Nil
+        @mutex.synchronize do
+          streaming.try { |value| @streaming = value }
+          recording.try { |value| @recording = value }
+        end
       end
 
       def emit_raw_frame(frame : String) : Nil
@@ -312,6 +358,7 @@ module Obsctl
           websocket.on_close do
             @mutex.synchronize do
               @websockets.delete(websocket)
+              @event_subscriptions.delete(websocket)
               @close_count += 1
               @closed_websocket_connection_ids << connection_id
             end
@@ -332,6 +379,9 @@ module Obsctl
           @mutex.synchronize do
             @identify_data = identify
             @identify_count += 1
+            # obs-websocket defaults to every non-high-volume category when a
+            # client omits the field.
+            @event_subscriptions[websocket] = identify["eventSubscriptions"]?.try(&.as_i64?) || OBS::Protocol::EventSubscription::ALL.to_i64
           end
           notify_identify(identify)
           send_frame(websocket, identified_frame)
@@ -474,7 +524,7 @@ module Obsctl
         end
       end
 
-      private def broadcast_event(event_type : String, event_data) : Nil
+      private def broadcast_event(event_type : String, event_data, category : Int32) : Nil
         frame = JSON.build do |json|
           json.object do
             json.field "op", 5
@@ -487,7 +537,9 @@ module Obsctl
           end
         end
 
-        sockets = @mutex.synchronize { @websockets.dup }
+        sockets = @mutex.synchronize do
+          @websockets.select { |websocket| (@event_subscriptions[websocket]? || 0_i64) & category != 0 }
+        end
         sockets.each do |websocket|
           send_frame(websocket, frame)
         rescue
@@ -519,6 +571,7 @@ module Obsctl
         data = request["requestData"]?
 
         result = true
+        code = nil.as(Int32?)
         comment = nil
         response_data = nil
 
@@ -545,7 +598,13 @@ module Obsctl
             response_data = input_list_data
           when "GetInputMute"
             if input = find_input(data)
-              response_data = JSON.parse({"inputMuted" => input.muted}.to_json)
+              if input.audio
+                response_data = JSON.parse({"inputMuted" => input.muted}.to_json)
+              else
+                result = false
+                code = AUDIO_UNSUPPORTED_CODE
+                comment = AUDIO_UNSUPPORTED_COMMENT
+              end
             else
               result = false
               comment = "input not found"
@@ -566,10 +625,16 @@ module Obsctl
             end
           when "GetInputVolume"
             if input = find_input(data)
-              response_data = JSON.parse({
-                "inputVolumeMul" => input.volume_mul,
-                "inputVolumeDb"  => input.volume_db,
-              }.to_json)
+              if input.audio
+                response_data = JSON.parse({
+                  "inputVolumeMul" => input.volume_mul,
+                  "inputVolumeDb"  => input.volume_db,
+                }.to_json)
+              else
+                result = false
+                code = AUDIO_UNSUPPORTED_CODE
+                comment = AUDIO_UNSUPPORTED_COMMENT
+              end
             else
               result = false
               comment = "input not found"
@@ -671,7 +736,7 @@ module Obsctl
                 json.field "requestStatus" do
                   json.object do
                     json.field "result", result
-                    json.field "code", result ? 100 : 600
+                    json.field "code", code || (result ? 100 : 600)
                     json.field "comment", comment if comment
                   end
                 end
@@ -717,7 +782,8 @@ module Obsctl
             input.kind,
             muted.nil? ? input.muted : muted,
             volume_mul || input.volume_mul,
-            input.volume_db
+            input.volume_db,
+            input.audio
           )
         end
       end

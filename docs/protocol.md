@@ -294,6 +294,10 @@ The client follows obs-websocket 5.x ordering:
 6. Match `RequestResponse` opcode `7` by `requestId`.
 7. Consume `Event` opcode `5` for realtime updates.
 
-Server mode sends an explicit Identify `eventSubscriptions` mask for the OBS event categories it currently consumes: `General`, `Scenes`, and `Inputs`. High-volume events such as input volume meters are not subscribed by default.
+Server mode sends an explicit Identify `eventSubscriptions` mask for the OBS event categories it currently consumes: `General`, `Config`, `Scenes`, `Inputs`, and `Outputs`. High-volume events such as input volume meters and scene item transforms are not subscribed by default.
+
+The mask must cover every category the supervisor handles an event from, because obs-websocket delivers an event only to clients subscribed to its category. `Outputs` carries `StreamStateChanged` and `RecordStateChanged`; `Config` carries the profile and scene-collection events. A missing bit does not fail a build — it silently stops the matching handler from ever running, so a stream started from the OBS UI or another client would never reach daemon state. `spec/obsctl/server/obs_supervisor_spec.cr` enforces the correspondence.
+
+Output state is additionally reconciled from the periodic `GetStreamStatus`/`GetRecordStatus` telemetry poll, so it converges within one poll interval even if an event is never delivered.
 
 Authentication uses `password + salt`, SHA256, Base64, then `base64_secret + challenge`, SHA256, Base64. Passwords and generated authentication strings must not be logged.

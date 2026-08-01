@@ -148,19 +148,30 @@ module Obsctl
         publish_snapshot(next_snapshot) if next_snapshot
       end
 
-      # Updates only periodically polled performance/output telemetry while
-      # preserving authoritative scene, audio, profile, and output state.
+      # Updates periodically polled performance and output telemetry while
+      # preserving authoritative scene, audio, and profile state.
+      #
+      # `streaming`/`recording` are the poll's view of output state. They are
+      # accepted here so a stream or recording toggled outside obsctl converges
+      # even if its `StreamStateChanged` event never arrives; nil leaves the
+      # cached value alone.
       def update_stats(
         stats : OBS::State::ObsStats,
         stream_bitrate_kbps : Float64?,
         stream_duration_ms : Int64?,
         record_duration_ms : Int64?,
+        streaming : Bool? = nil,
+        recording : Bool? = nil,
       ) : Nil
         next_snapshot = @lock.synchronize do
           current = @snapshot
           return unless current.connected
           next_snap = current.copy_with(
             stats: stats,
+            output: OBS::State::OutputState.new(
+              streaming: streaming.nil? ? current.output.streaming : streaming,
+              recording: recording.nil? ? current.output.recording : recording
+            ),
             stream_bitrate_kbps: stream_bitrate_kbps,
             stream_duration_ms: stream_duration_ms,
             record_duration_ms: record_duration_ms,

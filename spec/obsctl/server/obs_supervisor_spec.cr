@@ -84,6 +84,52 @@ private class FailedAttemptBeforeDelayStateStore < Obsctl::Server::StateStore
   end
 end
 
+# The obs-websocket category each event the supervisor handles is delivered
+# under. An event whose category is missing from the subscription mask is never
+# sent, so its handler arm silently never runs.
+private OBS_EVENT_CATEGORIES = {
+  "CurrentProgramSceneChanged"    => Obsctl::OBS::Protocol::EventSubscription::SCENES,
+  "SceneListChanged"              => Obsctl::OBS::Protocol::EventSubscription::SCENES,
+  "SceneCreated"                  => Obsctl::OBS::Protocol::EventSubscription::SCENES,
+  "SceneRemoved"                  => Obsctl::OBS::Protocol::EventSubscription::SCENES,
+  "SceneNameChanged"              => Obsctl::OBS::Protocol::EventSubscription::SCENES,
+  "InputMuteStateChanged"         => Obsctl::OBS::Protocol::EventSubscription::INPUTS,
+  "InputVolumeChanged"            => Obsctl::OBS::Protocol::EventSubscription::INPUTS,
+  "InputCreated"                  => Obsctl::OBS::Protocol::EventSubscription::INPUTS,
+  "InputRemoved"                  => Obsctl::OBS::Protocol::EventSubscription::INPUTS,
+  "InputNameChanged"              => Obsctl::OBS::Protocol::EventSubscription::INPUTS,
+  "StreamStateChanged"            => Obsctl::OBS::Protocol::EventSubscription::OUTPUTS,
+  "RecordStateChanged"            => Obsctl::OBS::Protocol::EventSubscription::OUTPUTS,
+  "CurrentProfileChanged"         => Obsctl::OBS::Protocol::EventSubscription::CONFIG,
+  "ProfileListChanged"            => Obsctl::OBS::Protocol::EventSubscription::CONFIG,
+  "CurrentSceneCollectionChanged" => Obsctl::OBS::Protocol::EventSubscription::CONFIG,
+  "SceneCollectionListChanged"    => Obsctl::OBS::Protocol::EventSubscription::CONFIG,
+}
+
+private def handled_event_types : Array(String)
+  source = File.read(File.expand_path("../../../src/obsctl/server/obs_supervisor.cr", __DIR__))
+  body = source[/private def apply_event.*?\n      rescue /m]? || raise "could not locate apply_event"
+  # `^` is not line-anchored in Crystal regexes, so match the newline itself.
+  body.scan(/\n\s*when (.+)/).flat_map do |match|
+    match[1].scan(/"([A-Za-z]+)"/).map(&.[1])
+  end.uniq!
+end
+
+describe "OBS event subscription coverage" do
+  it "subscribes to every category the supervisor handles an event from" do
+    handled = handled_event_types
+    handled.should_not be_empty
+
+    unknown = handled.reject { |event_type| OBS_EVENT_CATEGORIES.has_key?(event_type) }
+    unknown.should eq([] of String)
+
+    unsubscribed = handled.reject do |event_type|
+      Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT & OBS_EVENT_CATEGORIES[event_type] != 0
+    end
+    unsubscribed.should eq([] of String)
+  end
+end
+
 describe Obsctl::Server::ObsSupervisor do
   it "keeps a challenged OBS connection open when no password is configured" do
     previous = ENV.delete("OBSCTL_SPEC_MISSING_PASSWORD")
@@ -132,6 +178,87 @@ describe Obsctl::Server::ObsSupervisor do
     snapshot.stream_duration_ms.should eq(12_000_i64)
     snapshot.record_duration_ms.should eq(3_000_i64)
     updates.any? { |payload| !payload["stream_bitrate_kbps"]?.try(&.raw.nil?) }.should be_true
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "stays connected when a scene contains an input with no audio" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new(
+      inputs: [
+        Obsctl::SpecSupport::FakeObsServer::AudioInput.new("Mic/Aux", "input", false, 0.7, -3.0),
+        Obsctl::SpecSupport::FakeObsServer::AudioInput.new("Overlay", "image_source", audio: false),
+      ]
+    ).start
+    logs = [] of JSON::Any
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(
+      obs.config, state, nil, ->(payload : JSON::Any) { logs << payload; nil }
+    )
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    # The reported failure: GetInputMute on a non-audio input failed the whole
+    # snapshot, the supervisor read that as a lost connection, and the daemon
+    # reconnected forever without ever becoming usable.
+    obs.assert_no_identify_or_connection_attempt(300.milliseconds)
+    obs.connection_attempt_count.should eq(1)
+    state.snapshot.connected.should be_true
+    state.snapshot.audio_inputs.map(&.name).should eq(["Mic/Aux"])
+    logs.none? { |entry| entry["code"]?.try(&.as_s?) == "obs_disconnected" }.should be_true
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "applies stream and record state changed events without waiting for a poll" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    state = Obsctl::Server::StateStore.new
+    # An interval long enough that only the event path can move this state,
+    # isolating the subscription fix from the poll that also reconciles it.
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state, stats_poll_interval: 1.hour)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+    state.snapshot.output.streaming.should be_false
+
+    obs.emit_stream_state_changed(true)
+    wait_for_supervisor { state.snapshot.output.streaming == true }
+
+    obs.emit_record_state_changed(true)
+    wait_for_supervisor { state.snapshot.output.recording == true }
+
+    obs.emit_stream_state_changed(false)
+    wait_for_supervisor { state.snapshot.output.streaming == false }
+    state.snapshot.output.recording.should be_true
+  ensure
+    supervisor.try(&.stop)
+    obs.try(&.stop)
+    wait_for_supervisor { !supervisor.alive? } if supervisor
+  end
+
+  it "reconciles output state from the telemetry poll when no event arrives" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    state = Obsctl::Server::StateStore.new
+    supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state, stats_poll_interval: 20.milliseconds)
+
+    supervisor.start
+    obs.next_identify(2.seconds).should_not be_nil
+    wait_for_supervisor { state.snapshot.connected }
+
+    # Moves OBS's state without announcing it, standing in for an event obsctl
+    # never receives.
+    obs.set_output_state(streaming: true, recording: true)
+    wait_for_supervisor { state.snapshot.output.streaming == true }
+    state.snapshot.output.recording.should be_true
+
+    obs.set_output_state(streaming: false)
+    wait_for_supervisor { state.snapshot.output.streaming == false }
   ensure
     supervisor.try(&.stop)
     obs.try(&.stop)

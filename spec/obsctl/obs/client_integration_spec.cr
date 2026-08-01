@@ -44,6 +44,35 @@ describe Obsctl::OBS::Client do
     end
   end
 
+  it "builds a snapshot around inputs that have no audio to report" do
+    server = Obsctl::SpecSupport::FakeObsServer.new(
+      inputs: [
+        Obsctl::SpecSupport::FakeObsServer::AudioInput.new("Mic/Aux", "input", false, 0.7, -3.0),
+        # An image or colour source: listed by GetInputList, but OBS refuses to
+        # report its mute or volume.
+        Obsctl::SpecSupport::FakeObsServer::AudioInput.new("Overlay", "image_source", audio: false),
+        Obsctl::SpecSupport::FakeObsServer::AudioInput.new("Desktop Audio", "output", true, 0.4, -8.0),
+      ]
+    ).start
+    client = Obsctl::OBS::Client.new(server.config)
+
+    begin
+      client.connect
+
+      # The whole snapshot used to fail here, which the supervisor read as a
+      # lost connection and retried forever.
+      snapshot = client.snapshot
+      snapshot.connected.should be_true
+      snapshot.audio_inputs.map(&.name).should eq(["Mic/Aux", "Desktop Audio"])
+      snapshot.audio_inputs[0].volume_percent.should eq(70)
+
+      client.audio_snapshot.map(&.name).should eq(["Mic/Aux", "Desktop Audio"])
+    ensure
+      client.close
+      server.stop
+    end
+  end
+
   it "queries and switches profiles and scene collections" do
     server = Obsctl::SpecSupport::FakeObsServer.new.start
     client = Obsctl::OBS::Client.new(server.config)

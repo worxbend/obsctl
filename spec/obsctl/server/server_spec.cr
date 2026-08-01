@@ -367,6 +367,85 @@ describe Obsctl::Server::Server do
     File.delete(path) if path && File.exists?(path)
   end
 
+  it "reflects a stream started outside obsctl in daemon state" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    path = temp_socket_path
+    server = Obsctl::Server::Server.new(obs.config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    until File.exists?(path)
+      Fiber.yield
+    end
+
+    status_client = Obsctl::IPC::UnixClient.new(path)
+    wait_for_obs_connected(status_client)
+
+    state = subscribe(path, ["state"], "req-state")
+    initial = state.read_message.as(Obsctl::IPC::Event)
+    initial.data.not_nil!["output"]["streaming"].as_bool.should be_false
+
+    # The OBS UI, or any other obs-websocket client, starting the stream.
+    obs.emit_stream_state_changed(true)
+
+    streaming = nil.as(JSON::Any?)
+    5.times do
+      event = read_ipc_message(state).as(Obsctl::IPC::Event)
+      payload = event.data.not_nil!
+      if payload["output"]["streaming"].as_bool
+        streaming = payload
+        break
+      end
+    end
+
+    streaming.should_not be_nil
+    # And a client asking directly sees the same thing, not just subscribers.
+    status = wait_for_obs_snapshot(status_client) { |payload| payload["output"]["streaming"].as_bool }
+    status["output"]["streaming"].as_bool.should be_true
+  ensure
+    state.try(&.close)
+    server.try(&.stop)
+    obs.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
+  it "converges on OBS output state even when no event announces it" do
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    path = temp_socket_path
+    server = Obsctl::Server::Server.new(obs.config, "/tmp/obsctl-server-spec.yml", socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    until File.exists?(path)
+      Fiber.yield
+    end
+
+    status_client = Obsctl::IPC::UnixClient.new(path)
+    wait_for_obs_connected(status_client)
+
+    # No event: the telemetry poll is the only thing that can notice.
+    obs.set_output_state(streaming: true)
+
+    status = wait_for_obs_snapshot(status_client, timeout: 10.seconds) do |payload|
+      payload["output"]["streaming"].as_bool
+    end
+    status["output"]["streaming"].as_bool.should be_true
+  ensure
+    server.try(&.stop)
+    obs.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
   it "broadcasts OBS events to events subscribers and refreshes state subscribers" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     path = temp_socket_path
@@ -1015,6 +1094,30 @@ private def wait_for_obs_status(client : Obsctl::IPC::UnixClient, connected : Bo
   end
 
   raise "server did not report OBS connected=#{connected}"
+end
+
+private def wait_for_obs_snapshot(
+  client : Obsctl::IPC::UnixClient,
+  timeout : Time::Span = 3.seconds,
+  & : JSON::Any -> Bool
+) : JSON::Any
+  deadline = Time.instant + timeout
+
+  loop do
+    raise "timed out waiting for matching OBS snapshot" if Time.instant >= deadline
+
+    response = client.request(
+      Obsctl::IPC::Request.new(
+        "req-obs-snapshot",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("get_obs_status")
+      )
+    )
+    response.ok.should be_true
+    status = response.result.not_nil!
+    return status if yield status
+    sleep 50.milliseconds
+  end
 end
 
 private def wait_for_socket(path : String) : Nil

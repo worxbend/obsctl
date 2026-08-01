@@ -9,9 +9,28 @@ describe Obsctl::OBS::Protocol::EventSubscription do
 
     mask.should eq(
       Obsctl::OBS::Protocol::EventSubscription::GENERAL |
+      Obsctl::OBS::Protocol::EventSubscription::CONFIG |
       Obsctl::OBS::Protocol::EventSubscription::SCENES |
-      Obsctl::OBS::Protocol::EventSubscription::INPUTS
+      Obsctl::OBS::Protocol::EventSubscription::INPUTS |
+      Obsctl::OBS::Protocol::EventSubscription::OUTPUTS
     )
+  end
+
+  it "subscribes to the output events that carry stream and record state" do
+    mask = Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT
+
+    # Dropping this bit does not break a build or a handler; it just stops
+    # StreamStateChanged from ever arriving, so a stream started in the OBS UI
+    # never reaches the dashboard.
+    (mask & Obsctl::OBS::Protocol::EventSubscription::OUTPUTS).should_not eq(0)
+    (mask & Obsctl::OBS::Protocol::EventSubscription::CONFIG).should_not eq(0)
+  end
+
+  it "leaves the high-volume categories out of the server mask" do
+    mask = Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT
+
+    (mask & Obsctl::OBS::Protocol::EventSubscription::INPUT_VOLUME_METERS).should eq(0)
+    (mask & Obsctl::OBS::Protocol::EventSubscription::SCENE_ITEM_TRANSFORM_CHANGED).should eq(0)
   end
 end
 
