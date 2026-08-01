@@ -18,7 +18,7 @@ module SiteFrames
   SHOWCASED = %w[ember slate tokyo-night catppuccin-mocha gruvbox synthwave-84 matrix github-light]
 
   WIDTH  = 118
-  HEIGHT =  36
+  HEIGHT =  30
 
   # The 16 ANSI colours, for the one built-in theme that uses indexed colours.
   INDEXED = {
@@ -176,7 +176,10 @@ module SiteFrames
         end
 
         flush.call
-        io << "</span>\n"
+        # No newline: `.row` is a block element and already breaks the line.
+        # A literal newline here lands inside `white-space: pre` and renders as
+        # a second, blank line under every row.
+        io << "</span>"
       end
     end
   end

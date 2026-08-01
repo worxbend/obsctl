@@ -197,15 +197,15 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
 
 .hero { padding-top: clamp(2.75rem, 6vw, 5rem); padding-bottom: clamp(2rem, 4vw, 3rem); }
 
+/* The frame is 118 columns wide. It gets the full measure rather than a side
+   column, so it stays legible instead of being scaled down to fit beside the
+   copy. */
 .hero__grid {
   display: grid;
-  gap: clamp(1.75rem, 4vw, 3.5rem);
+  gap: clamp(1.75rem, 4vw, 2.75rem);
   grid-template-columns: minmax(0, 1fr);
-  align-items: end;
 }
-@media (min-width: 1080px) {
-  .hero__grid { grid-template-columns: minmax(0, 27rem) minmax(0, 1fr); }
-}
+.hero__intro { max-width: 54rem; }
 
 .hero h1 {
   font-size: clamp(3.1rem, 9vw, 5.1rem);
@@ -277,14 +277,18 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
 .frame {
   display: block;
   font-family: var(--mono);
-  font-size: clamp(6.2px, 0.79vw, 11.4px);
-  line-height: 1.34;
+  font-size: clamp(7px, 1.05vw, 15px);
+  /* Exactly 1: box-drawing glyphs fill their em box, so any leading at all
+     breaks the vertical strokes into dashes and opens gaps between rows. */
+  line-height: 1;
   white-space: pre;
   margin: 0;
   width: max-content;
   min-width: 100%;
   tab-size: 1;
 }
+/* Each row is its own line. The generator emits no newline between rows,
+   because one would land inside `white-space: pre` and double the spacing. */
 .frame .row { display: block; }
 
 /* Page-load: the console paints itself, top to bottom, once. */
@@ -518,7 +522,7 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
   <!-- The thesis: the actual product, painting itself on load. -->
   <section class="wrap hero">
     <div class="hero__grid">
-      <div>
+      <div class="hero__intro">
         <h1>obsctl<span class="dim">.</span></h1>
         <p class="hero__tag">Your OBS control room — right inside the terminal.</p>
         <p class="hero__body">
@@ -540,7 +544,7 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
             <i style="background:var(--warning)"></i>
             <i style="background:var(--success)"></i>
           </span>
-          <span>obsctl — broadcast command center</span>
+          <span>obsctl · $XDG_RUNTIME_DIR/obsctl/obsctl.sock</span>
         </figcaption>
         <div class="term__scroll">
           <pre class="frame frame--boot" id="hero-frame" aria-label="The obsctl terminal dashboard during a live stream"></pre>
