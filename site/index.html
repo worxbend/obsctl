@@ -291,6 +291,20 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
    because one would land inside `white-space: pre` and double the spacing. */
 .frame .row { display: block; }
 
+/* A run holding non-ASCII glyphs. Its width is set inline to the number of
+   terminal cells it occupies, so an emoji the browser draws at 1.4 advances
+   still consumes its true 2 columns and the row stays on the grid. */
+.frame .g {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+  vertical-align: top;
+  white-space: pre;
+  /* Deliberately not `overflow: hidden`: the fixed width already pins the
+     layout, and emoji ink routinely exceeds the em box, so clipping would
+     shave their tops and bottoms for no benefit. */
+}
+
 /* Page-load: the console paints itself, top to bottom, once. */
 .frame--boot .row {
   opacity: 0;

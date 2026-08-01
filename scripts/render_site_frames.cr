@@ -145,37 +145,67 @@ module SiteFrames
 
   # Serialises a rendered buffer as HTML, collapsing runs of identically styled
   # cells into one span so the payload stays small.
+  #
+  # A terminal cell is a fixed box; a browser glyph is not. An emoji occupies
+  # exactly two cells here but renders at whatever advance the colour-emoji
+  # font happens to use, and `⏱` is one cell but is often given emoji
+  # presentation at roughly two. Either way the rest of the row slides out of
+  # the character grid and the panels stop lining up with each other.
+  #
+  # So every run containing a non-ASCII glyph is emitted as an inline-block of
+  # exactly as many `ch` as it occupies cells. ASCII needs no such box: in a
+  # monospace face it is already one advance per character.
   private def to_html(buffer : CryTUI::Buffer) : String
     String.build do |io|
       (0...buffer.area.height).each do |row|
         io << "<span class=\"row\">"
         run = String::Builder.new
         run_css = nil.as(String?)
+        run_ascii = true
+        run_cells = 0
+        emitted = 0
 
         flush = -> do
           text = run.to_s
           unless text.empty?
-            if css = run_css
-              io << "<span style=\"" << css << "\">" << escape(text) << "</span>"
+            style = run_css
+            if run_ascii
+              if style
+                io << "<span style=\"" << style << "\">" << escape(text) << "</span>"
+              else
+                io << escape(text)
+              end
             else
-              io << escape(text)
+              io << "<span class=\"g\" style=\"width:" << run_cells << "ch"
+              io << ';' << style if style
+              io << "\">" << escape(text) << "</span>"
             end
+            emitted += run_cells
           end
           run = String::Builder.new
+          run_cells = 0
         end
 
         (0...buffer.area.width).each do |column|
           cell = buffer[buffer.area.x + column, buffer.area.y + row]
           next if cell.continuation?
+
+          symbol = cell.symbol.empty? ? " " : cell.symbol
           css = cell_css(cell)
-          if css != run_css
-            flush.call
-            run_css = css
-          end
-          run << (cell.symbol.empty? ? " " : cell.symbol)
+          ascii = symbol.ascii_only?
+          flush.call if css != run_css || ascii != run_ascii
+          run_css = css
+          run_ascii = ascii
+          run_cells += {CryTUI::TextWidth.width(symbol), 1}.max
+          run << symbol
         end
 
         flush.call
+
+        # The grid is the whole point: if a row does not declare exactly the
+        # buffer's width, something above is wrong and the panels would drift.
+        raise "row #{row} spans #{emitted} cells, expected #{buffer.area.width}" unless emitted == buffer.area.width
+
         # No newline: `.row` is a block element and already breaks the line.
         # A literal newline here lands inside `white-space: pre` and renders as
         # a second, blank line under every row.
