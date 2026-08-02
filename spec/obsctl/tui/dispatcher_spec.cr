@@ -193,3 +193,43 @@ describe "pointer actions" do
     sent.should be_empty
   end
 end
+
+describe "pointer gain" do
+  it "adjusts the input under the pointer and debounces one OBS command" do
+    model, sent, dispatcher = dispatcher_fixture
+    model.audio_cursor = 0
+
+    # A wheel spun over the second input, which is not the selected one.
+    3.times do
+      dispatcher.handle(Obsctl::TUI::Action.new(
+        Obsctl::TUI::ActionKind::PointerVolumeUp,
+        panel: Obsctl::TUI::FocusPanel::Audio,
+        index: 1
+      ))
+    end
+
+    model.audio_cursor.should eq(1)
+    # Redrawn immediately from 20%, three steps of five.
+    model.audio_inputs[1].volume_percent.should eq(35)
+
+    wait_for_volume_command(sent)
+    volume = sent.select(&.name.==("set_volume"))
+    volume.size.should eq(1)
+    volume.first.target.should eq("Desktop")
+    volume.first.percent.should eq(35)
+  end
+
+  it "stops at the ends of the range" do
+    model, _, dispatcher = dispatcher_fixture
+
+    25.times do
+      dispatcher.handle(Obsctl::TUI::Action.new(
+        Obsctl::TUI::ActionKind::PointerVolumeDown,
+        panel: Obsctl::TUI::FocusPanel::Audio,
+        index: 0
+      ))
+    end
+
+    model.audio_inputs[0].volume_percent.should eq(0)
+  end
+end

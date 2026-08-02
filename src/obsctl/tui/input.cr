@@ -40,6 +40,8 @@ module Obsctl
       PointerFocus
       PointerActivate
       PointerToggleMute
+      PointerVolumeUp
+      PointerVolumeDown
     end
 
     struct Action
@@ -101,7 +103,20 @@ module Obsctl
         return unless target = HitTest.resolve(model, area, event.column, event.row)
 
         if event.scroll?
-          kind = event.kind.scroll_up? ? ActionKind::NavigateUp : ActionKind::NavigateDown
+          up = event.kind.scroll_up?
+
+          # Over the audio matrix the wheel is a gain control, because that is
+          # what a wheel does on a mixer. Holding shift falls back to moving
+          # through the list, so inputs scrolled out of view are still
+          # reachable without touching the keyboard.
+          if target.panel.audio? && !event.modifiers.shift?
+            index = target.index
+            return Action.new(ActionKind::PointerFocus, panel: target.panel) unless index
+            kind = up ? ActionKind::PointerVolumeUp : ActionKind::PointerVolumeDown
+            return Action.new(kind, panel: target.panel, index: index)
+          end
+
+          kind = up ? ActionKind::NavigateUp : ActionKind::NavigateDown
           # Scrolling over a panel moves within it, so point at it first.
           return Action.new(kind, panel: target.panel, index: nil) if target.panel == model.focus
           return Action.new(ActionKind::PointerFocus, panel: target.panel, index: nil)

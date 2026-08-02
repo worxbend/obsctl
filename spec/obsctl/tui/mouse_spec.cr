@@ -36,12 +36,12 @@ private def click(model, column, row, button = CryTUI::MouseButton::Left)
   )
 end
 
-private def wheel(model, column, row, up : Bool)
+private def wheel(model, column, row, up : Bool, modifiers = CryTUI::KeyModifiers::None)
   Obsctl::TUI::Input.handle_mouse(
     model,
     CryTUI::MouseEvent.new(
       up ? CryTUI::MouseKind::ScrollUp : CryTUI::MouseKind::ScrollDown,
-      CryTUI::MouseButton::None, column, row
+      CryTUI::MouseButton::None, column, row, modifiers
     ),
     AREA
   )
@@ -183,6 +183,38 @@ describe "mouse input" do
     model.focus = Obsctl::TUI::FocusPanel::Profiles
     wheel(model, column, row, false).not_nil!.kind.should eq(Obsctl::TUI::ActionKind::NavigateDown)
     wheel(model, column, row, true).not_nil!.kind.should eq(Obsctl::TUI::ActionKind::NavigateUp)
+  end
+
+  it "treats the wheel as a gain control over the audio matrix" do
+    model = mouse_model
+    areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
+    second_row = first_item_row(areas.audio) + 1
+
+    # No selection needed first: the wheel acts on the input it is over.
+    up = wheel(model, areas.audio.x + 8, second_row, true).not_nil!
+    up.kind.should eq(Obsctl::TUI::ActionKind::PointerVolumeUp)
+    up.index.should eq(1)
+
+    down = wheel(model, areas.audio.x + 8, second_row, false).not_nil!
+    down.kind.should eq(Obsctl::TUI::ActionKind::PointerVolumeDown)
+    down.index.should eq(1)
+  end
+
+  it "still moves through the audio list when shift is held" do
+    model = mouse_model
+    model.focus = Obsctl::TUI::FocusPanel::Audio
+    areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
+
+    action = wheel(model, areas.audio.x + 8, first_item_row(areas.audio), false, CryTUI::KeyModifiers::Shift).not_nil!
+    action.kind.should eq(Obsctl::TUI::ActionKind::NavigateDown)
+  end
+
+  it "does not change gain when the wheel is over empty audio space" do
+    model = mouse_model
+    areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
+
+    action = wheel(model, areas.audio.x + 8, areas.audio.bottom - 2, true).not_nil!
+    action.kind.should eq(Obsctl::TUI::ActionKind::PointerFocus)
   end
 
   it "does nothing for buttons and releases the dashboard does not bind" do

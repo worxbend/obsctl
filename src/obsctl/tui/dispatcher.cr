@@ -125,6 +125,14 @@ module Obsctl
         end
       end
 
+      POINTER_KINDS = [
+        ActionKind::PointerFocus,
+        ActionKind::PointerActivate,
+        ActionKind::PointerToggleMute,
+        ActionKind::PointerVolumeUp,
+        ActionKind::PointerVolumeDown,
+      ]
+
       # Pointer actions carry the panel and row they were resolved against, so
       # they place focus and the cursor themselves before doing anything. The
       # keyboard equivalents read whatever is focused; these must not, or a
@@ -132,7 +140,7 @@ module Obsctl
       private def pointer_action(action : Action) : ActionOutcome?
         panel = action.panel
         return unless panel
-        return unless action.kind.pointer_focus? || action.kind.pointer_activate? || action.kind.pointer_toggle_mute?
+        return unless POINTER_KINDS.includes?(action.kind)
 
         @model.focus = panel
         if index = action.index
@@ -156,6 +164,12 @@ module Obsctl
           end
         when .pointer_toggle_mute?
           command_action(Action.new(ActionKind::ToggleMute))
+        when .pointer_volume_up?
+          # Through the ordinary volume path, so a spun wheel gets the same
+          # optimistic redraw and debounced OBS command a held arrow key does.
+          navigation_action(Action.new(ActionKind::VolumeUp))
+        when .pointer_volume_down?
+          navigation_action(Action.new(ActionKind::VolumeDown))
         else
           ActionOutcome.new
         end
