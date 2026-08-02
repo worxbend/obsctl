@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
+## [Unreleased]
+
+### Added
+
+- `install.sh`, so obsctl installs in one line:
+
+  ```sh
+  curl -fsSL https://worxbend.github.io/obsctl/install.sh | sh
+  ```
+
+  It resolves the latest tag, downloads the static build for the machine's
+  architecture, and verifies it against the release's `SHA256SUMS.txt` before
+  anything is written — a mismatch installs nothing. The binary is run from the
+  temporary directory before it is moved into place, so a build that cannot
+  execute here never replaces a working one, and the move itself is atomic.
+  `--version` and `--dir` (or `OBSCTL_VERSION` and `OBSCTL_INSTALL_DIR`) pin the
+  release and the destination; the default is `~/.local/bin`, or
+  `/usr/local/bin` when run as root. It needs only curl or wget, tar, and a
+  SHA-256 tool.
+
+  The script is deployed to the microsite from the file in this repository
+  rather than kept as a second copy, and is attached to every release, so
+  `https://github.com/worxbend/obsctl/releases/latest/download/install.sh`
+  serves it too. A spec pins the archive names it asks for to the ones the
+  release workflow packages — the failure mode is a one-liner that 404s for
+  everyone at once.
+
 ## [0.5.0] - 2026-08-02
 
 ### Added

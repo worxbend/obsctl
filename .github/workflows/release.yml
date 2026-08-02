@@ -67,6 +67,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The installer ships as a release asset too, so a pinned install can
+      # fetch the script that matches the tag it is installing.
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -87,5 +92,6 @@ jobs:
           files: |
             dist/obsctl-*.tar.gz
             dist/SHA256SUMS.txt
+            install.sh
           generate_release_notes: true
           fail_on_unmatched_files: true

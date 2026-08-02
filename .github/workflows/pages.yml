@@ -6,6 +6,7 @@ on:
       - master
     paths:
       - "site/**"
+      - "install.sh"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -52,6 +53,12 @@ jobs:
             diff /tmp/frames.committed.js site/frames.js | head -20 >&2
             exit 1
           fi
+
+      # Copied in at deploy time rather than kept as a second copy in the repo,
+      # so `curl .../install.sh` can never serve a script that has drifted from
+      # the one in the tree.
+      - name: Publish the installer alongside the site
+        run: cp install.sh site/install.sh
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

@@ -793,13 +793,28 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
     <div class="split">
       <div class="steps">
         <div>
+          <div class="step__head">One line</div>
+          <p class="lede" style="margin-bottom:.8rem">
+            Fetches the static musl build for your architecture, checks it against the
+            release's <code style="font-family:var(--mono)">SHA256SUMS.txt</code>, and installs it to
+            <code style="font-family:var(--mono)">~/.local/bin</code>. A mismatched checksum installs nothing.
+          </p>
+          <pre class="code"><code><span class="c-prompt">$</span> <span class="c-cmd">curl</span> <span class="c-flag">-fsSL</span> https://worxbend.github.io/obsctl/install.sh | <span class="c-cmd">sh</span></code></pre>
+          <p class="lede" style="margin-top:.8rem;font-size:.9rem">
+            Read it first if you like — it is
+            <a href="https://github.com/worxbend/obsctl/blob/master/install.sh">install.sh</a>
+            in the repository, deployed here from the same file.
+          </p>
+        </div>
+
+        <div>
           <div class="step__head">Prebuilt binary</div>
           <p class="lede" style="margin-bottom:.8rem">
             Static musl builds for <code style="font-family:var(--mono)">linux-amd64</code> and
             <code style="font-family:var(--mono)">linux-arm64</code>, published with
             <code style="font-family:var(--mono)">SHA256SUMS.txt</code> — they do not depend on your glibc.
           </p>
-          <pre class="code"><code><span class="c-prompt">$</span> <span class="c-cmd">tar</span> xzf obsctl-v0.4.0-linux-amd64.tar.gz
+          <pre class="code"><code><span class="c-prompt">$</span> <span class="c-cmd">tar</span> xzf obsctl-v0.5.0-linux-amd64.tar.gz
 <span class="c-prompt">$</span> <span class="c-cmd">install</span> <span class="c-flag">-Dm755</span> obsctl ~/.local/bin/obsctl</code></pre>
         </div>
 

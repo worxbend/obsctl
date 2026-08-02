@@ -15,7 +15,7 @@
 [![obs-websocket](https://img.shields.io/badge/obs--websocket-5.x-302E31?style=flat-square&logo=obsstudio)](https://github.com/obsproject/obs-websocket)
 [![License](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](LICENSE)
 
-[**Visit the site**](https://worxbend.github.io/obsctl/) · [Mirror](https://obs.worxbend.com/) · [Get started](#-quick-start) · [Explore the TUI](#-the-control-room) · [Automate with the CLI](#-cli--automation) · [Read the docs](#-documentation)
+[**Visit the site**](https://worxbend.github.io/obsctl/) · [More worxbend tools](https://obs.worxbend.com/) · [Get started](#-quick-start) · [Explore the TUI](#-the-control-room) · [Automate with the CLI](#-cli--automation) · [Read the docs](#-documentation)
 
 </div>
 
@@ -58,7 +58,36 @@ daemon running as a user service.
 - Crystal **1.21.0+** and Shards when building from source
 - A UTF-8 terminal; a Nerd Font is recommended for the richest icon set
 
-### 1. Build
+### 1. Install
+
+```bash
+curl -fsSL https://worxbend.github.io/obsctl/install.sh | sh
+```
+
+That downloads the static binary for your architecture, checks it against the
+release's `SHA256SUMS.txt`, and installs it to `~/.local/bin` — or
+`/usr/local/bin` when run as root. Nothing is installed if the checksum does
+not match.
+
+Pass options after `sh -s --`:
+
+```bash
+# a specific release, somewhere specific
+curl -fsSL https://worxbend.github.io/obsctl/install.sh | sh -s -- --version v0.5.0 --dir /usr/local/bin
+```
+
+`OBSCTL_VERSION` and `OBSCTL_INSTALL_DIR` do the same thing. The script is also
+attached to every release, so `https://github.com/worxbend/obsctl/releases/latest/download/install.sh`
+fetches it too. Read it before you run it — it is [`install.sh`](install.sh) in
+this repository, and the copy on the site is deployed from it.
+
+Prebuilt static binaries for `linux-amd64` and `linux-arm64`, with
+`SHA256SUMS.txt`, are on the
+[Releases page](https://github.com/worxbend/obsctl/releases) if you would
+rather do it by hand. They are linked against musl, so they do not depend on
+your glibc version.
+
+**Prefer to build it yourself?**
 
 ```bash
 git clone https://github.com/worxbend/obsctl.git
@@ -68,10 +97,7 @@ make release
 install -Dm755 bin/obsctl ~/.local/bin/obsctl
 ```
 
-The release binary is written to `bin/obsctl`. Prebuilt static binaries for
-`linux-amd64` and `linux-arm64`, with `SHA256SUMS.txt`, are published on the
-[Releases page](https://github.com/worxbend/obsctl/releases). They are linked
-against musl, so they do not depend on your glibc version.
+The release binary is written to `bin/obsctl`.
 
 ### 2. Initialize
 
@@ -482,7 +508,8 @@ repositories. See [docs/protocol.md](docs/protocol.md) for the contract model.
 
 | Guide | Contents |
 | --- | --- |
-| [Microsite](https://worxbend.github.io/obsctl/) | Project landing page — also mirrored at <https://obs.worxbend.com/> |
+| [Microsite](https://worxbend.github.io/obsctl/) | Project landing page, and the installer the one-liner fetches |
+| [worxbend tools](https://obs.worxbend.com/) | The sibling streaming utilities this one belongs with |
 | [Commands](docs/commands.md) | Complete CLI/palette grammar, JSON envelopes, errors, and status semantics |
 | [Configuration](docs/config.md) | Connection, reconnect, UI, theme, alias, and persistence settings |
 | [Protocol](docs/protocol.md) | IPC framing, subscriptions, state contracts, and compatibility fixtures |
