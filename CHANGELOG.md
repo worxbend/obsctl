@@ -12,6 +12,14 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Added
 
+- Mouse support in the TUI. Clicking a row focuses and selects it, clicking the
+  selected row activates it, clicking an input's speaker icon toggles its mute,
+  and the wheel moves within the panel under the pointer. The two-step click is
+  deliberate: a stray click cannot cut the program scene. Volume stays on the
+  arrow keys, because the bar under each input is a level meter rather than a
+  fader. CryTUI now parses SGR mouse reports (with an X10 fallback) and asks for
+  tracking on entry, releasing it before it gives back the alternate screen.
+
 - A microsite at <https://worxbend.github.io/obsctl/>, published from `site/`
   by the `Pages` workflow. The terminal frames on it are not screenshots:
   `scripts/render_site_frames.cr` renders the real widget code into a CryTUI

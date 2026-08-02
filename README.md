@@ -163,6 +163,21 @@ logs.
 | `r` / `D` / `R` | Reload config, dump config, or reconnect OBS |
 | `q` or `Ctrl-C` | Quit |
 
+### Mouse
+
+The dashboard also takes mouse input where the terminal supports it.
+
+| Action | Result |
+| --- | --- |
+| Click a row | Focus that panel and select the row |
+| Click the selected row | Activate it — switch scene, profile, or collection |
+| Click the speaker icon | Toggle that input's mute |
+| Wheel over a panel | Move within it |
+
+Clicking a row selects it and clicking it again activates it, so a stray click
+cannot cut the program scene mid-broadcast. Volume stays on `←`/`→`: the bar
+under each input is a level meter, not a fader.
+
 Rapid volume keypresses update the display immediately and coalesce into one
 OBS command 120 ms after input stops. Terminal shrinking and expansion trigger
 a full safe repaint; normal frames return to cell-level incremental updates.

@@ -47,7 +47,10 @@ describe "obsctl TUI CLI PTY" do
     status.success?.should be_true, "TUI PTY failed: #{error}\n#{output}"
     topics.receive.should eq(["state", "events", "logs"])
     output.to_s.should contain("\e[?1049h")
-    output.to_s.should contain("\e[?25h\e[?1049l")
+    # Over a real PTY: mouse reporting is requested on entry and given back
+    # before the alternate screen, so the shell underneath is left clean.
+    output.to_s.should contain(CryTUI::AnsiBackend::MOUSE_ON)
+    output.to_s.should contain("\e[?25h#{CryTUI::AnsiBackend::MOUSE_OFF}\e[?1049l")
     select
     when done.receive
     when timeout(2.seconds)

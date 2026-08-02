@@ -1,4 +1,5 @@
 require "../../crytui"
+require "./hit_test"
 require "./model"
 
 module Obsctl
@@ -36,13 +37,21 @@ module Obsctl
       SettingsNavigateUp
       SettingsNavigateDown
       ApplySettingsTheme
+      PointerFocus
+      PointerActivate
+      PointerToggleMute
     end
 
     struct Action
       getter kind : ActionKind
       getter character : Char?
+      # Pointer actions name their own target instead of acting on whatever is
+      # focused, so a click cannot be applied to the wrong panel if focus moves
+      # between the report arriving and the action running.
+      getter panel : FocusPanel?
+      getter index : Int32?
 
-      def initialize(@kind, @character = nil)
+      def initialize(@kind, @character = nil, @panel = nil, @index = nil)
       end
     end
 
@@ -79,6 +88,46 @@ module Obsctl
           navigation_key(key) ||
           activation_key(model, key) ||
           audio_key(model, key)
+      end
+
+      # Resolves a mouse report to an action, or nil when the pointer is not
+      # over anything actionable.
+      #
+      # Clicking a row focuses and selects it; clicking a row that is already
+      # selected activates it. That deliberate second click is why a stray
+      # click cannot cut the programme scene mid-broadcast, and it needs no
+      # double-click timer to do it.
+      def handle_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
+        return unless target = HitTest.resolve(model, area, event.column, event.row)
+
+        if event.scroll?
+          kind = event.kind.scroll_up? ? ActionKind::NavigateUp : ActionKind::NavigateDown
+          # Scrolling over a panel moves within it, so point at it first.
+          return Action.new(kind, panel: target.panel, index: nil) if target.panel == model.focus
+          return Action.new(ActionKind::PointerFocus, panel: target.panel, index: nil)
+        end
+
+        return unless event.kind.press? && event.button.left?
+        index = target.index
+        return Action.new(ActionKind::PointerFocus, panel: target.panel) unless index
+
+        if target.on_mute_control
+          return Action.new(ActionKind::PointerToggleMute, panel: target.panel, index: index)
+        end
+
+        already_selected = target.panel == model.focus && index == selected_index(model, target.panel)
+        kind = already_selected ? ActionKind::PointerActivate : ActionKind::PointerFocus
+        Action.new(kind, panel: target.panel, index: index)
+      end
+
+      private def selected_index(model : Model, panel : FocusPanel) : Int32
+        case panel
+        when .scenes?      then model.scene_cursor
+        when .audio?       then model.audio_cursor
+        when .profiles?    then model.profile_cursor
+        when .collections? then model.collection_cursor
+        else                    -1
+        end
       end
 
       private def global_key(model : Model, key : CryTUI::KeyEvent) : Action?

@@ -249,19 +249,30 @@ module CryTUI
         end
       end
 
+      # The index of the first item the list will draw, from the item heights,
+      # the selection, and the rows available. Anything that needs to know where
+      # an item ended up on screen -- hit testing, most obviously -- has to
+      # reach the same answer the renderer did, so both come through here.
+      def self.visible_offset(heights : Array(Int32), selected : Int32?, height : Int32, offset : Int32 = 0) : Int32
+        return offset.clamp(0, {heights.size - 1, 0}.max) unless selected
+        selected = selected.clamp(0, heights.size - 1)
+        offset = {offset, selected}.min.clamp(0, Int32::MAX)
+        while rows(heights, offset, selected) > height
+          offset += 1
+        end
+        offset
+      end
+
+      private def self.rows(heights : Array(Int32), from : Int32, through : Int32) : Int32
+        return 0 if from > through
+        heights[from..through].sum
+      end
+
       private def clamp_state(state : ListState, height : Int32)
         selected = state.selected
         return state.offset = state.offset.clamp(0, {@items.size - 1, 0}.max) unless selected
-        selected = selected.clamp(0, @items.size - 1)
-        state.selected = selected
-        state.offset = {state.offset, selected}.min.clamp(0, Int32::MAX)
-        while item_rows(state.offset, selected) > height
-          state.offset += 1
-        end
-      end
-
-      private def item_rows(from : Int32, through : Int32) : Int32
-        @items[from..through].sum(&.height)
+        state.selected = selected.clamp(0, @items.size - 1)
+        state.offset = List.visible_offset(@items.map(&.height), state.selected, height, state.offset)
       end
     end
 

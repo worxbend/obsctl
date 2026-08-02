@@ -4,14 +4,20 @@ module CryTUI
   class AnsiBackend < Backend
     getter io : IO
 
-    def initialize(@io : IO, width : Int, height : Int, @alternate_screen = true, @size_source : IO::FileDescriptor? = nil)
+    # Button-event tracking reports presses, releases, and motion while a
+    # button is held, which is what a drag needs; 1006 asks for SGR-encoded
+    # coordinates so columns past 223 still report correctly.
+    MOUSE_ON  = "\e[?1000h\e[?1002h\e[?1006h"
+    MOUSE_OFF = "\e[?1006l\e[?1002l\e[?1000l"
+
+    def initialize(@io : IO, width : Int, height : Int, @alternate_screen = true, @size_source : IO::FileDescriptor? = nil, @mouse = true)
       @area = Rect.new(0, 0, width.to_i, height.to_i)
       @last_style = Style.new
     end
 
-    def self.for_terminal(io : IO, size_source : IO::FileDescriptor, alternate_screen = true) : self
+    def self.for_terminal(io : IO, size_source : IO::FileDescriptor, alternate_screen = true, mouse = true) : self
       area = TerminalSize.from(size_source) || TerminalSize.from_environment || Rect.new(0, 0, 80, 24)
-      new(io, area.width, area.height, alternate_screen, size_source)
+      new(io, area.width, area.height, alternate_screen, size_source, mouse)
     end
 
     def size : Rect
@@ -33,12 +39,17 @@ module CryTUI
 
     def enter : Nil
       @io << "\e[?1049h" if @alternate_screen
+      @io << MOUSE_ON if @mouse
       @io << "\e[?25l\e[?7l\e[2J\e[H"
       @io.flush
     end
 
+    # Mouse tracking is released before the alternate screen, so a terminal that
+    # survives the process still stops reporting. Leaving it on would spray
+    # escape sequences into whatever shell prompt comes back.
     def leave : Nil
       @io << "\e[0m\e[?7h\e[?25h"
+      @io << MOUSE_OFF if @mouse
       @io << "\e[?1049l" if @alternate_screen
       @io.flush
       @last_style = Style.new

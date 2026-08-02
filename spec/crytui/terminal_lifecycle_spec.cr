@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "../../src/crytui"
 
 describe "CryTUI terminal lifecycle" do
   it "clears and fully redraws after shrinking and expanding" do
@@ -54,5 +55,30 @@ describe "CryTUI terminal lifecycle" do
     output.to_s.should contain("CRYTUI_RAW_RESTORED")
     output.to_s.should contain("CRYTUI_RESIZE_DETECTED")
     output.to_s.should contain("CRYTUI_REPEAT_RESIZE_REDRAW")
+  end
+end
+
+describe CryTUI::AnsiBackend do
+  it "enables mouse reporting on entry and releases it on the way out" do
+    output = IO::Memory.new
+    backend = CryTUI::AnsiBackend.new(output, 10, 3, alternate_screen: true)
+
+    CryTUI::Terminal.new(backend).run { }
+    rendered = output.to_s
+
+    rendered.should contain(CryTUI::AnsiBackend::MOUSE_ON)
+    rendered.should contain(CryTUI::AnsiBackend::MOUSE_OFF)
+    # Tracking has to stop before the alternate screen is given back, or a
+    # terminal that outlives the process keeps spraying reports at the shell.
+    rendered.index!(CryTUI::AnsiBackend::MOUSE_OFF).should be < rendered.index!("\e[?1049l")
+  end
+
+  it "leaves mouse reporting alone when it is switched off" do
+    output = IO::Memory.new
+    backend = CryTUI::AnsiBackend.new(output, 10, 3, alternate_screen: false, mouse: false)
+
+    CryTUI::Terminal.new(backend).run { }
+
+    output.to_s.should_not contain("1006")
   end
 end

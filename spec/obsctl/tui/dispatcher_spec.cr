@@ -8,8 +8,16 @@ private def dispatcher_fixture(volume_debounce : Time::Span = 10.milliseconds)
     obs_studio_version: nil,
     obs_websocket_version: nil,
     current_scene: "Main",
-    scenes: [Obsctl::OBS::State::SceneState.new("Main", active: true)],
-    audio_inputs: [Obsctl::OBS::State::AudioState.new("Mic", muted: false, volume_percent: 50)]
+    scenes: [
+      Obsctl::OBS::State::SceneState.new("Main", active: true),
+      Obsctl::OBS::State::SceneState.new("Cam"),
+    ],
+    audio_inputs: [
+      Obsctl::OBS::State::AudioState.new("Mic", muted: false, volume_percent: 50),
+      Obsctl::OBS::State::AudioState.new("Desktop", muted: true, volume_percent: 20),
+    ],
+    profiles: ["Default", "Streaming"],
+    current_profile: "Default"
   )
   sent = [] of Obsctl::IPC::CommandPayload
   sender = ->(payload : Obsctl::IPC::CommandPayload) do
@@ -122,5 +130,66 @@ describe Obsctl::TUI::Dispatcher do
     retry.retry_subscription.should be_true
     retry.message.should eq("Reconnected to daemon.")
     dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::Quit)).quit.should be_true
+  end
+end
+
+describe "pointer actions" do
+  it "acts on the row the pointer named, not on whatever had focus" do
+    model, sent, dispatcher = dispatcher_fixture
+    # Focus and cursor deliberately point somewhere else entirely.
+    model.focus = Obsctl::TUI::FocusPanel::Audio
+    model.scene_cursor = 0
+
+    dispatcher.handle(Obsctl::TUI::Action.new(
+      Obsctl::TUI::ActionKind::PointerActivate,
+      panel: Obsctl::TUI::FocusPanel::Scenes,
+      index: 1
+    ))
+
+    model.focus.should eq(Obsctl::TUI::FocusPanel::Scenes)
+    model.scene_cursor.should eq(1)
+    sent.last.name.should eq("set_scene")
+    sent.last.target.should eq("Cam")
+  end
+
+  it "moves focus and the cursor without sending anything" do
+    model, sent, dispatcher = dispatcher_fixture
+
+    dispatcher.handle(Obsctl::TUI::Action.new(
+      Obsctl::TUI::ActionKind::PointerFocus,
+      panel: Obsctl::TUI::FocusPanel::Profiles,
+      index: 1
+    ))
+
+    model.focus.should eq(Obsctl::TUI::FocusPanel::Profiles)
+    model.profile_cursor.should eq(1)
+    sent.should be_empty
+  end
+
+  it "mutes the input under the pointer" do
+    model, sent, dispatcher = dispatcher_fixture
+
+    dispatcher.handle(Obsctl::TUI::Action.new(
+      Obsctl::TUI::ActionKind::PointerToggleMute,
+      panel: Obsctl::TUI::FocusPanel::Audio,
+      index: 1
+    ))
+
+    model.audio_cursor.should eq(1)
+    sent.last.name.should eq("toggle_mute")
+    sent.last.target.should eq("Desktop")
+  end
+
+  it "clamps a row index that no longer exists" do
+    model, sent, dispatcher = dispatcher_fixture
+
+    dispatcher.handle(Obsctl::TUI::Action.new(
+      Obsctl::TUI::ActionKind::PointerFocus,
+      panel: Obsctl::TUI::FocusPanel::Scenes,
+      index: 99
+    ))
+
+    model.scene_cursor.should eq(1)
+    sent.should be_empty
   end
 end

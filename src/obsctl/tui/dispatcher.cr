@@ -43,7 +43,8 @@ module Obsctl
           return ActionOutcome.new
         end
 
-        palette_action(action) ||
+        pointer_action(action) ||
+          palette_action(action) ||
           navigation_action(action) ||
           settings_action(action) ||
           command_action(action) ||
@@ -121,6 +122,42 @@ module Obsctl
           @model.theme_preview_origin = nil
           @model.view = View::Main
           ActionOutcome.new(message: @theme_persister.try(&.call(@model.theme)) || "theme set: #{@model.theme.id}")
+        end
+      end
+
+      # Pointer actions carry the panel and row they were resolved against, so
+      # they place focus and the cursor themselves before doing anything. The
+      # keyboard equivalents read whatever is focused; these must not, or a
+      # click would act on the panel the keyboard happened to leave selected.
+      private def pointer_action(action : Action) : ActionOutcome?
+        panel = action.panel
+        return unless panel
+        return unless action.kind.pointer_focus? || action.kind.pointer_activate? || action.kind.pointer_toggle_mute?
+
+        @model.focus = panel
+        if index = action.index
+          case panel
+          when .scenes?      then @model.scene_cursor = index
+          when .audio?       then @model.audio_cursor = index
+          when .profiles?    then @model.profile_cursor = index
+          when .collections? then @model.collection_cursor = index
+          end
+          @model.clamp_cursors
+        end
+
+        case action.kind
+        when .pointer_activate?
+          case panel
+          when .scenes?      then command_action(Action.new(ActionKind::ActivateScene))
+          when .profiles?    then command_action(Action.new(ActionKind::ActivateProfile))
+          when .collections? then command_action(Action.new(ActionKind::ActivateCollection))
+          when .audio?       then command_action(Action.new(ActionKind::ToggleMute))
+          else                    ActionOutcome.new
+          end
+        when .pointer_toggle_mute?
+          command_action(Action.new(ActionKind::ToggleMute))
+        else
+          ActionOutcome.new
         end
       end
 

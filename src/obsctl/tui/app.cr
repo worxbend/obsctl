@@ -68,6 +68,7 @@ module Obsctl
         @config_path : String? = nil,
       )
         @messages = Channel(AppMessage).new(128)
+        @area = CryTUI::Rect.new(0, 0, 0, 0)
         @subscription = nil.as(EventSession?)
         @subscription_generation = 0
         @running = false
@@ -120,6 +121,12 @@ module Obsctl
           else
             false
           end
+        when CryTUI::MouseEvent
+          if action = Input.handle_mouse(@model, message, @area)
+            apply_outcome(dispatcher.handle(action))
+          else
+            false
+          end
         when CryTUI::PasteEvent
           if @model.command_palette.active
             @model.command_palette.input += message.text.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
@@ -148,6 +155,9 @@ module Obsctl
 
       def render(terminal : CryTUI::Terminal)
         terminal.draw do |frame|
+          # Remembered so a mouse report can be resolved against the geometry
+          # that was actually on screen when the user clicked.
+          @area = frame.area
           if @model.view.settings?
             Widgets::Settings.render(frame.area, frame.buffer, @model)
           elsif @model.connected_to_daemon

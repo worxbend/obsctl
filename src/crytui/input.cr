@@ -46,7 +46,39 @@ module CryTUI
     end
   end
 
-  alias InputEvent = KeyEvent | PasteEvent
+  enum MouseKind
+    Press
+    Release
+    Drag
+    ScrollUp
+    ScrollDown
+  end
+
+  enum MouseButton
+    Left
+    Middle
+    Right
+    None
+  end
+
+  # A mouse report, in the same zero-based cell coordinates as `Buffer`.
+  # Terminals count from one; the parser subtracts it so callers never have to.
+  struct MouseEvent
+    getter kind : MouseKind
+    getter button : MouseButton
+    getter column : Int32
+    getter row : Int32
+    getter modifiers : KeyModifiers
+
+    def initialize(@kind, @button, @column, @row, @modifiers = KeyModifiers::None)
+    end
+
+    def scroll? : Bool
+      @kind.scroll_up? || @kind.scroll_down?
+    end
+  end
+
+  alias InputEvent = KeyEvent | PasteEvent | MouseEvent
 
   # Incremental VT input parser for the keys used by obsctl. It accepts chunks
   # because escape sequences and UTF-8 input may straddle reads.
@@ -125,8 +157,11 @@ module CryTUI
       end
     end
 
-    private def parse_escape : Tuple(KeyEvent, Int32)?
+    private def parse_escape : Tuple(InputEvent, Int32)?
       return if @pending.bytesize == 1
+      if mouse = parse_mouse
+        return mouse
+      end
       sequences = {
         "\e[A"    => KeyEvent.new(KeyCode::Up),
         "\e[B"    => KeyEvent.new(KeyCode::Down),
@@ -162,6 +197,67 @@ module CryTUI
       # Alt-modified printable character.
       char = @pending.byte_slice(1).each_char.first
       {KeyEvent.character(char, KeyModifiers::Alt), 1 + char.bytesize}
+    end
+
+    # SGR mouse reports, `ESC [ < button ; column ; row (M|m)`, requested with
+    # DECSET 1006. Preferred over the original X10 encoding because its
+    # coordinates are decimal and so are not capped at column 223.
+    SGR_MOUSE = /\A\e\[<(\d+);(\d+);(\d+)([Mm])/
+
+    # The X10 encoding, `ESC [ M` then three bytes biased by 32. Parsed only so
+    # a terminal that ignores the 1006 request cannot wedge the parser: without
+    # it these bytes fall through to the unknown-sequence branch, which does not
+    # match and so waits forever for a completion that never comes.
+    X10_MOUSE_PREFIX = "\e[M"
+
+    private def parse_mouse : Tuple(InputEvent, Int32)?
+      if match = @pending.match(SGR_MOUSE)
+        button = match[1].to_i
+        column = match[2].to_i
+        row = match[3].to_i
+        released = match[4] == "m"
+        return {build_mouse(button, column, row, released), match[0].bytesize}
+      end
+      # A truncated SGR report: wait for the rest rather than mis-parsing it.
+      return if @pending.matches?(/\A\e\[<[\d;]*\z/)
+
+      if @pending.starts_with?(X10_MOUSE_PREFIX)
+        return if @pending.bytesize < X10_MOUSE_PREFIX.bytesize + 3
+        bytes = @pending.byte_slice(X10_MOUSE_PREFIX.bytesize, 3).bytes
+        button = bytes[0].to_i - 32
+        # X10 reports a release as button 3 rather than a separate final byte.
+        released = (button & 0b11) == 3
+        {build_mouse(button, bytes[1].to_i - 32, bytes[2].to_i - 32, released), X10_MOUSE_PREFIX.bytesize + 3}
+      end
+    end
+
+    private def build_mouse(button : Int32, column : Int32, row : Int32, released : Bool) : MouseEvent
+      modifiers = KeyModifiers::None
+      modifiers |= KeyModifiers::Shift if button.bits_set?(0b00_0100)
+      modifiers |= KeyModifiers::Alt if button.bits_set?(0b00_1000)
+      modifiers |= KeyModifiers::Control if button.bits_set?(0b01_0000)
+
+      if button.bits_set?(0b100_0000)
+        # Wheel. The low bit selects direction and there is no press or release.
+        kind = button.bits_set?(0b1) ? MouseKind::ScrollDown : MouseKind::ScrollUp
+        return MouseEvent.new(kind, MouseButton::None, column - 1, row - 1, modifiers)
+      end
+
+      code = button & 0b11
+      resolved = case code
+                 when 0 then MouseButton::Left
+                 when 1 then MouseButton::Middle
+                 when 2 then MouseButton::Right
+                 else        MouseButton::None
+                 end
+      kind = if released
+               MouseKind::Release
+             elsif button.bits_set?(0b10_0000)
+               MouseKind::Drag
+             else
+               MouseKind::Press
+             end
+      MouseEvent.new(kind, resolved, column - 1, row - 1, modifiers)
     end
   end
 end
