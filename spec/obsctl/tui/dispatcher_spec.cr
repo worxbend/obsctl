@@ -233,3 +233,119 @@ describe "pointer gain" do
     model.audio_inputs[0].volume_percent.should eq(0)
   end
 end
+
+describe "vim bindings" do
+  it "clears the pending sequence on whatever the next action is" do
+    model, _, dispatcher = dispatcher_fixture
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PendingSequence, sequence: "<leader>"))
+    model.pending_sequence.should eq("<leader>")
+
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PendingSequence, sequence: "<leader>f"))
+    model.pending_sequence.should eq("<leader>f")
+
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::FocusAudio))
+    model.pending_sequence.should be_empty
+    model.focus.should eq(Obsctl::TUI::FocusPanel::Audio)
+  end
+
+  it "jumps to the ends of the focused panel" do
+    model, _, dispatcher = dispatcher_fixture
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::NavigateBottom))
+    model.scene_cursor.should eq(1)
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::NavigateTop))
+    model.scene_cursor.should eq(0)
+  end
+
+  it "steps by half the focused panel's visible rows" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+      connected: true,
+      obs_studio_version: nil,
+      obs_websocket_version: nil,
+      current_scene: "Scene 00",
+      scenes: (0..40).map { |index| Obsctl::OBS::State::SceneState.new("Scene #{index}") },
+      audio_inputs: [] of Obsctl::OBS::State::AudioState
+    )
+    sender = ->(_payload : Obsctl::IPC::CommandPayload) do
+      Obsctl::IPC::Response.new("test", true, JSON.parse(%({"message":"ok"})))
+    end
+    area = CryTUI::Rect.new(0, 0, 120, 40)
+    dispatcher = Obsctl::TUI::Dispatcher.new(model, sender, viewport: -> { area })
+
+    rows = Obsctl::TUI::DashboardLayout.compute(area, false).scenes.height - 2
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::NavigateHalfPageDown))
+    model.scene_cursor.should eq(rows // 2)
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::NavigateHalfPageUp))
+    model.scene_cursor.should eq(0)
+  end
+end
+
+describe "vim command line" do
+  it "opens with the key that was pressed and completes under that leader" do
+    model, _, dispatcher = dispatcher_fixture
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette, ':'))
+    model.command_palette.input.should eq(":")
+    model.command_palette.completions.should contain(":scene")
+  end
+
+  it "runs a command typed after a colon" do
+    model, sent, dispatcher = dispatcher_fixture
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette, ':'))
+    ":scene Cam".each_char.skip(1).each do |character|
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteCharacter, character))
+    end
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteSubmit))
+    sent.map(&.name).should eq(["set_scene"])
+    sent.first.target.should eq("Cam")
+  end
+
+  it "answers the vim spellings of quit and help" do
+    _, _, dispatcher = dispatcher_fixture
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette, ':'))
+    ["q", "qa", "wq", "quit"].each do |word|
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette, ':'))
+      word.each_char { |character| dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteCharacter, character)) }
+      dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteSubmit)).quit.should be_true
+    end
+
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette, ':'))
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteCharacter, 'h'))
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteSubmit)).message.not_nil!.should start_with("Commands:")
+  end
+
+  it "clears the line back to its leader and deletes by word" do
+    model, _, dispatcher = dispatcher_fixture
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette, ':'))
+    "scene Cam".each_char { |character| dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteCharacter, character)) }
+
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteDeleteWord))
+    model.command_palette.input.should eq(":scene ")
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteClearLine))
+    model.command_palette.input.should eq(":")
+  end
+
+  it "takes a completion from a click" do
+    model, _, dispatcher = dispatcher_fixture
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenPalette, '/'))
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PaletteCharacter, 's'))
+    target = model.command_palette.completions[1]
+
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PointerCompletion, index: 1))
+    model.command_palette.input.should eq(target)
+    model.command_palette.completion_index.should eq(1)
+  end
+
+  it "previews a clicked theme and applies the one already previewed" do
+    model, _, dispatcher = dispatcher_fixture
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenSettings))
+
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PointerSettingsSelect, index: 2))
+    model.settings_cursor.should eq(2)
+    model.theme.should eq(Obsctl::TUI::Theme::ALL[2])
+    model.view.should eq(Obsctl::TUI::View::Settings)
+
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::PointerSettingsApply))
+    model.view.should eq(Obsctl::TUI::View::Main)
+    model.theme.should eq(Obsctl::TUI::Theme::ALL[2])
+  end
+end

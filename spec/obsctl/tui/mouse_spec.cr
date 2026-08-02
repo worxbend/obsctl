@@ -232,3 +232,68 @@ describe "mouse input" do
     click(model, AREA.right - 1, AREA.bottom - 1).should be_nil
   end
 end
+
+describe "which-key mouse" do
+  it "runs the binding under the pointer and closes on a click outside" do
+    model = mouse_model
+    model.pending_sequence = "<leader>"
+    entries = Obsctl::TUI::Keymap.continuations("<leader>")
+    rect = Obsctl::TUI::HitTest.which_key_area(model, AREA)
+    row = entries.index! { |entry| entry.token == "q" }
+
+    quit = click(model, rect.x + 2, rect.y + 1 + row).not_nil!
+    quit.kind.should eq(Obsctl::TUI::ActionKind::Quit)
+
+    group = entries.index! { |entry| entry.token == "f" }
+    opened = click(model, rect.x + 2, rect.y + 1 + group).not_nil!
+    opened.kind.should eq(Obsctl::TUI::ActionKind::PendingSequence)
+    opened.sequence.should eq("<leader>f")
+
+    click(model, 0, 0).not_nil!.kind.should eq(Obsctl::TUI::ActionKind::ClearSequence)
+  end
+end
+
+describe "appearance lab mouse" do
+  it "previews the theme under the pointer and applies the previewed one" do
+    model = mouse_model
+    model.view = Obsctl::TUI::View::Settings
+    themes = Obsctl::TUI::SettingsLayout.compute(AREA).themes
+
+    preview = click(model, themes.x + 4, first_item_row(themes) + 2).not_nil!
+    preview.kind.should eq(Obsctl::TUI::ActionKind::PointerSettingsSelect)
+    preview.index.should eq(2)
+
+    model.settings_cursor = 2
+    click(model, themes.x + 4, first_item_row(themes) + 2).not_nil!.kind
+      .should eq(Obsctl::TUI::ActionKind::PointerSettingsApply)
+
+    wheel(model, themes.x + 4, first_item_row(themes), false).not_nil!.kind
+      .should eq(Obsctl::TUI::ActionKind::SettingsNavigateDown)
+  end
+end
+
+describe "palette mouse" do
+  it "picks the completion chip under the pointer" do
+    model = mouse_model
+    model.command_palette.active = true
+    model.command_palette.completions = ["/scene", "/screenshot"]
+    palette = Obsctl::TUI::HitTest.palette_area(model, AREA)
+    chips = Obsctl::TUI::PaletteLayout.chips(model.command_palette.completions, palette)
+    row = Obsctl::TUI::PaletteLayout.completion_row(palette)
+
+    picked = click(model, chips[1][0], row).not_nil!
+    picked.kind.should eq(Obsctl::TUI::ActionKind::PointerCompletion)
+    picked.index.should eq(1)
+
+    # The chips end well before the panel does, so this lands on the panel but
+    # on no chip -- a miss, not a pick.
+    click(model, chips[1][1] + 2, row).should be_nil
+    wheel(model, chips[0][0], row, true).not_nil!.kind.should eq(Obsctl::TUI::ActionKind::CompletePrevious)
+  end
+
+  it "closes the palette when the click lands outside it" do
+    model = mouse_model
+    model.command_palette.active = true
+    click(model, 0, 0).not_nil!.kind.should eq(Obsctl::TUI::ActionKind::ClosePalette)
+  end
+end

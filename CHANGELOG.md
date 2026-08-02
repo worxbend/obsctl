@@ -12,6 +12,29 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Added
 
+- Vim keybindings in the TUI, in the AstroNvim arrangement. `Space` is the
+  leader and opens a which-key menu of what can follow it — `<leader>f` to find
+  a panel, `<leader>u t` for themes, `<leader>o` for reload, dump, and
+  reconnect, `<leader>m` for mute, `<leader>q` to quit. `gg` and `G` jump to the
+  ends of a panel, `Ctrl-D` and `Ctrl-U` move half of it — measured from the
+  panel actually on screen, not a fixed step — and `Ctrl-W` with `h/j/k/l`
+  moves between panels. Every sequence lives in one table that both the resolver
+  and the menu read, so a binding cannot be dispatchable but unlisted. The
+  existing single-letter bindings are untouched.
+
+- `:` as the command line. It opens the palette wearing the key that opened it,
+  parses and completes the same commands as `/`, and answers the vim spellings:
+  `:q`, `:qa`, `:wq`, `:x` quit and `:h` lists commands. The line is edited with
+  the vim command-line keys — `Ctrl-U` clears it back to its leader, `Ctrl-W`
+  deletes a word, `Ctrl-N`/`Ctrl-P` cycle completions.
+
+- Mouse control of the rest of the dashboard: which-key entries run or open
+  their group on a click, completion chips can be clicked onto the command line
+  and cycled with the wheel, a click away from the command line closes it, and
+  in the appearance lab a click previews a theme while a second click on it
+  persists the choice. The geometry for each of those is a shared layout
+  function, so a click resolves against the columns that were actually painted.
+
 - Mouse support in the TUI. Clicking a row focuses and selects it, clicking the
   selected row activates it, and clicking an input's speaker icon toggles its
   mute. The two-step click is deliberate: a stray click cannot cut the program

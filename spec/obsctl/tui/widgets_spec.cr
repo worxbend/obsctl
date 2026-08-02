@@ -10,6 +10,7 @@ require "../../../src/obsctl/tui/widgets/dashboard"
 require "../../../src/obsctl/tui/widgets/settings"
 require "../../../src/obsctl/tui/widgets/splash"
 require "../../../src/obsctl/tui/widgets/scene_map"
+require "../../../src/obsctl/tui/widgets/which_key"
 
 private def widget_model
   model = Obsctl::TUI::Model.new(theme: Obsctl::TUI::Theme::NORD)
@@ -576,5 +577,25 @@ describe Obsctl::TUI::Widgets::SceneMap do
     text.should contain("[ungrouped]")
     text.should contain("▶ Main")
     text.index!("[Studio]").should be < text.index!("[ungrouped]")
+  end
+end
+
+describe Obsctl::TUI::Widgets::WhichKey do
+  it "lists what can be pressed next and marks groups" do
+    model = widget_model
+    model.pending_sequence = "<leader>"
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 40))
+    Obsctl::TUI::Widgets::WhichKey.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+    text.should contain("<leader>  obsctl")
+    text.should contain("+find")
+    text.should contain("quit")
+  end
+
+  it "draws nothing while no sequence is pending" do
+    model = widget_model
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 40))
+    Obsctl::TUI::Widgets::WhichKey.render(buffer.area, buffer, model)
+    rendered_text(buffer).strip.should be_empty
   end
 end

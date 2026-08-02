@@ -1,4 +1,6 @@
 require "../../crytui"
+require "./keymap"
+require "./model"
 
 module Obsctl
   module TUI
@@ -11,7 +13,18 @@ module Obsctl
       collections : CryTUI::Rect,
       logs : CryTUI::Rect,
       palette : CryTUI::Rect,
-      stats : CryTUI::Rect? = nil
+      stats : CryTUI::Rect? = nil do
+      # The rectangle a focus panel is drawn in, so callers that reason about a
+      # panel -- half-page steps, hit tests -- do not repeat the mapping.
+      def panel(focus : FocusPanel) : CryTUI::Rect
+        case focus
+        when .scenes?   then scenes
+        when .audio?    then audio
+        when .profiles? then profiles
+        else                 collections
+        end
+      end
+    end
 
     module DashboardLayout
       extend self
@@ -67,6 +80,88 @@ module Obsctl
             CryTUI::Rect.new(rect.x, rect.y - 1, rect.width, rect.height + 1)
           end
         end
+      end
+    end
+
+    record SettingsAreas, themes : CryTUI::Rect, preview : CryTUI::Rect
+
+    # The appearance lab's two columns, shared by its widget and its hit test so
+    # a click lands on the theme the pointer is actually over.
+    module SettingsLayout
+      extend self
+
+      def compute(area : CryTUI::Rect) : SettingsAreas
+        inner = area.inner(1)
+        sections = CryTUI::Layout.new(constraints: [CryTUI::Constraint.percentage(45), CryTUI::Constraint.percentage(55)]).split(inner)
+        SettingsAreas.new(sections[0], sections[1])
+      end
+    end
+
+    # Where the palette draws its completion chips. Kept out of the widget so
+    # the hit test measures the same columns that were painted.
+    module PaletteLayout
+      extend self
+
+      MAX_VISIBLE_COMPLETIONS = 8
+      # The indent before the first chip and the gap between chips, matching the
+      # spans `Widgets::CommandPalette` emits.
+      INDENT = 2
+      GAP    = 1
+      # Completions are the third line of the panel, under the result and the
+      # prompt.
+      COMPLETION_LINE = 2
+
+      def visible(completions : Array(String)) : Array(String)
+        completions.first(MAX_VISIBLE_COMPLETIONS)
+      end
+
+      def label(completion : String) : String
+        "[#{completion}]"
+      end
+
+      def completion_row(area : CryTUI::Rect) : Int32
+        area.inner(1).y + COMPLETION_LINE
+      end
+
+      # First and last column of each visible chip, in draw order.
+      def chips(completions : Array(String), area : CryTUI::Rect) : Array(Tuple(Int32, Int32))
+        x = area.inner(1).x + INDENT
+        visible(completions).map do |completion|
+          width = CryTUI::TextWidth.width(label(completion))
+          span = {x, x + width - 1}
+          x += width + GAP
+          span
+        end
+      end
+    end
+
+    # The which-key menu that opens while a key sequence is half typed. It
+    # floats above the palette, is as tall as the pending sequence needs, and
+    # never grows past the space it has.
+    module WhichKeyLayout
+      extend self
+
+      MIN_WIDTH = 22
+
+      def compute(area : CryTUI::Rect, entries : Array(Keymap::Entry), anchor : CryTUI::Rect) : CryTUI::Rect
+        return CryTUI::Rect.new(area.x, area.y, 0, 0) if entries.empty? || area.width < MIN_WIDTH
+
+        width = entries.max_of? { |entry| CryTUI::TextWidth.width(entry_text(entry)) } || 0
+        width = { {width + 2, MIN_WIDTH}.max, area.width - 4 }.min
+        available = {anchor.y - area.y, 3}.max
+        height = {entries.size + 2, available}.min
+        CryTUI::Rect.new(area.x + 2, {anchor.y - height, area.y}.max, width, height)
+      end
+
+      # The entries that fit inside the panel once its borders are taken.
+      def visible(entries : Array(Keymap::Entry), rect : CryTUI::Rect) : Array(Keymap::Entry)
+        entries.first({rect.height - 2, 0}.max)
+      end
+
+      # One menu row. The widget splits this into styled spans that concatenate
+      # back to exactly this string, so the measured width stays honest.
+      def entry_text(entry : Keymap::Entry) : String
+        " #{entry.token}  #{entry.group ? "+" : ""}#{entry.label} "
       end
     end
   end

@@ -1,3 +1,4 @@
+require "../layout"
 require "./chrome"
 
 module Obsctl
@@ -6,12 +7,11 @@ module Obsctl
       module CommandPalette
         extend self
 
-        MAX_VISIBLE_COMPLETIONS = 8
-        REVEAL_PER_FRAME        = 3
+        REVEAL_PER_FRAME = 3
 
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           palette = model.command_palette
-          hint = palette.active ? model.symbol("type command  ↵ run  esc close", "type command Enter run Esc close") : "/ open  F2 themes  q quit"
+          hint = palette.active ? model.symbol("type command  ↵ run  esc close", "type command Enter run Esc close") : ": open  space keys  q quit"
           block = Chrome.panel(model.symbol("⌘", ">"), "Command Palette", hint, palette.completions.size, palette.active, model)
           lines = [result_line(model), prompt_line(model)]
           lines << completion_line(model) if palette.active
@@ -31,7 +31,7 @@ module Obsctl
         private def prompt_line(model : Model) : CryTUI::Line
           palette = model.command_palette
           unless palette.active
-            text = model.advanced_ui ? "  ◈  / or : command  │  F2 themes  │  r reload  │  D dump  │  q quit" : "  >  / or : command  |  F2 themes  |  r reload  |  D dump  |  q quit"
+            text = model.advanced_ui ? "  ◈  : command  │  ␣ leader  │  gg/G  │  F2 themes  │  q quit" : "  >  : command  |  space leader  |  gg/G  |  F2 themes  |  q quit"
             return CryTUI::Line.from(text, CryTUI::Style.new(foreground: model.theme.muted))
           end
           CryTUI::Line.new([
@@ -46,11 +46,13 @@ module Obsctl
           if palette.completions.empty?
             return CryTUI::Line.from("  no completions", CryTUI::Style.new(foreground: model.theme.muted, modifiers: CryTUI::Modifier::Dim))
           end
-          spans = [CryTUI::Span.new("  ")]
-          palette.completions.first(MAX_VISIBLE_COMPLETIONS).each_with_index do |completion, index|
-            spans << CryTUI::Span.new(" ") if index > 0
+          # Indent, chip text, and gap come from `PaletteLayout` so a click can
+          # be resolved back to the chip that was drawn.
+          spans = [CryTUI::Span.new(" " * PaletteLayout::INDENT)]
+          PaletteLayout.visible(palette.completions).each_with_index do |completion, index|
+            spans << CryTUI::Span.new(" " * PaletteLayout::GAP) if index > 0
             style = index == palette.completion_index ? CryTUI::Style.new(foreground: model.theme.accent, modifiers: CryTUI::Modifier::Bold) : CryTUI::Style.new(foreground: model.theme.muted)
-            spans << CryTUI::Span.new("[#{completion}]", style)
+            spans << CryTUI::Span.new(PaletteLayout.label(completion), style)
           end
           CryTUI::Line.new(spans)
         end

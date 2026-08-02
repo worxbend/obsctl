@@ -15,7 +15,7 @@
 [![obs-websocket](https://img.shields.io/badge/obs--websocket-5.x-302E31?style=flat-square&logo=obsstudio)](https://github.com/obsproject/obs-websocket)
 [![License](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](LICENSE)
 
-[**Visit the site**](https://worxbend.github.io/obsctl/) · [Get started](#-quick-start) · [Explore the TUI](#-the-control-room) · [Automate with the CLI](#-cli--automation) · [Read the docs](#-documentation)
+[**Visit the site**](https://worxbend.github.io/obsctl/) · [Mirror](https://obs.worxbend.com/) · [Get started](#-quick-start) · [Explore the TUI](#-the-control-room) · [Automate with the CLI](#-cli--automation) · [Read the docs](#-documentation)
 
 </div>
 
@@ -149,19 +149,40 @@ logs.
 
 ### Keyboard map
 
+The dashboard is keyed like AstroNvim: `:` is the command line, `Space` is the
+leader and opens a which-key menu, and the motions are the vim ones.
+
 | Key | Action |
 | --- | --- |
-| `s` / `a` / `p` / `c` | Focus scenes, audio, profiles, or collections |
 | `↑` `↓` or `j` `k` | Move within the focused panel |
+| `gg` / `G` | Jump to the first or last item |
+| `Ctrl-D` / `Ctrl-U` | Move half a panel down or up |
+| `Ctrl-W` + `h/j/k/l` | Move between panels |
 | `Ctrl` + arrows or `Ctrl-h/j/k/l` | Move between panels |
 | `Enter` | Activate the focused scene, profile, or collection |
 | `m` | Toggle the focused audio input mute state |
 | `←` `→` or `h` `l` | Lower or raise focused input volume |
-| `/` or `:` | Open the command palette |
-| `Tab` / `Shift-Tab` | Cycle command completions |
+| `:` or `/` | Open the command line |
+| `Tab` / `Shift-Tab` or `Ctrl-N` / `Ctrl-P` | Cycle command completions |
+| `Ctrl-U` / `Ctrl-W` on the command line | Clear the line or delete a word |
+| `s` / `a` / `p` / `c` | Focus scenes, audio, profiles, or collections |
 | `Ctrl-T` or `F2` | Open the appearance lab |
 | `r` / `D` / `R` | Reload config, dump config, or reconnect OBS |
 | `q` or `Ctrl-C` | Quit |
+
+Press `Space` and the which-key menu lists what can follow it; `Esc`, or any
+key that leads nowhere, closes it.
+
+| Leader key | Action |
+| --- | --- |
+| `<leader>f` `s` `a` `p` `c` | Find: focus scenes, audio, profiles, collections |
+| `<leader>u` `t` | UI: open the appearance lab |
+| `<leader>o` `r` `d` `c` | OBS: reload config, dump config, reconnect |
+| `<leader>m` | Toggle the focused input's mute |
+| `<leader>q` | Quit |
+
+The single-letter bindings (`s`, `a`, `p`, `c`, `r`, `D`, `R`, `m`, `q`) still
+work, so nothing that was in your fingers before has been taken away.
 
 ### Mouse
 
@@ -175,9 +196,16 @@ The dashboard also takes mouse input where the terminal supports it.
 | Wheel over an audio input | Raise or lower its volume |
 | `Shift` + wheel over audio | Move through the input list |
 | Wheel over any other panel | Move within it |
+| Click a which-key entry | Run that binding, or open its group |
+| Click a completion chip | Put it on the command line |
+| Wheel over the command line | Cycle completions |
+| Click away from the command line | Close it |
+| Click a theme in the appearance lab | Preview it; click it again to apply |
+| Wheel in the appearance lab | Move through the themes |
 
 Clicking a row selects it and clicking it again activates it, so a stray click
-cannot cut the program scene mid-broadcast.
+cannot cut the program scene mid-broadcast. The appearance lab follows the same
+rule: the first click previews a theme and the second commits it.
 
 The wheel is a gain control over the audio matrix, the way it is on a mixer —
 it acts on whichever input the pointer is over, without selecting it first, and
@@ -187,22 +215,25 @@ Rapid volume keypresses update the display immediately and coalesce into one
 OBS command 120 ms after input stops. Terminal shrinking and expansion trigger
 a full safe repaint; normal frames return to cell-level incremental updates.
 
-### Command palette
+### Command line
 
-Press `/` and use the same grammar as the CLI:
+Press `:` (or `/`) and use the same grammar as the CLI. The line keeps whichever
+leader opened it, and completions follow it:
 
 ```text
-/scene "Main Camera"
-/mute Mic/Aux
-/vol "Desktop Audio" 65
-/profile Streaming
-/collection Gaming
-/stream
-/rec start
-/rec status
-/status
-/reconnect
+:scene "Main Camera"
+:mute Mic/Aux
+:vol "Desktop Audio" 65
+:profile Streaming
+:collection Gaming
+:stream
+:rec start
+:status
+:reconnect
 ```
+
+The vim spellings resolve too: `:q`, `:qa`, `:wq`, and `:x` quit, and `:h`
+lists the commands.
 
 ## 🧰 CLI & automation
 
@@ -451,6 +482,7 @@ repositories. See [docs/protocol.md](docs/protocol.md) for the contract model.
 
 | Guide | Contents |
 | --- | --- |
+| [Microsite](https://worxbend.github.io/obsctl/) | Project landing page — also mirrored at <https://obs.worxbend.com/> |
 | [Commands](docs/commands.md) | Complete CLI/palette grammar, JSON envelopes, errors, and status semantics |
 | [Configuration](docs/config.md) | Connection, reconnect, UI, theme, alias, and persistence settings |
 | [Protocol](docs/protocol.md) | IPC framing, subscriptions, state contracts, and compatibility fixtures |

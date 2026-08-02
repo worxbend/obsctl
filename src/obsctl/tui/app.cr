@@ -7,6 +7,7 @@ require "./widgets/dashboard"
 require "./widgets/connection"
 require "./widgets/settings"
 require "./widgets/splash"
+require "./widgets/which_key"
 require "./theme_persistence"
 
 module Obsctl
@@ -89,7 +90,8 @@ module Obsctl
           dispatcher = Dispatcher.new(
             @model,
             ->(payload : IPC::CommandPayload) { command_client.send(payload) },
-            ->(theme : Theme) { ThemePersistence.save(@config_path, theme) }
+            ->(theme : Theme) { ThemePersistence.save(@config_path, theme) },
+            viewport: -> { @area }
           )
           connect_subscription
           loop do
@@ -166,6 +168,9 @@ module Obsctl
             frame.buffer.set_style(frame.area, CryTUI::Style.new(background: @model.theme.background, foreground: @model.theme.foreground))
             Widgets::Connection.render_unavailable(frame.area, frame.buffer, @model)
           end
+          # Last, so a half-typed key sequence floats over whichever view is
+          # underneath it.
+          Widgets::WhichKey.render(frame.area, frame.buffer, @model)
         end
       end
 

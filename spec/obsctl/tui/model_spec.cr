@@ -109,3 +109,35 @@ describe Obsctl::TUI::Model do
     palette.input.should eq("/scene Cam")
   end
 end
+
+describe "cursor motions" do
+  it "jumps and steps within the focused panel without leaving it" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+      connected: true,
+      obs_studio_version: nil,
+      obs_websocket_version: nil,
+      current_scene: "A",
+      scenes: [
+        Obsctl::OBS::State::SceneState.new("A"),
+        Obsctl::OBS::State::SceneState.new("B"),
+        Obsctl::OBS::State::SceneState.new("C"),
+      ],
+      audio_inputs: [] of Obsctl::OBS::State::AudioState
+    )
+
+    model.move_bottom
+    model.scene_cursor.should eq(2)
+    model.move_by(5)
+    model.scene_cursor.should eq(2)
+    model.move_top
+    model.scene_cursor.should eq(0)
+    model.move_by(-5)
+    model.scene_cursor.should eq(0)
+
+    # An empty panel has nowhere to go rather than a negative cursor.
+    model.focus = Obsctl::TUI::FocusPanel::Audio
+    model.move_bottom
+    model.audio_cursor.should eq(0)
+  end
+end

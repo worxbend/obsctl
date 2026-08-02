@@ -50,3 +50,11 @@ describe Obsctl::TUI::Completion do
     Obsctl::TUI::Completion.compute("/stream something", completion_model).should be_empty
   end
 end
+
+describe "palette leaders" do
+  it "completes a colon line as its slash equivalent" do
+    model = completion_model
+    Obsctl::TUI::Completion.compute(":sc", model).should eq([":scene"])
+    Obsctl::TUI::Completion.compute(":scene m", model).should eq([":scene m2", ":scene Main", ":scene Media"])
+  end
+end

@@ -1,6 +1,7 @@
 require "../domain/command_parser"
 require "./completion"
 require "./input"
+require "./layout"
 require "./session"
 
 module Obsctl
@@ -15,12 +16,20 @@ module Obsctl
 
       alias Sender = Proc(IPC::CommandPayload, IPC::Response)
       alias ThemePersister = Proc(Theme, String)
+      alias Viewport = Proc(CryTUI::Rect)
+
+      # Half-page steps need to know how tall the focused panel is. The area is
+      # read through a proc rather than stored because it changes with every
+      # resize, and asking at the moment of the keypress is what keeps the step
+      # matched to what is on screen.
+      DEFAULT_PAGE_STEP = 5
 
       def initialize(
         @model : Model,
         @sender : Sender,
         @theme_persister : ThemePersister? = nil,
         @volume_debounce : Time::Span = VOLUME_DEBOUNCE,
+        @viewport : Viewport? = nil,
       )
         @volume_versions = Hash(String, UInt64).new(0_u64)
       end
@@ -37,7 +46,18 @@ module Obsctl
         ActionKind::FocusPaneDown    => ->(model : Model) { model.focus = model.focus.down },
       }
 
+      # Every action ends the sequence that produced it; only a fresh prefix
+      # leaves one pending. Clearing here rather than in each branch is what
+      # guarantees the which-key menu closes on whatever the next key does.
       def handle(action : Action) : ActionOutcome
+        outcome = dispatch(action)
+        @model.pending_sequence = action.kind.pending_sequence? ? (action.sequence || "") : ""
+        outcome
+      end
+
+      private def dispatch(action : Action) : ActionOutcome
+        return ActionOutcome.new if action.kind.pending_sequence? || action.kind.clear_sequence?
+
         if move = FOCUS_ACTIONS[action.kind]?
           move.call(@model)
           return ActionOutcome.new
@@ -56,7 +76,7 @@ module Obsctl
         when .open_palette?
           palette = @model.command_palette
           palette.active = true
-          palette.input = "/"
+          palette.input = (action.character || @model.command_palette_prefix[0]? || '/').to_s
           refresh_completions
           ActionOutcome.new
         when .close_palette?
@@ -76,11 +96,31 @@ module Obsctl
           input = @model.command_palette.input
           close_palette
           dispatch_palette(input)
+        when .palette_clear_line?
+          # `Ctrl-U` clears the arguments but keeps the leader, so the line is
+          # ready to retype rather than closed.
+          palette = @model.command_palette
+          palette.input = palette.input.each_grapheme.first(1).join
+          refresh_completions
+          ActionOutcome.new
+        when .palette_delete_word?
+          palette = @model.command_palette
+          palette.input = palette.input.rstrip.sub(/[^\s]*$/, "")
+          refresh_completions
+          ActionOutcome.new
         when .complete_next?
           @model.command_palette.cycle_next
           ActionOutcome.new
         when .complete_previous?
           @model.command_palette.cycle_previous
+          ActionOutcome.new
+        when .pointer_completion?
+          index = action.index
+          completion = index ? @model.command_palette.completions[index]? : nil
+          if completion
+            @model.command_palette.input = completion
+            @model.command_palette.completion_index = index
+          end
           ActionOutcome.new
         end
       end
@@ -93,9 +133,32 @@ module Obsctl
         when .navigate_down?
           @model.move_down
           ActionOutcome.new
+        when .navigate_top?
+          @model.move_top
+          ActionOutcome.new
+        when .navigate_bottom?
+          @model.move_bottom
+          ActionOutcome.new
+        when .navigate_half_page_up?
+          @model.move_by(-page_step)
+          ActionOutcome.new
+        when .navigate_half_page_down?
+          @model.move_by(page_step)
+          ActionOutcome.new
         when .volume_down? then volume(-5)
         when .volume_up?   then volume(5)
         end
+      end
+
+      # Half of the focused panel's visible rows, the way vim measures
+      # `Ctrl-D`. Without a viewport -- before the first frame, or in a spec
+      # that renders nothing -- a fixed step keeps the key useful.
+      private def page_step : Int32
+        area = @viewport.try(&.call)
+        return DEFAULT_PAGE_STEP if area.nil? || area.empty?
+
+        rows = DashboardLayout.compute(area, @model.streaming?).panel(@model.focus).height - 2
+        {rows // 2, 1}.max
       end
 
       private def settings_action(action : Action) : ActionOutcome?
@@ -118,7 +181,14 @@ module Obsctl
           @model.settings_cursor = {@model.settings_cursor + 1, Theme::ALL.size - 1}.min
           @model.theme = Theme::ALL[@model.settings_cursor]
           ActionOutcome.new
-        when .apply_settings_theme?
+        when .pointer_settings_select?
+          index = action.index
+          if index && (theme = Theme::ALL[index]?)
+            @model.settings_cursor = index
+            @model.theme = theme
+          end
+          ActionOutcome.new
+        when .apply_settings_theme?, .pointer_settings_apply?
           @model.theme_preview_origin = nil
           @model.view = View::Main
           ActionOutcome.new(message: @theme_persister.try(&.call(@model.theme)) || "theme set: #{@model.theme.id}")
@@ -191,30 +261,38 @@ module Obsctl
         end
       end
 
+      # The palette accepts either leader, so the line is read without one and
+      # the vim spellings of quit and help are answered before the registry is
+      # consulted.
+      PALETTE_LEADERS = "/:"
+      QUIT_WORDS      = ["q", "q!", "qa", "qa!", "quit", "quit!", "exit", "x", "wq"]
+      HELP_WORDS      = ["h", "help"]
+
       private def dispatch_palette(input : String) : ActionOutcome
-        normalized = input.strip.downcase
-        return ActionOutcome.new(quit: true) if normalized == "/quit" || normalized == "/exit"
+        line = input.strip.lstrip(PALETTE_LEADERS)
+        normalized = line.strip.downcase
+        return ActionOutcome.new(quit: true) if QUIT_WORDS.includes?(normalized)
         if SETTINGS_ALIASES.includes?(normalized)
           return handle(Action.new(ActionKind::OpenSettings))
         end
-        if normalized == "/help"
+        if HELP_WORDS.includes?(normalized)
           return ActionOutcome.new(message: palette_help)
         end
-        parsed = Domain::CommandParser.new.parse(input)
+        parsed = Domain::CommandParser.new.parse(line)
         command(payload_for(parsed))
       rescue ex : Domain::ObsctlError
         ActionOutcome.new(message: "error: #{ex.message}")
       end
 
-      # `/themes` is a dashboard-only view, so it has no registry entry and is
+      # `themes` is a dashboard-only view, so it has no registry entry and is
       # appended to the generated list.
-      SETTINGS_ALIASES = ["/themes", "/theme", "/settings"]
+      SETTINGS_ALIASES = ["themes", "theme", "settings"]
 
       private def palette_help : String
         usages = Domain::CommandRegistry
           .for_surface(Domain::CommandSurface::Palette)
           .map { |spec| "/#{spec.usage}" }
-        "Commands: #{(usages << SETTINGS_ALIASES.first).join(' ')}"
+        "Commands: #{(usages << "/#{SETTINGS_ALIASES.first}").join(' ')}"
       end
 
       # Where the dashboard deliberately asks for something other than the

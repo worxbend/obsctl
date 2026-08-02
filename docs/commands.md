@@ -426,12 +426,39 @@ subdirectories. Current daemon status fixtures should include
 
 TUI keyboard input:
 
-- `/` or `:` opens the command palette with the configured command prefix.
-- `Backspace` edits the current palette line.
-- `Enter` submits the current palette command.
-- `Esc` or `Ctrl-C` cancels palette editing.
+- `:` or the configured command prefix opens the command line, which keeps the
+  key that opened it as its leader. Both leaders parse to the same commands and
+  complete against the same registry.
+- `Backspace` edits the current line; `Ctrl-U` clears it back to its leader and
+  `Ctrl-W` deletes the last word.
+- `Enter` submits the current command.
+- `Tab`/`Shift-Tab` or `Ctrl-N`/`Ctrl-P` cycle completions.
+- `Esc` or `Ctrl-C` cancels command-line editing.
+- `:q`, `:qa`, `:wq`, `:x`, `:quit`, and `:exit` exit; `:h` lists the commands.
+- `j`/`k` and the arrows move within a panel, `gg`/`G` jump to its ends, and
+  `Ctrl-D`/`Ctrl-U` move half a panel.
+- `Ctrl-W` followed by `h`/`j`/`k`/`l`, or `Ctrl` with those keys or the
+  arrows, moves between panels.
+- `Space` is the leader: `<leader>f` finds panels (`s`/`a`/`p`/`c`),
+  `<leader>u t` opens themes, `<leader>o` sends OBS commands (`r` reload,
+  `d` dump, `c` reconnect), `<leader>m` toggles mute, and `<leader>q` exits.
+  A which-key menu lists the continuations while a sequence is pending; `Esc`
+  or an unbound key cancels it.
 - `q` exits from the dashboard.
 - `r` sends `/reload-config` from the dashboard.
 - `D` sends `/dump-config` from the dashboard.
 - `Ctrl-T` or `F2` opens theme settings; arrows or `j`/`k` preview, Enter
   persists, and Esc cancels the preview.
+
+TUI mouse input:
+
+- Clicking a dashboard row focuses and selects it; clicking the selected row
+  activates it. Clicking an input's speaker glyph toggles its mute.
+- The wheel is a gain control over the audio matrix and a cursor move over the
+  other panels; `Shift` with the wheel moves through the audio list.
+- Clicking a which-key entry runs its binding or opens its group; clicking
+  elsewhere cancels the sequence.
+- Clicking a completion chip puts it on the command line, the wheel cycles
+  completions, and a click outside the panel closes the line.
+- In theme settings a click previews the theme under the pointer, a second
+  click on it persists the selection, and the wheel moves through the list.

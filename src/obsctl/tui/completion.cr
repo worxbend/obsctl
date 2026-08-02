@@ -13,7 +13,16 @@ module Obsctl
       # Bare `/rec` still toggles; these are the explicit actions.
       RECORD_ACTIONS = Domain::CommandRegistry::RECORD_ACTIONS.keys
 
+      # Commands are registered with the `/` spelling, so a line opened with a
+      # different leader -- `:` for a vim command line, or a configured prefix
+      # -- is matched as its `/` equivalent and handed back wearing the leader
+      # the user actually typed.
       def compute(input : String, model : Model) : Array(String)
+        leader = input[0]?
+        if leader && leader != '/' && (leader == ':' || model.command_palette_prefix.includes?(leader))
+          return compute("/#{input[1..]}", model).map { |candidate| "#{leader}#{candidate[1..]}" }
+        end
+
         unless input.includes?(' ')
           prefix = input.downcase
           return sorted(ALL_COMMANDS.select(&.starts_with?(prefix)), input)

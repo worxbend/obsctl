@@ -1,5 +1,6 @@
 require "./chrome"
 require "../anim"
+require "../layout"
 
 module Obsctl
   module TUI
@@ -21,10 +22,11 @@ module Obsctl
             border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::DOUBLE : CryTUI::Widgets::BorderSet::ASCII
           )
           outer.render(area, buffer)
-          inner = outer.inner(area)
-          sections = CryTUI::Layout.new(constraints: [CryTUI::Constraint.percentage(45), CryTUI::Constraint.percentage(55)]).split(inner)
-          render_theme_list(sections[0], buffer, model)
-          render_preview(sections[1], buffer, model)
+          # Through the shared layout so a click resolves against the same
+          # columns the themes were drawn in.
+          sections = SettingsLayout.compute(area)
+          render_theme_list(sections.themes, buffer, model)
+          render_preview(sections.preview, buffer, model)
         end
 
         private def render_theme_list(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)

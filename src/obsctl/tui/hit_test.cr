@@ -45,6 +45,47 @@ module Obsctl
         list_target(FocusPanel::Collections, areas.collections, model, column, row)
       end
 
+      # The theme row under the pointer in the appearance lab.
+      def settings_index(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Int32?
+        return unless model.view.settings?
+
+        themes = SettingsLayout.compute(area).themes
+        return unless contains?(themes, column, row)
+
+        item_at(themes, Array.new(Theme::ALL.size, 1), model.settings_cursor, row)
+      end
+
+      # The panel the command palette is drawn in, so a click outside it can be
+      # told from a click on it.
+      def palette_area(model : Model, area : CryTUI::Rect) : CryTUI::Rect
+        DashboardLayout.compute(area, model.streaming?).palette
+      end
+
+      # The completion chip under the pointer, or nil anywhere else.
+      def palette_completion(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Int32?
+        palette = palette_area(model, area)
+        return unless row == PaletteLayout.completion_row(palette)
+
+        PaletteLayout
+          .chips(model.command_palette.completions, palette)
+          .index { |span| column >= span[0] && column <= span[1] }
+      end
+
+      # Where the which-key menu is drawn for the sequence being typed.
+      def which_key_area(model : Model, area : CryTUI::Rect) : CryTUI::Rect
+        WhichKeyLayout.compute(area, Keymap.continuations(model.pending_sequence), palette_area(model, area))
+      end
+
+      # The which-key row under the pointer, so the menu can be clicked as well
+      # as typed.
+      def which_key_entry(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Keymap::Entry?
+        entries = Keymap.continuations(model.pending_sequence)
+        rect = WhichKeyLayout.compute(area, entries, palette_area(model, area))
+        return unless contains?(rect, column, row)
+
+        WhichKeyLayout.visible(entries, rect)[row - inner_area(rect).y]?
+      end
+
       private def list_target(panel : FocusPanel, area : CryTUI::Rect, model : Model, column : Int32, row : Int32) : PointerTarget?
         return unless contains?(area, column, row)
         count = case panel

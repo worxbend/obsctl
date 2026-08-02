@@ -120,6 +120,9 @@ module Obsctl
       property locale : String
       property settings_cursor : Int32
       property theme_preview_origin : Theme?
+      # Keys of a multi-key binding pressed so far, e.g. `<leader>f`. Non-empty
+      # means the which-key menu is open and the next key completes or cancels.
+      property pending_sequence : String
 
       def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true, @command_palette_prefix = "/", @locale = "en")
         @snapshot = nil
@@ -142,6 +145,7 @@ module Obsctl
         @view = View::Main
         @settings_cursor = 0
         @theme_preview_origin = nil
+        @pending_sequence = ""
       end
 
       def rich_ui? : Bool
@@ -256,20 +260,52 @@ module Obsctl
       end
 
       def move_up
-        case @focus
-        when .scenes?      then @scene_cursor = {@scene_cursor - 1, 0}.max
-        when .audio?       then @audio_cursor = {@audio_cursor - 1, 0}.max
-        when .profiles?    then @profile_cursor = {@profile_cursor - 1, 0}.max
-        when .collections? then @collection_cursor = {@collection_cursor - 1, 0}.max
-        end
+        move_by(-1)
       end
 
       def move_down
+        move_by(1)
+      end
+
+      def move_by(delta : Int32)
+        move_to(cursor + delta)
+      end
+
+      def move_top
+        move_to(0)
+      end
+
+      def move_bottom
+        move_to(item_count - 1)
+      end
+
+      # Cursor moves are clamped rather than wrapped: `G` on the last item and
+      # a half page past the end both stop at the end, the way they do in vim.
+      def move_to(index : Int32)
+        bounded = index.clamp(0, {item_count - 1, 0}.max)
         case @focus
-        when .scenes?      then @scene_cursor = {@scene_cursor + 1, scenes.size - 1}.min.clamp(0, Int32::MAX)
-        when .audio?       then @audio_cursor = {@audio_cursor + 1, audio_inputs.size - 1}.min.clamp(0, Int32::MAX)
-        when .profiles?    then @profile_cursor = {@profile_cursor + 1, profiles.size - 1}.min.clamp(0, Int32::MAX)
-        when .collections? then @collection_cursor = {@collection_cursor + 1, scene_collections.size - 1}.min.clamp(0, Int32::MAX)
+        when .scenes?      then @scene_cursor = bounded
+        when .audio?       then @audio_cursor = bounded
+        when .profiles?    then @profile_cursor = bounded
+        when .collections? then @collection_cursor = bounded
+        end
+      end
+
+      def cursor(panel : FocusPanel = @focus) : Int32
+        case panel
+        when .scenes?   then @scene_cursor
+        when .audio?    then @audio_cursor
+        when .profiles? then @profile_cursor
+        else                 @collection_cursor
+        end
+      end
+
+      def item_count(panel : FocusPanel = @focus) : Int32
+        case panel
+        when .scenes?   then scenes.size
+        when .audio?    then audio_inputs.size
+        when .profiles? then profiles.size
+        else                 scene_collections.size
         end
       end
 
