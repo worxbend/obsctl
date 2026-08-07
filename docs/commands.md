@@ -437,6 +437,11 @@ TUI keyboard input:
 - `:q`, `:qa`, `:wq`, `:x`, `:quit`, and `:exit` exit; `:h` lists the commands.
 - `j`/`k` and the arrows move within a panel, `gg`/`G` jump to its ends, and
   `Ctrl-D`/`Ctrl-U` move half a panel.
+- The audio matrix draws its inputs as channel strips side by side, so its keys
+  follow that axis instead: `h`/`l` or `←`/`→` move to the previous/next
+  channel, `k`/`j` or `↑`/`↓` raise/lower the gain of the selected one, and `m`
+  toggles its mute. `gg`/`G`, `Home`/`End` and the half-panel keys still move
+  between channels.
 - `Ctrl-W` followed by `h`/`j`/`k`/`l`, or `Ctrl` with those keys or the
   arrows, moves between panels.
 - `Space` is the leader: `<leader>f` finds panels (`s`/`a`/`p`/`c`),
@@ -453,9 +458,10 @@ TUI keyboard input:
 TUI mouse input:
 
 - Clicking a dashboard row focuses and selects it; clicking the selected row
-  activates it. Clicking an input's speaker glyph toggles its mute.
-- The wheel is a gain control over the audio matrix and a cursor move over the
-  other panels; `Shift` with the wheel moves through the audio list.
+  activates it. Clicking the mute button at the foot of an audio channel strip
+  toggles that input's mute.
+- The wheel is a gain control anywhere over an audio channel strip and a cursor
+  move over the other panels; `Shift` with the wheel moves between channels.
 - Clicking a which-key entry runs its binding or opens its group; clicking
   elsewhere cancels the sequence.
 - Clicking a completion chip puts it on the command line, the wheel cycles

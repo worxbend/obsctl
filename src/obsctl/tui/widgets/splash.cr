@@ -38,7 +38,11 @@ module Obsctl
 
         private def render_compact(area, buffer, model, frame, total)
           theme = model.theme
-          orbit = model.show_icons ? ["✦", "✧", "◆", "◇"][(frame // 3 % 4).to_i] : ["*", "+", "o", "."][(frame // 3 % 4).to_i]
+          orbit = CryTUI::Widgets::FluxSpinner.new(
+            frame,
+            frames: model.show_icons ? CryTUI::Widgets::FluxFrames::DIAMOND : %w[* + o .],
+            ticks_per_step: 3_u64
+          ).glyph
           pulse = (Math.sin(frame.to_f32 * 0.18_f32) * 0.5_f32 + 0.5_f32).clamp(0.0_f32, 1.0_f32)
           title = CryTUI::Line.new([
             CryTUI::Span.new(" #{orbit} ", CryTUI::Style.new(foreground: theme.warning)),
@@ -57,7 +61,7 @@ module Obsctl
             centered(TAGLINE, theme.foreground),
             live_line(model, frame),
           ]
-          lines << centered("SYNC   #{slither(frame, 18)}", theme.info) if block.inner(area).height >= 7
+          lines << sweep_line("SYNC", 18, frame, theme.info, model) if block.inner(area).height >= 7
           lines.concat([
             progress_line(model, frame, total),
             centered(boot_message(frame, total, model.show_icons), theme.muted),
@@ -71,7 +75,9 @@ module Obsctl
           lines = ASCII_LOGO.map { |text| centered(text, theme.accent, true) }
           lines << centered(TAGLINE, theme.foreground)
           lines << centered("Scenes, audio, profiles, recording, and live telemetry.", theme.muted)
-          spinner = ["|", "/", "-", "\\"][(frame // 2 % 4).to_i]
+          # The same spinner widget the rest of the interface uses, handed an
+          # ASCII frame sequence so the TTY-safe splash stays TTY-safe.
+          spinner = CryTUI::Widgets::FluxSpinner.new(frame, frames: %w[| / - \\], ticks_per_step: 2_u64).glyph
           lines << centered("#{spinner}  (o) LIVE  #{spinner}", theme.danger, true)
           lines << line("")
           ratio = progress(frame, total)
@@ -102,13 +108,40 @@ module Obsctl
             border_set: CryTUI::Widgets::BorderSet::THICK
           )
           lines = [
-            centered("SIGNAL #{slither(frame, 32)}", theme.accent),
-            centered("LIQUID #{liquid(frame, 32)}", theme.accent_alt),
+            # The block draws no top border, so its title shares the first row
+            # with the content. A blank line keeps the sweep clear of it.
+            line(""),
+            sweep_line("SIGNAL", 32, frame, theme.accent, model),
+            wave_line("LIQUID", 32, frame, theme.accent_alt),
             line(""),
             progress_line(model, frame, total),
             centered(boot_message(frame, total, model.show_icons), theme.muted),
           ]
           CryTUI::Widgets::StyledText.new(lines, block: block).render(rows[2], buffer)
+          render_rings(rows[2], buffer, model, frame)
+        end
+
+        # Two braille rings bookending the telemetry block. They sit in the
+        # margins the centred lines never reach, so nothing has to move to make
+        # room for them.
+        private def render_rings(area, buffer, model, frame)
+          return unless model.advanced_ui && area.width >= 40 && area.height >= 4
+          theme = model.theme
+          CryTUI::Widgets::CircleSpinner.new(
+            frame,
+            radius: 4,
+            arc_color: theme.accent,
+            dim_color: Anim.blend(theme.border, theme.accent, 0.3),
+            ticks_per_step: 1_u64
+          ).render(CryTUI::Rect.new(area.x + 3, area.y + 1, 5, 3), buffer)
+          CryTUI::Widgets::SquareSpinner.new(
+            frame,
+            size: 3,
+            centre: CryTUI::Widgets::Centre::Empty,
+            spin: CryTUI::Widgets::Spin::CounterClockwise,
+            arc_color: theme.accent_alt,
+            dim_color: theme.border
+          ).render(CryTUI::Rect.new(area.right - 10, area.y + 1, 7, 4), buffer)
         end
 
         private def live_line(model, frame)
@@ -163,20 +196,30 @@ module Obsctl
           icons ? "#{icon}  #{message}" : "[..] #{message}"
         end
 
-        private def slither(frame, width)
-          cells = Array.new(width, '·')
-          return "" if width == 0
-          head = frame.to_i % width
-          ['█', '▓', '▒', '░'].each_with_index { |glyph, offset| cells[(head + width - offset) % width] = glyph }
-          cells.join
+        # A labelled bar with a glow running along it.
+        private def sweep_line(label : String, width : Int32, frame : UInt64, color : CryTUI::Color, model : Model) : CryTUI::Line
+          spinner = CryTUI::Widgets::BarSpinner.new(
+            frame,
+            motion: CryTUI::Widgets::BarMotion::Loop,
+            bar_style: model.advanced_ui ? CryTUI::Widgets::BarStyle::Braille : CryTUI::Widgets::BarStyle::Block,
+            arc_color: color,
+            dim_color: model.theme.border
+          )
+          spans = [CryTUI::Span.new("#{label} ", CryTUI::Style.new(foreground: color, modifiers: CryTUI::Modifier::Bold))]
+          CryTUI::Line.new(spans + Anim.spans(spinner.lines(width)), CryTUI::Alignment::Center)
         end
 
-        private def liquid(frame, width)
-          bars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
-          Array.new(width) do |index|
-            phase = index.to_f32 * 0.62_f32 + frame.to_f32 * 0.32_f32
-            bars[((Math.sin(phase) * 0.5_f32 + 0.5_f32) * 7.0_f32).round.to_i.clamp(0, 7)]
-          end.join
+        # A labelled travelling wave: one cell per column, each a frame behind
+        # the one before it.
+        private def wave_line(label : String, width : Int32, frame : UInt64, color : CryTUI::Color) : CryTUI::Line
+          spinner = CryTUI::Widgets::FluxSpinner.new(
+            frame,
+            width: width,
+            frames: CryTUI::Widgets::FluxFrames::BAR,
+            color: color
+          )
+          spans = [CryTUI::Span.new("#{label} ", CryTUI::Style.new(foreground: color, modifiers: CryTUI::Modifier::Bold))]
+          CryTUI::Line.new(spans + Anim.spans(spinner.lines), CryTUI::Alignment::Center)
         end
 
         private def progress(frame, total) : Float32

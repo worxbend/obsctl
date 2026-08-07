@@ -31,9 +31,25 @@ module Obsctl
             badge("LIVE", model.streaming?, model.stream_duration_ms, pulse, model), CryTUI::Span.new("  "),
             badge("REC", model.recording?, model.record_duration_ms, pulse, model), separator(model),
             CryTUI::Span.new("#{model.symbol("🎬", "SCN")} #{model.current_scene || "no active scene"}", CryTUI::Style.new(foreground: theme.foreground)),
-          ])
+          ].concat(transport_spans(model, active)))
           second = metrics_line(model)
           CryTUI::Widgets::StyledText.new([first, second], block: block).render(area, buffer)
+        end
+
+        # A glow running along the transport while something is being sent out.
+        # Nothing is drawn when the output is idle, so the movement means
+        # exactly one thing.
+        private def transport_spans(model : Model, active : Bool) : Array(CryTUI::Span)
+          return [] of CryTUI::Span unless active && model.advanced_ui
+
+          spinner = CryTUI::Widgets::BarSpinner.new(
+            model.anim.frame,
+            motion: CryTUI::Widgets::BarMotion::Loop,
+            arc_color: model.theme.danger,
+            dim_color: model.theme.border,
+            fade_width: 4
+          )
+          [separator(model)] + Anim.spans(spinner.lines(16))
         end
 
         private def compact_metrics(model : Model) : CryTUI::Span

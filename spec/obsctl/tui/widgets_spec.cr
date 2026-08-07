@@ -328,20 +328,59 @@ describe Obsctl::TUI::Widgets::Scenes do
 end
 
 describe Obsctl::TUI::Widgets::Audio do
-  it "renders mute state, volume, alias, and logarithmic meter" do
+  it "draws one channel strip per input, with meter, gain, and mute button" do
     model = widget_model
     model.focus = Obsctl::TUI::FocusPanel::Audio
-    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 76, 8))
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 76, 10))
     Obsctl::TUI::Widgets::Audio.render(buffer.area, buffer, model)
     text = rendered_text(buffer)
 
     text.should contain("Audio Matrix")
-    text.should contain("Mic (mic) 80%")
-    text.should contain("Desktop 0%")
+    text.should contain("Mic")
+    text.should contain("Desktop")
+    text.should contain("80%")
     text.should contain("dB")
-    text.should contain("▰")
-    buffer[12, 1].style.background.should eq(model.theme.highlight_background)
-    buffer[12, 2].style.background.should eq(model.theme.highlight_background)
+    text.should contain("LIVE")
+    text.should contain("MUTE")
+    # The strip is too narrow for the full identity, so the panel title spells
+    # out the selected channel instead of truncating it into the column.
+    text.should contain("Mic (mic)")
+
+    # The selection highlight fills the whole name row of the first strip.
+    rows = Obsctl::TUI::MixerLayout.rows(buffer.area)
+    name_row = rows.name.not_nil!
+    buffer[1, name_row].style.background.should eq(model.theme.highlight_background)
+    buffer[Obsctl::TUI::MixerLayout::STRIP_WIDTH, name_row].style.background.should eq(model.theme.highlight_background)
+  end
+
+  it "scrolls sideways so the selected channel stays on screen" do
+    model = widget_model
+    inputs = (1..12).map { |index| Obsctl::OBS::State::AudioState.new("Ch#{index}", volume_percent: 50) }
+    model.snapshot = model.snapshot.not_nil!.copy_with(audio_inputs: inputs)
+    model.audio_cursor = 11
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 40, 10))
+    Obsctl::TUI::Widgets::Audio.render(buffer.area, buffer, model)
+
+    text = rendered_text(buffer)
+    text.should contain("Ch12")
+    text.should_not contain("Ch1 ")
+  end
+
+  it "tells a channel with no meter reading apart from a silent one" do
+    model = widget_model
+    model.meter_levels["Mic"] = 0.0
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 40, 10))
+    Obsctl::TUI::Widgets::Audio.render(buffer.area, buffer, model)
+    rows = Obsctl::TUI::MixerLayout.rows(buffer.area)
+    columns = Obsctl::TUI::MixerLayout.columns(Obsctl::TUI::MixerLayout.strips(2, 0, buffer.area).first[1])
+
+    # Silent: an empty meter, reading right down to the floor.
+    rendered_text(buffer).should contain("-60.0 dB")
+    # No reading at all: a searching dot rather than a meter cell.
+    idle = Obsctl::TUI::MixerLayout.strips(2, 0, buffer.area)[1][1]
+    idle_column = Obsctl::TUI::MixerLayout.columns(idle)
+    (rows.meter_top...(rows.meter_top + rows.meter_height)).map { |row| buffer[idle_column.meter + 1, row].symbol }.should contain("●")
+    columns.meter.should be < idle_column.meter
   end
 
   it "renders unknown mute state without claiming the input is active" do
@@ -398,6 +437,62 @@ describe Obsctl::TUI::Widgets::CommandPalette do
     text.should contain("[/scene Main]")
     text.should contain("[/scene Media]")
     text.should contain("sce")
+  end
+end
+
+describe Obsctl::TUI::MixerLayout do
+  it "lays strips out side by side and only draws whole ones" do
+    area = CryTUI::Rect.new(0, 0, 40, 10)
+    strips = Obsctl::TUI::MixerLayout.strips(9, 0, area)
+
+    # 38 inner columns hold four 8-wide strips with a gutter between them.
+    strips.size.should eq(4)
+    strips.map { |index, _| index }.should eq([0, 1, 2, 3])
+    strips.map { |_, rect| rect.x }.should eq([1, 10, 19, 28])
+    strips.each { |_, rect| rect.width.should eq(Obsctl::TUI::MixerLayout::STRIP_WIDTH) }
+  end
+
+  it "scrolls just far enough to keep the cursor on screen" do
+    area = CryTUI::Rect.new(0, 0, 40, 10)
+    Obsctl::TUI::MixerLayout.offset(9, 0, area).should eq(0)
+    Obsctl::TUI::MixerLayout.offset(9, 3, area).should eq(0)
+    Obsctl::TUI::MixerLayout.offset(9, 4, area).should eq(1)
+    Obsctl::TUI::MixerLayout.offset(9, 8, area).should eq(5)
+    # Nothing to scroll when everything fits.
+    Obsctl::TUI::MixerLayout.offset(3, 2, area).should eq(0)
+  end
+
+  it "gives rows up from the bottom as the panel gets shorter" do
+    tall = Obsctl::TUI::MixerLayout.rows(CryTUI::Rect.new(0, 0, 40, 12))
+    tall.decibels.should_not be_nil
+    tall.value.should_not be_nil
+    tall.mute.should_not be_nil
+    tall.meter_height.should eq(6)
+
+    # The dB readout is the first row given up, then the gain readout.
+    short = Obsctl::TUI::MixerLayout.rows(CryTUI::Rect.new(0, 0, 40, 7))
+    short.decibels.should be_nil
+    short.value.should_not be_nil
+    short.meter_height.should eq(2)
+
+    shorter = Obsctl::TUI::MixerLayout.rows(CryTUI::Rect.new(0, 0, 40, 6))
+    shorter.value.should be_nil
+    shorter.mute.should_not be_nil
+    shorter.meter_height.should eq(2)
+
+    # The meter is the last thing to go.
+    tiny = Obsctl::TUI::MixerLayout.rows(CryTUI::Rect.new(0, 0, 40, 3))
+    tiny.value.should be_nil
+    tiny.mute.should be_nil
+    tiny.meter_height.should be >= 1
+  end
+
+  it "keeps a clipped strip inside a panel too narrow for a whole one" do
+    area = CryTUI::Rect.new(0, 0, 8, 10)
+    strips = Obsctl::TUI::MixerLayout.strips(4, 0, area)
+
+    strips.size.should eq(1)
+    strips.first[1].right.should be <= area.right - 1
   end
 end
 

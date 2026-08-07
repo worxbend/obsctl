@@ -1,0 +1,7 @@
+require "./spinners/braille"
+require "./spinners/ring_engine"
+require "./spinners/flux_spinner"
+require "./spinners/linear_spinner"
+require "./spinners/circle_spinner"
+require "./spinners/rect_spinner"
+require "./spinners/bar_spinner"

@@ -24,10 +24,6 @@ module Obsctl
     module HitTest
       extend self
 
-      # Columns the mute glyph and its trailing space occupy at the start of an
-      # audio row, matching the leading span in `Widgets::Audio`.
-      MUTE_CONTROL_WIDTH = 3
-
       def resolve(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : PointerTarget?
         return unless model.view.main?
         return if model.command_palette.active
@@ -98,19 +94,16 @@ module Obsctl
         PointerTarget.new(panel, index)
       end
 
+      # The mixer runs sideways, so a channel is picked out by column and only
+      # the row decides whether the pointer is on that channel's mute button.
       private def audio_target(area : CryTUI::Rect, model : Model, column : Int32, row : Int32) : PointerTarget?
         return unless contains?(area, column, row)
-        inputs = model.audio_inputs
-        # An input only grows a second row once a meter level has arrived for
-        # it, so heights are per item rather than a fixed stride.
-        heights = inputs.map { |input| model.meter_levels[input.name]? ? 2 : 1 }
-        index = item_at(area, heights, model.audio_cursor, row)
-        return PointerTarget.new(FocusPanel::Audio) unless index
 
         inner = inner_area(area)
-        first_row = row_of(area, heights, model.audio_cursor, index)
-        on_mute = row == first_row && column < inner.x + MUTE_CONTROL_WIDTH
-        PointerTarget.new(FocusPanel::Audio, index, on_mute)
+        index = MixerLayout.index_at(model.audio_inputs.size, model.audio_cursor, area, column)
+        return PointerTarget.new(FocusPanel::Audio) unless index && row >= inner.y && row < inner.bottom
+
+        PointerTarget.new(FocusPanel::Audio, index, MixerLayout.rows(area).mute == row)
       end
 
       # The item occupying `row`, or nil when the pointer is on the chrome or
@@ -129,13 +122,6 @@ module Obsctl
           break if y >= inner.bottom
         end
         nil
-      end
-
-      # The first screen row of an item already known to be visible.
-      private def row_of(area : CryTUI::Rect, heights : Array(Int32), cursor : Int32, index : Int32) : Int32
-        inner = inner_area(area)
-        offset = CryTUI::Widgets::List.visible_offset(heights, cursor, inner.height)
-        inner.y + (offset...index).sum { |i| heights[i] }
       end
 
       # Panels are drawn inside a one-cell border on every side.

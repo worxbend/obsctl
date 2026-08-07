@@ -1,6 +1,6 @@
 CRYSTAL ?= crystal
 
-.PHONY: build test format format-check lint check bootstrap-obsctl-rs-contract-fixtures contract-rs-compat run release site-frames
+.PHONY: build test format format-check lint check bootstrap-obsctl-rs-contract-fixtures contract-rs-compat run release site-frames readme-shots
 
 # Every gate CI enforces, in the order a contributor should hit them.
 check: format-check lint build test
@@ -49,3 +49,8 @@ release:
 # frames no longer match.
 site-frames:
 	$(CRYSTAL) run scripts/render_site_frames.cr
+
+# Redraws the README screenshots from the same widget code. They are committed
+# under docs/assets, so run this after changing a widget or a theme.
+readme-shots:
+	$(CRYSTAL) run scripts/render_readme_shots.cr

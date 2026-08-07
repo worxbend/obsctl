@@ -33,7 +33,7 @@ module Obsctl
             spans.concat(highlight_message(entry.message, model, resources))
             CryTUI::Widgets::ListItem.new([CryTUI::Line.new(spans)])
           end
-          block = Chrome.panel(model.symbol("📡", "L"), "Logs // Event Stream", "live daemon feed", model.logs.size, false, model)
+          block = Chrome.panel(feed_icon(model), "Logs // Event Stream", "live daemon feed", model.logs.size, false, model)
           CryTUI::Widgets::List.new(items, block: block).render(area, buffer, CryTUI::Widgets::ListState.new)
         end
 
@@ -103,6 +103,18 @@ module Obsctl
           resources.sort_by! { |name, _| -name.bytesize }
           resources.uniq! { |name, _| name.downcase }
           resources
+        end
+
+        # The dish turns while the daemon is feeding the panel, and stops when
+        # there is nothing coming through.
+        private def feed_icon(model : Model) : String
+          return model.symbol("📡", "L") unless model.advanced_ui && model.connected_to_daemon
+
+          CryTUI::Widgets::FluxSpinner.new(
+            model.anim.frame,
+            frames: CryTUI::Widgets::FluxFrames::MOON,
+            ticks_per_step: 3_u64
+          ).glyph
         end
 
         private def level_appearance(level : Runtime::LogLevel, model : Model) : Tuple(CryTUI::Color, String)

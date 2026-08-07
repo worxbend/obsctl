@@ -1,390 +1,412 @@
 <div align="center">
 
-<img src="docs/assets/obsctl-logo.svg" alt="obsctl logo" width="180" />
+<img src="docs/assets/obsctl-logo.svg" alt="obsctl logo" width="150" />
 
 # 📡 obsctl
 
-### Your OBS control room—right inside the terminal.
+### Drive OBS Studio from your terminal. No mouse, no clicking around. 🖱️🚫
 
-**A fast Crystal TUI, automation-friendly CLI, and resilient local daemon for OBS Studio.**
-
-🎛️ **Control** · 📊 **Observe** · 🤖 **Automate** · 🔁 **Stay connected**
-
-[![Release](https://img.shields.io/github/v/release/worxbend/obsctl?display_name=tag&sort=semver&style=flat-square)](https://github.com/worxbend/obsctl/releases)
-[![Crystal](https://img.shields.io/badge/Crystal-%E2%89%A5%201.21.0-000000?style=flat-square&logo=crystal)](https://crystal-lang.org/)
-[![obs-websocket](https://img.shields.io/badge/obs--websocket-5.x-302E31?style=flat-square&logo=obsstudio)](https://github.com/obsproject/obs-websocket)
-[![License](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](LICENSE)
-
-[**Visit the site**](https://worxbend.github.io/obsctl/) · [More worxbend tools](https://obs.worxbend.com/) · [Get started](#-quick-start) · [Explore the TUI](#-the-control-room) · [Automate with the CLI](#-cli--automation) · [Read the docs](#-documentation)
-
-</div>
-
----
-
-`obsctl` gives streamers, operators, and automation scripts one dependable
-control surface for OBS Studio. Use the responsive terminal dashboard while
-you are live, run precise one-shot commands from scripts, or keep the local
-daemon running as a user service.
-
-```text
-╭─ OBSCTL // BROADCAST COMMAND CENTER ─────────────────────────────╮
-│ ● daemon: connected   ● OBS: connected   scene: Main Camera      │
-├─ LIVE TELEMETRY ─────────────────────────────────────────────────┤
-│ CPU  3.2%    FPS 60.0    MEM 742MB    NET 5842kbps               │
-├─ Scenes ────────────────┬─ Audio Matrix ─────────────────────────┤
-│ ▶ Main Camera           │ ● Mic/Aux          72%  ███████░░░     │
-│   Screen Share          │ ○ Desktop Audio    48%  █████░░░░░     │
-╰─────────────────────────┴────────────────────────────────────────╯
-```
-
-## ✨ Why obsctl?
-
-| | Capability | What it gives you |
-| --- | --- | --- |
-| 🎛️ | **Live terminal dashboard** | Scenes, audio, profiles, collections, output state, telemetry, stream health, logs, and a command palette in one responsive view. |
-| ⚡ | **Fast interactions** | Optimistic UI updates, debounced volume changes, incremental rendering, and safe terminal resize reflow. |
-| 🧠 | **One OBS connection** | A local daemon owns the WebSocket, eliminating competing CLI/TUI connections and centralizing reconnect behavior. |
-| 🤖 | **Automation-ready CLI** | Stable commands, JSON envelopes, canonical error codes, and meaningful exit statuses for scripts and CI. |
-| 🔁 | **Resilient operation** | Bounded reconnect backoff, explicit reconnect control, state subscriptions, and secret-safe diagnostics. |
-| 🎨 | **Made for humans** | 29 built-in themes, custom colors, Unicode and ASCII modes, English/Ukrainian UI surfaces, and keyboard-first navigation. |
-| 🧱 | **Built on CryTUI** | An in-tree immediate-mode Crystal TUI library inspired by Ratatui and tested with memory, ANSI, and real PTY backends. |
-
-## 🚀 Quick start
-
-### Prerequisites
-
-- Linux
-- OBS Studio with **obs-websocket 5.x** enabled
-- Crystal **1.21.0+** and Shards when building from source
-- A UTF-8 terminal; a Nerd Font is recommended for the richest icon set
-
-### 1. Install
+**A snappy dashboard, a scriptable CLI, and a little daemon that keeps the OBS connection warm.**
 
 ```bash
 curl -fsSL https://worxbend.github.io/obsctl/install.sh | sh
 ```
 
-That downloads the static binary for your architecture, checks it against the
-release's `SHA256SUMS.txt`, and installs it to `~/.local/bin` — or
-`/usr/local/bin` when run as root. Nothing is installed if the checksum does
-not match.
+[![Release](https://img.shields.io/github/v/release/worxbend/obsctl?display_name=tag&sort=semver&style=for-the-badge&color=d97757)](https://github.com/worxbend/obsctl/releases)
+[![Crystal](https://img.shields.io/badge/Crystal-1.21%2B-000000?style=for-the-badge&logo=crystal)](https://crystal-lang.org/)
+[![obs-websocket](https://img.shields.io/badge/obs--websocket-5.x-302E31?style=for-the-badge&logo=obsstudio)](https://github.com/obsproject/obs-websocket)
+[![License](https://img.shields.io/badge/MIT-7C3AED?style=for-the-badge&label=license)](LICENSE)
 
-Pass options after `sh -s --`:
+🎛️ **Control** · 📊 **Watch** · 🤖 **Automate** · 🔁 **Stay connected**
+
+[Website](https://worxbend.github.io/obsctl/) · [Install](#-install) · [First 5 minutes](#-your-first-five-minutes) · [Cheat sheet](#-cheat-sheet) · [Scripting](#-scripting) · [Docs](#-more-docs)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/shot-dashboard.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/shot-dashboard-light.svg">
+  <img src="docs/assets/shot-dashboard.svg" alt="The obsctl dashboard: scenes, audio matrix, profiles, collections, logs and stream stats" width="900">
+</picture>
+
+<sub>👆 Not a mockup — every screenshot here is rendered from the real widget code by <code>make readme-shots</code>.</sub>
+
+</div>
+
+---
+
+## 🤔 What even is this?
+
+You're live. Your mic is hot, your scene is wrong, and OBS is buried behind a
+game on another monitor. **obsctl** is OBS in a terminal window:
+
+- 🎛️ **A dashboard** — scenes, audio levels, profiles, collections, logs and
+  stream health on one screen. Switch scenes with `Enter`, ride the mic gain
+  with `↑`/`↓`.
+- 🤖 **A CLI** — `obsctl scene brb`, `obsctl mute mic`. Perfect for hotkeys,
+  Stream Deck buttons, cron jobs, or a chat bot.
+- 🧠 **A tiny daemon** — one background process holds the OBS connection and
+  reconnects when OBS restarts. Everything else just talks to it. Fast, and no
+  connection storm.
+
+Think of it as `kubectl`, but for your stream. And it's keyed like **Neovim**
+(AstroNvim, specifically), so `:` runs commands and `Space` opens a menu of
+what you can press next.
+
+**You'll like it if you:** live on a keyboard ⌨️ · run OBS on a small or
+headless machine 🖥️ · want stream actions in scripts 📜 · think a terminal is a
+perfectly nice place to be 🧡
+
+---
+
+## ⚡ Install
+
+One line. Works on any Linux, any distro — the binaries are static.
 
 ```bash
-# a specific release, somewhere specific
-curl -fsSL https://worxbend.github.io/obsctl/install.sh | sh -s -- --version v0.5.0 --dir /usr/local/bin
+curl -fsSL https://worxbend.github.io/obsctl/install.sh | sh
 ```
 
-`OBSCTL_VERSION` and `OBSCTL_INSTALL_DIR` do the same thing. The script is also
-attached to every release, so `https://github.com/worxbend/obsctl/releases/latest/download/install.sh`
-fetches it too. Read it before you run it — it is [`install.sh`](install.sh) in
-this repository, and the copy on the site is deployed from it.
+**What that actually does** (no magic, promise 🙂):
 
-Prebuilt static binaries for `linux-amd64` and `linux-arm64`, with
-`SHA256SUMS.txt`, are on the
-[Releases page](https://github.com/worxbend/obsctl/releases) if you would
-rather do it by hand. They are linked against musl, so they do not depend on
-your glibc version.
+1. 📥 Grabs the right build for your CPU (`amd64` or `arm64`)
+2. 🔐 Checks it against the release's `SHA256SUMS.txt` — if the hash is wrong,
+   **nothing** gets installed
+3. 📁 Drops the binary in `~/.local/bin` (or `/usr/local/bin` if you're root)
+4. ✅ Runs it once to make sure it works
 
-**Prefer to build it yourself?**
+> [!TIP]
+> Nervous about piping a script into a shell? Good instinct. It's
+> [`install.sh`](install.sh) right here in this repo — read it first, or
+> download and run it yourself.
+
+<details>
+<summary>🎚️ Options, pinned versions, and other ways to install</summary>
+
+```bash
+# a specific release, into a specific folder
+curl -fsSL https://worxbend.github.io/obsctl/install.sh | sh -s -- --version v0.6.0 --dir /usr/local/bin
+
+# same thing with environment variables
+OBSCTL_VERSION=v0.6.0 OBSCTL_INSTALL_DIR=/usr/local/bin sh install.sh
+```
+
+The installer is also attached to every release, so this URL works too:
+`https://github.com/worxbend/obsctl/releases/latest/download/install.sh`
+
+**By hand:** download a tarball from the
+[Releases page](https://github.com/worxbend/obsctl/releases), check it against
+`SHA256SUMS.txt`, unpack, and put `obsctl` on your `PATH`.
+
+**From source** (needs Crystal 1.21+ and Shards):
 
 ```bash
 git clone https://github.com/worxbend/obsctl.git
-cd obsctl
-shards install
-make release
+cd obsctl && shards install && make release
 install -Dm755 bin/obsctl ~/.local/bin/obsctl
 ```
 
-The release binary is written to `bin/obsctl`.
+</details>
 
-### 2. Initialize
+**Check it worked:**
+
+```bash
+obsctl --version
+```
+
+Nothing happened? `~/.local/bin` probably isn't on your `PATH`. Add this to
+your `~/.bashrc` or `~/.zshrc`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+---
+
+## 🐣 Your first five minutes
+
+Never touched obs-websocket before? Start here. Five steps, nothing skipped.
+
+### 1️⃣ Turn on the OBS WebSocket server
+
+In OBS Studio: **Tools ▸ WebSocket Server Settings**
+
+- ☑️ Tick **Enable WebSocket server**
+- 🔌 Leave the port at **4455** (that's what obsctl expects)
+- 🔑 Click **Show Connect Info** and copy the password — or untick
+  **Enable Authentication** if this machine is only yours
+- 💾 Hit **Apply**, then **OK**
+
+<sub>Don't see the menu item? You're on OBS older than 28. Update OBS — 28 and
+up ship obs-websocket 5 built in.</sub>
+
+### 2️⃣ Create a config file
 
 ```bash
 obsctl init
-obsctl validate-config
 ```
 
-The default configuration lives at `~/.config/obsctl/config.yml`. Override it
-with `--config PATH` or `OBSCTL_CONFIG`.
+That writes `~/.config/obsctl/config.yml` with sensible defaults. You don't
+have to edit it yet.
 
-If OBS authentication is enabled, export its password before starting the
-server:
+### 3️⃣ Hand over the password
+
+obsctl never stores your password in a file. Put it in the environment:
 
 ```bash
-export OBS_WEBSOCKET_PASSWORD='your OBS WebSocket password'
+export OBS_WEBSOCKET_PASSWORD='the password you copied'
 ```
 
-No password? No problem—when the variable is absent, `obsctl` attempts the
-connection with an empty password.
+Put that line in your `~/.bashrc` / `~/.zshrc` so it sticks around. 🔒
+No authentication? Skip this — obsctl connects with an empty password.
 
-### 3. Start the daemon and TUI
+### 4️⃣ Start the daemon
 
-In one terminal:
+In a terminal, leave this running:
 
 ```bash
 obsctl server --headless
 ```
 
-In another:
+You should see a log line like `obs_connected  connected to OBS 31.0.0`. 🎉
+(Later, make it automatic: `obsctl service install && obsctl service start`.)
+
+### 5️⃣ Open the dashboard
+
+In a second terminal:
 
 ```bash
 obsctl
 ```
 
-Once connected, import live scene and audio names while preserving your local
-settings:
+That's it — you're in. Now play:
 
-```bash
-obsctl dump-config
-```
+| Press this | And… |
+| --- | --- |
+| `j` / `k` | move down / up the list |
+| `Enter` | switch to that scene 🎬 |
+| `a` then `←` `→` | pick the audio panel, walk the channels 🎚️ |
+| `↑` `↓` on a channel | ride its gain 🔊 |
+| `m` | mute / unmute the selected input 🔇 |
+| `Space` | open the leader menu — it shows you every option ✨ |
+| `:` | command line, e.g. `:scene brb` |
+| `F2` | pick a prettier theme 🎨 |
+| `q` | quit |
 
-> [!TIP]
-> Scene and audio names discovered from OBS work immediately. Running
-> `dump-config` is useful for adding memorable aliases and shortcuts, but it is
-> not required before using the TUI.
+> [!NOTE]
+> Nothing on screen or an error? Jump to
+> [Something broke?](#-something-broke) — it's almost always one of three
+> things.
 
-## 🎛️ The control room
+---
 
-The TUI is a thin local client: it subscribes to daemon state, OBS events, and
-logs, then renders them through CryTUI. It does **not** open another OBS
-WebSocket connection.
+## 📸 The tour
 
-### Stream health
+<div align="center">
 
-While the stream is live, a **Stats** pane opens beside the logs with the
-numbers that tell you whether viewers are seeing a clean feed:
+**Press `Space` and obsctl tells you what's next** — the which-key menu, exactly like AstroNvim.
+
+<img src="docs/assets/shot-which-key.svg" alt="The leader menu open, listing find, mute, obs, quit and ui groups" width="880">
+
+**Type `:` for a command line**, with completion for every scene and input you have.
+
+<img src="docs/assets/shot-command-line.svg" alt="The command line open with :scene and four completions" width="880">
+
+**29 built-in themes**, previewed live before you commit. `F2` or `<leader>ut`.
+
+<img src="docs/assets/shot-themes.svg" alt="The appearance lab, previewing a theme" width="880">
+
+</div>
+
+### 🎚️ A mixing desk, not a list
+
+Every audio input is a vertical channel strip, the way OBS' own vertical mixer
+lays them out:
 
 ```text
-├ 📡  Logs // Event Stream  02   live daemon feed ─┬ 📊  Stats  352   dropped frames ──────────────┤
-│ ● 21:14:02 INFO  obs_connected  connected to OBS │ ⚡ 59.94 fps  █████▇██  ⏱ 1.42 ms             │
-│ ▲ 21:14:09 WARN  obs_event  scene switched -> 'M │ ▸ RENDER missed     12 / 128,400   0.01%      │
-│                                                  │ ▸ OUTPUT skipped   340 / 128,000   0.27%      │
-│                                                  │ ◆ HEALTH         nominal  · budget 9%         │
+├ ⣾  Audio Matrix  03  [a] Mic/Aux (mic) · ←/→ chan ↑/↓ gain m mute ─┤
+┃  mic    desktop   guest                                            ┃
+┃ ▔▔▔ │    ▂▂▂ │    ░·░ │        ← peak hold, meter, fader           ┃
+┃ ███ ━    ███ │    ░·░ ━                                            ┃
+┃ ███ ┃    ███ ━    ░●░ ┃                                            ┃
+┃-4.2 dB  -12.4 dB    –∞                                             ┃
+┃  72%      48%      60%                                             ┃
+┃ ♪ LIVE   ♪ LIVE   ✖ MUTE                                           ┃
 ```
 
-Active FPS is graphed against the best rate seen this session, so a 30 fps
-profile reads as healthy at 30. Average frame render time is colored by how
-much of a single frame's budget it consumes. Frames missed to rendering lag and
-skipped to encoding lag each carry their drop ratio, scored the way the OBS
-stats dock scores them — under 1% is nominal, 5% or more is critical — and the
-verdict line reports the worst of the three signals. On a narrow terminal the
-rows abbreviate, and below 80 columns the pane yields its space back to the
-logs.
+The meter fills bottom-up in eighth-height blocks, so it reads eight times
+finer than the rows it has, and each cell is coloured by the level it stands
+for — green up to −20 dBFS, yellow to −9, red above it. The bar over the top
+is the peak hold: it jumps to your loudest moment and slides back down on its
+own. A channel that clips flashes its name; a channel that has never sent a
+reading shows a searching dot, so *silent* and *not there* don't look alike. 🟢🟡🔴
 
-### Keyboard map
+Short on rows? The panel drops the dB readout first, then the gain, then the
+mute button. The meters are the last thing to go.
+
+### 📊 Stream health, while you're live
+
+When the stream starts, a **Stats** panel opens next to the logs:
+
+```text
+├ 📊  Stats  352   dropped frames ──────────────┤
+│ ⚡ 59.94 fps  █████▇██  ⏱ 1.42 ms             │
+│ ▸ RENDER missed     12 / 128,400   0.01%      │
+│ ▸ OUTPUT skipped   340 / 128,000   0.27%      │
+│ ◆ HEALTH         nominal  · budget 9%         │
+```
+
+Frames missed to rendering lag, frames skipped to encoding lag, and how much of
+each frame's budget you're burning. Green is fine, yellow means look at it, red
+means your viewers are already seeing it. 🟢🟡🔴
+
+---
+
+## 🎹 Cheat sheet
 
 The dashboard is keyed like AstroNvim: `:` is the command line, `Space` is the
-leader and opens a which-key menu, and the motions are the vim ones.
+leader, and the motions are vim's.
 
-| Key | Action |
+### Moving around
+
+| Key | What happens |
 | --- | --- |
-| `↑` `↓` or `j` `k` | Move within the focused panel |
-| `gg` / `G` | Jump to the first or last item |
-| `Ctrl-D` / `Ctrl-U` | Move half a panel down or up |
-| `Ctrl-W` + `h/j/k/l` | Move between panels |
-| `Ctrl` + arrows or `Ctrl-h/j/k/l` | Move between panels |
-| `Enter` | Activate the focused scene, profile, or collection |
-| `m` | Toggle the focused audio input mute state |
-| `←` `→` or `h` `l` | Lower or raise focused input volume |
-| `:` or `/` | Open the command line |
-| `Tab` / `Shift-Tab` or `Ctrl-N` / `Ctrl-P` | Cycle command completions |
-| `Ctrl-U` / `Ctrl-W` on the command line | Clear the line or delete a word |
-| `s` / `a` / `p` / `c` | Focus scenes, audio, profiles, or collections |
-| `Ctrl-T` or `F2` | Open the appearance lab |
-| `r` / `D` / `R` | Reload config, dump config, or reconnect OBS |
-| `q` or `Ctrl-C` | Quit |
+| `j` `k` or `↑` `↓` | Move inside the focused panel |
+| `gg` / `G` | Jump to the first / last item |
+| `Ctrl-D` / `Ctrl-U` | Half a panel down / up |
+| `Ctrl-W` + `h` `j` `k` `l` | Move between panels (also plain `Ctrl-h/j/k/l`) |
+| `Enter` | Activate — switch scene, profile, or collection ✅ |
+| `m` | Mute / unmute the selected input 🔇 |
+| `q` or `Ctrl-C` | Quit 👋 |
 
-Press `Space` and the which-key menu lists what can follow it; `Esc`, or any
-key that leads nowhere, closes it.
+**On the audio matrix the axes follow the desk**, not the list — the strips
+stand side by side, so the keys do too:
 
-| Leader key | Action |
+| Key | What happens |
 | --- | --- |
-| `<leader>f` `s` `a` `p` `c` | Find: focus scenes, audio, profiles, collections |
-| `<leader>u` `t` | UI: open the appearance lab |
-| `<leader>o` `r` `d` `c` | OBS: reload config, dump config, reconnect |
-| `<leader>m` | Toggle the focused input's mute |
-| `<leader>q` | Quit |
+| `←` `→` or `h` `l` | Move to the previous / next channel 🎚️ |
+| `↑` `↓` or `k` `j` | Gain up / down on that channel 🔊 |
+| `m` | Mute / unmute it 🔇 |
 
-The single-letter bindings (`s`, `a`, `p`, `c`, `r`, `D`, `R`, `m`, `q`) still
-work, so nothing that was in your fingers before has been taken away.
+### The leader menu (`Space`)
 
-### Mouse
+Press `Space` and a menu appears showing every next key. No memorising.
 
-The dashboard also takes mouse input where the terminal supports it.
-
-| Action | Result |
+| Keys | What it does |
 | --- | --- |
-| Click a row | Focus that panel and select the row |
-| Click the selected row | Activate it — switch scene, profile, or collection |
-| Click the speaker icon | Toggle that input's mute |
-| Wheel over an audio input | Raise or lower its volume |
-| `Shift` + wheel over audio | Move through the input list |
-| Wheel over any other panel | Move within it |
-| Click a which-key entry | Run that binding, or open its group |
-| Click a completion chip | Put it on the command line |
-| Wheel over the command line | Cycle completions |
-| Click away from the command line | Close it |
-| Click a theme in the appearance lab | Preview it; click it again to apply |
-| Wheel in the appearance lab | Move through the themes |
+| `<leader>f` → `s` `a` `p` `c` | 🔍 Find: scenes, audio, profiles, collections |
+| `<leader>u` → `t` | 🎨 UI: theme picker |
+| `<leader>o` → `r` `d` `c` | 🔧 OBS: reload config, dump config, reconnect |
+| `<leader>m` | 🔇 Toggle mute |
+| `<leader>q` | 👋 Quit |
 
-Clicking a row selects it and clicking it again activates it, so a stray click
-cannot cut the program scene mid-broadcast. The appearance lab follows the same
-rule: the first click previews a theme and the second commits it.
+`Esc` (or any key that leads nowhere) closes it. The old single letters —
+`s` `a` `p` `c` `r` `D` `R` — still work too.
 
-The wheel is a gain control over the audio matrix, the way it is on a mixer —
-it acts on whichever input the pointer is over, without selecting it first, and
-coalesces into one OBS command the same way the `←`/`→` keys do.
+### The command line (`:`)
 
-Rapid volume keypresses update the display immediately and coalesce into one
-OBS command 120 ms after input stops. Terminal shrinking and expansion trigger
-a full safe repaint; normal frames return to cell-level incremental updates.
-
-### Command line
-
-Press `:` (or `/`) and use the same grammar as the CLI. The line keeps whichever
-leader opened it, and completions follow it:
+| Key | What it does |
+| --- | --- |
+| `:` or `/` | Open it |
+| `Tab` / `Shift-Tab` or `Ctrl-N` / `Ctrl-P` | Cycle completions |
+| `Ctrl-U` / `Ctrl-W` | Clear the line / delete a word |
+| `Enter` | Run it |
+| `Esc` | Never mind |
 
 ```text
-:scene "Main Camera"
-:mute Mic/Aux
-:vol "Desktop Audio" 65
-:profile Streaming
-:collection Gaming
-:stream
-:rec start
-:status
-:reconnect
+:scene "Main Camera"      :vol "Desktop Audio" 65
+:mute Mic/Aux             :profile Streaming
+:stream                   :collection Gaming
+:rec start                :status
+:q                        :h
 ```
 
-The vim spellings resolve too: `:q`, `:qa`, `:wq`, and `:x` quit, and `:h`
-lists the commands.
+Yes, `:q`, `:qa`, `:wq` and `:x` all quit. `:h` lists everything. 😄
 
-## 🧰 CLI & automation
+### 🖱️ Mouse works too
 
-The daemon-backed CLI is designed to be pleasant interactively and predictable
-inside scripts.
+| Do this | Get that |
+| --- | --- |
+| Click a row | Focus the panel, select the row |
+| Click it **again** | Activate it (two steps, so a stray click can't cut your program scene 😅) |
+| Click a channel's **MUTE** button | Mute / unmute |
+| Wheel over a channel strip | Volume up / down, like a real mixer 🎚️ |
+| `Shift` + wheel over audio | Scroll through the channels instead |
+| Click a which-key entry | Run it, or open its group |
+| Click a completion chip | Put it on the command line |
+| Click a theme | Preview it; click again to keep it |
+
+---
+
+## 🤖 Scripting
+
+Everything the dashboard does, the CLI does — and it's built to be called from
+scripts, hotkeys, and bots.
 
 ```bash
-# Status
-obsctl status
-obsctl obs-status
-obsctl server-status
-
 # Scenes and audio
-obsctl scene main
+obsctl scene brb                    # aliases and shortcuts work
 obsctl mute mic
-obsctl unmute mic
-obsctl toggle-mute mic
 obsctl volume "Desktop Audio" 70
 
-# Studio and output controls
-obsctl stream
-obsctl record
-obsctl reconnect
+# Outputs
+obsctl stream                       # toggle streaming
+obsctl record start                 # start | stop | toggle | pause | resume | status
 
-# Diagnostics
-obsctl doctor
-obsctl doctor --json
+# What's going on?
+obsctl status
+obsctl doctor                       # checks everything, tells you how to fix it 🩺
 
-# Recording
-obsctl record start
-obsctl record pause
-obsctl record resume
-obsctl record stop
-obsctl record status --json
-
-# Event stream for scripts
+# Live event feed, one JSON object per line
 obsctl watch --topics state | jq -r '.data.current_scene'
 
-# Shell completions (bash, zsh, fish)
-obsctl completions bash > /etc/bash_completion.d/obsctl
-
-# Configuration and lifecycle
-obsctl validate-config
-obsctl dump-config
-obsctl reload-config
-obsctl config explain
-obsctl config diff
-obsctl config migrate --dry-run
-obsctl shutdown-server
+# Tab completion for your shell
+obsctl completions zsh > ~/.zfunc/_obsctl
 ```
 
-Aliases, shortcuts, exact OBS names, and case-insensitive names are supported.
-Quote names containing spaces.
+### 📦 JSON for robots
 
-### JSON mode
-
-Add `--json` before or after a scriptable command:
+Add `--json` to any scriptable command and get exactly one envelope on stdout:
 
 ```bash
-obsctl --json status
 obsctl scene main --json
 ```
 
-Every JSON invocation writes exactly one envelope to stdout:
-
 ```json
-{
-  "ok": true,
-  "result": {"message": "scene set: Main Camera"},
-  "error": null,
-  "exit_code": 0
-}
+{"ok": true, "result": {"message": "scene set: Main Camera"}, "error": null, "exit_code": 0}
 ```
 
-Failures use canonical error codes and matching process exit statuses, making
-them straightforward to handle in shell scripts and other tools. See the
-[command reference](docs/commands.md) for the full grammar, supported JSON
-commands, error codes, and status schema.
+Exit codes are stable, so `if obsctl scene main; then …` just works:
 
-### Scripting behavior
+| Code | Meaning |
+| --- | --- |
+| `0` | 🟢 Did what you asked |
+| `1` | 🔴 Failed |
+| `2` | ⚙️ Config problem |
+| `3` | 🔌 Daemon or OBS unreachable |
+| `4` | 📡 OBS refused the request |
+| `5` | ✍️ Couldn't parse the command |
+| `6` | 🔗 IPC problem |
 
-Human output is decorated only when stdout is a terminal, so redirecting or
-piping gives you plain text; `NO_COLOR` and `--color=never` also disable it, and
-`--color=always` forces it back on. `-q`/`--quiet` drops the human message and
-leaves the exit code as the only signal, and `--timeout SECONDS` bounds a single
-daemon round trip. Streaming into a short-lived reader, as in
-`obsctl watch | head -5`, ends cleanly with exit `0`.
+<details>
+<summary>🔬 Behaviour that matters inside scripts</summary>
 
-Names are passed to the daemon exactly as the shell delivers them, so scenes and
-inputs containing quotes or backslashes work without special handling:
+- Colour is on only when stdout is a terminal. `NO_COLOR` and `--color=never`
+  turn it off; `--color=always` forces it on.
+- `-q` / `--quiet` drops the human message; the exit code is the signal.
+- `--timeout SECONDS` bounds a single daemon round trip.
+- `obsctl watch | head -5` ends cleanly with exit `0`.
+- Names go to the daemon exactly as your shell delivers them, so quotes and
+  backslashes are fine: `obsctl scene 'Camera "A"'`.
 
-```bash
-obsctl scene 'Camera "A"'
-```
+Full grammar, every JSON command, and the error codes:
+[docs/commands.md](docs/commands.md).
 
-## 🏗️ Architecture
+</details>
 
-```mermaid
-flowchart LR
-    OBS["🎥 OBS Studio<br/>obs-websocket 5.x"]
-    D["🧠 obsctl server<br/>single connection owner"]
-    T["🎛️ CryTUI dashboard"]
-    C["⚙️ CLI / scripts"]
-    S["🛠️ systemd --user"]
+---
 
-    OBS <-->|WebSocket| D
-    D <-->|Unix socket IPC| T
-    D <-->|Unix socket IPC| C
-    S -. supervises .-> D
-```
+## 🎨 Make it yours
 
-The daemon is the authoritative state owner. This boundary provides:
-
-- exactly one OBS WebSocket connection per user session;
-- shared state and event delivery across every local client;
-- centralized reconnect, validation, logging, and secret handling;
-- short-lived CLI processes without repeated OBS handshakes.
-
-The Unix socket lives under `$XDG_RUNTIME_DIR/obsctl/` when an XDG runtime
-directory is available, with a user-specific `/tmp/obsctl-$UID/` fallback.
-Control remains local—there is no network-facing obsctl API.
-
-## 🔧 Configuration
-
-A minimal configuration looks like this:
+`~/.config/obsctl/config.yml` — short, human, and validated:
 
 ```yaml
 version: 1
@@ -392,21 +414,21 @@ version: 1
 connection:
   host: 127.0.0.1
   port: 4455
-  password_env: OBS_WEBSOCKET_PASSWORD
+  password_env: OBS_WEBSOCKET_PASSWORD   # 🔒 the name of the variable, never the password
 
 reconnect:
   enabled: true
   endless: true
 
 ui:
-  theme: default
-  advanced_ui: true
+  theme: ember          # 29 to choose from, or roll your own colours
+  advanced_ui: true     # false = plain ASCII, no fancy glyphs
   show_icons: true
-  locale: en
+  locale: en            # en | uk
 
 scenes:
   - name: Main Camera
-    alias: main
+    alias: main         # so you can type `obsctl scene main`
     shortcut: "1"
 
 audio:
@@ -416,22 +438,17 @@ audio:
       shortcut: m
 ```
 
-Important behavior:
+💡 **Shortcut:** run `obsctl dump-config` once you're connected and obsctl fills
+in your real scene and input names for you. It keeps your settings and makes a
+backup.
 
-- secrets belong in environment variables; plaintext password values produce a
-  secret-safe warning;
-- unknown top-level fields are rejected instead of being silently discarded;
-- config rewrites are atomic and preserve backups;
-- `dump-config` refuses to create ambiguous aliases or shortcuts;
-- `OBSCTL_LOCALE` overrides `ui.locale`; supported UI locales are `en` and `uk`;
-- custom themes can override any subset of the semantic color palette.
+Handy commands: `obsctl config explain` (where every setting came from) ·
+`obsctl config diff` (what you changed) · `obsctl validate-config` (is it
+sane?). Full reference: [docs/config.md](docs/config.md).
 
-See the complete [configuration reference](docs/config.md).
+### 🔁 Keep the daemon running
 
-## 🛠️ Run as a user service
-
-No root daemon is required. Install a `systemd --user` unit using the current
-binary path:
+Don't babysit a terminal — let systemd do it:
 
 ```bash
 obsctl service install
@@ -439,115 +456,129 @@ obsctl service start
 obsctl service status
 ```
 
-Other lifecycle commands:
+No root needed; it's a `--user` unit at `~/.config/systemd/user/obsctl.service`.
+`stop`, `restart`, and `uninstall` do what you'd expect.
+
+---
+
+## 🩺 Something broke?
+
+**Start here — it fixes most things:**
 
 ```bash
-obsctl service stop
-obsctl service restart
-obsctl service uninstall
+obsctl doctor
 ```
 
-The generated unit lives at `~/.config/systemd/user/obsctl.service`.
+It checks your config, credentials, socket, daemon, OBS connection, and service
+unit, and prints a fix for anything it doesn't like.
 
-## 🩺 Troubleshooting
+| Symptom | Usually means | Fix |
+| --- | --- | --- |
+| 😴 `server unavailable` (exit `3`) | The daemon isn't running | `obsctl server --headless` or `obsctl service start` |
+| 🔑 `authentication failed` | Wrong or missing password | Re-copy it from **Tools ▸ WebSocket Server Settings**, `export OBS_WEBSOCKET_PASSWORD=…` |
+| 🔌 `connection refused` | WebSocket server is off, or wrong port | Enable it in OBS; check `connection.port` matches (4455) |
+| 🤷 `unknown scene` | Name doesn't match OBS | `obsctl status` to see real names, or `obsctl dump-config` |
+| 🧟 OBS was closed when it started | Nothing — it retries | `obsctl reconnect` to hurry it up |
+| 🔣 Boxes instead of icons | Font has no glyphs | Install a Nerd Font, or set `ui.advanced_ui: false` |
 
-### Show connection and retry diagnostics
+Still stuck? Turn up the volume and read along:
 
 ```bash
 obsctl --log-level debug server --headless
 ```
 
-Server logs are mirrored to stderr and persisted at
-`~/.local/state/obsctl/obsctl.log`. Passwords and generated authentication
-strings are redacted from both sinks. WebSocket resets include the close code,
-reason, reconnect attempt, and next delay.
-
-### The CLI says the server is unavailable
-
-Start it directly:
-
-```bash
-obsctl server --headless
-```
-
-Or install/start the user service. Thin client commands exit with status `3`
-when the daemon or OBS connection is unavailable.
-
-### OBS was offline during startup
-
-Reconnect is enabled by default. Check `obsctl server-status`, then request an
-immediate attempt with `obsctl reconnect`. If `reconnect.enabled: false`,
-restart the server after OBS becomes available.
-
-## 🧑‍💻 Development
-
-```bash
-shards install
-make format
-make test
-make build
-make release
-make lint
-```
-
-The local test suite is deterministic and does not require OBS Studio. It uses
-a fake obs-websocket server, Unix-socket integration tests, memory rendering,
-ANSI assertions, and real PTY lifecycle probes.
-
-Optional cross-implementation fixture verification against a sibling
-`../obsctl-rs` checkout:
-
-```bash
-make contract-rs-compat
-```
-
-Strict compatibility mode requires a recognized fixture root in both
-repositories. See [docs/protocol.md](docs/protocol.md) for the contract model.
-
-## 📚 Documentation
-
-| Guide | Contents |
-| --- | --- |
-| [Microsite](https://worxbend.github.io/obsctl/) | Project landing page, and the installer the one-liner fetches |
-| [worxbend tools](https://obs.worxbend.com/) | The sibling streaming utilities this one belongs with |
-| [Commands](docs/commands.md) | Complete CLI/palette grammar, JSON envelopes, errors, and status semantics |
-| [Configuration](docs/config.md) | Connection, reconnect, UI, theme, alias, and persistence settings |
-| [Protocol](docs/protocol.md) | IPC framing, subscriptions, state contracts, and compatibility fixtures |
-| [CryTUI research](docs/tui-research.md) | Ratatui analysis, Crystal library evaluation, rendering architecture, and parity evidence |
-| [Contributing](CONTRIBUTING.md) | Setup, the four build gates, project layout, and release process |
-| [Changelog](CHANGELOG.md) | Release history |
-| [Security](SECURITY.md) | Reporting vulnerabilities, credential handling, and the daemon's trust boundary |
-
-## 🤝 Contributing
-
-Issues, focused bug reports, documentation improvements, and pull requests are
-welcome. For behavior changes, include a regression test at the narrowest
-useful layer and run `make check` before opening a PR — see
-[CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
-
-Useful reports include:
-
-- your OBS Studio and obs-websocket versions;
-- terminal name, dimensions, font, and `$TERM` for rendering issues;
-- sanitized `obsctl.log` excerpts for connection problems;
-- the exact command, expected result, and actual result.
-
-Please never include OBS passwords or generated authentication strings.
-
-For security vulnerabilities, do not open a public issue — follow
-[SECURITY.md](SECURITY.md) instead.
-
-## 📜 License
-
-`obsctl` is released under the [MIT license](LICENSE).
+Logs also land in `~/.local/state/obsctl/obsctl.log`. Passwords are redacted
+from both, so they're safe to paste into an issue. 🔐
 
 ---
 
+## 🧠 How it works
+
+One process owns the OBS connection. Everyone else asks it nicely.
+
+```mermaid
+flowchart LR
+    OBS["🎥 OBS Studio<br/>obs-websocket 5.x"]
+    D["🧠 obsctl server<br/>the only connection owner"]
+    T["🎛️ dashboard"]
+    C["⚙️ CLI / scripts"]
+    S["🛠️ systemd --user"]
+
+    OBS <-->|WebSocket| D
+    D <-->|Unix socket| T
+    D <-->|Unix socket| C
+    S -. keeps alive .-> D
+```
+
+Why bother? Because it means 🔌 exactly one WebSocket per session · 🔄 every
+client sees the same state instantly · 🧯 reconnect logic lives in one place ·
+⚡ CLI commands don't pay for a handshake every time.
+
+The socket lives in `$XDG_RUNTIME_DIR/obsctl/` (falling back to
+`/tmp/obsctl-$UID/`). Nothing listens on the network — this is a local tool.
+
+Under the hood it's Crystal, and the TUI is drawn with **CryTUI**, an in-tree
+immediate-mode library inspired by Ratatui, tested against memory, ANSI, and
+real PTY backends.
+
+---
+
+## 📚 More docs
+
+| 📖 | What's inside |
+| --- | --- |
+| [Website](https://worxbend.github.io/obsctl/) | The pretty version of this page (and where the installer lives) |
+| [Commands](docs/commands.md) | Every command, flag, JSON envelope, and error code |
+| [Configuration](docs/config.md) | Every setting, with defaults and examples |
+| [Protocol](docs/protocol.md) | IPC framing, topics, and the compatibility fixtures |
+| [CryTUI notes](docs/tui-research.md) | How the rendering layer came to be |
+| [Contributing](CONTRIBUTING.md) | Setup, the four build gates, project layout |
+| [Changelog](CHANGELOG.md) | What changed, and why |
+| [Security](SECURITY.md) | Reporting holes, and how credentials are handled |
+| [More worxbend tools](https://obs.worxbend.com/) | The sibling streaming utilities 🧰 |
+
+---
+
+## 🤝 Contributing
+
+Bugs, docs, ideas, code — all welcome. 🙌
+
+```bash
+shards install
+make check      # format + lint + build + test, the same four gates CI runs
+```
+
+The test suite is deterministic and **doesn't need OBS running** — there's a
+fake obs-websocket server, real Unix sockets, and real PTYs in the repo. Add a
+regression test at the narrowest layer that catches your bug, and you're
+golden.
+
+Changed a widget or a theme? Redraw the pictures:
+
+```bash
+make readme-shots     # the screenshots above
+make site-frames      # the website's terminal frames
+```
+
+**Filing an issue?** Include your OBS and obs-websocket versions, your terminal
+and `$TERM`, what you ran, what you expected, and what you got. For rendering
+issues, terminal size and font help a lot. Never paste passwords or auth
+strings — and for security holes, use [SECURITY.md](SECURITY.md) instead of a
+public issue. 🔒
+
+---
+
+## 📜 License
+
+[MIT](LICENSE). Do what you like with it.
+
 <div align="center">
 
-Built with 💎 Crystal, terminal escape sequences, and an unreasonable love for
-reliable broadcast controls.
+---
 
-**If obsctl improves your control room, consider starring the repository. ⭐**
+Built with 💎 Crystal, escape sequences, and an unreasonable love for reliable
+broadcast controls.
+
+**If obsctl saves your stream even once, a ⭐ would be lovely.**
 
 </div>

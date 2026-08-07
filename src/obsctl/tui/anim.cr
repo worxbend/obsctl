@@ -29,6 +29,14 @@ module Obsctl
         CryTUI::Line.new(spans, alignment)
       end
 
+      # Splices one row of a spinner into a line the caller is already
+      # building. Spinners render themselves into a rectangle, but most of the
+      # places obsctl wants one are mid-sentence rather than in a pane of their
+      # own.
+      def spans(lines : Array(CryTUI::Line), row : Int32 = 0) : Array(CryTUI::Span)
+        lines[row]?.try(&.spans) || [] of CryTUI::Span
+      end
+
       def sparkline(values : Enumerable(Number), width : Int32) : String
         history(values, width, BARS, normalize_from_zero: true)
       end

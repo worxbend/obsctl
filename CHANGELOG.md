@@ -8,6 +8,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
+## [0.7.0] - 2026-08-07
+
+### Fixed
+
+- A config with a `keymap:` section loads instead of failing with
+  `unsupported top-level config field: keymap`. The field has been documented
+  as part of the schema all along and is written by the Rust reference, but the
+  loader's allow-list never learned about it, so any config carrying one was
+  rejected outright with exit code 2. It is now typed, defaulted, and written
+  back out by `config migrate`, so a hand-written or Rust-written file
+  round-trips without losing its bindings. The dashboard still resolves those
+  four actions from its built-in bindings — which are the defaults — so
+  overriding them does not change what the keys do yet.
+
+### Changed
+
+- The audio matrix is a mixing desk rather than a list. Each input is a
+  vertical channel strip — name, meter, fader, dB and gain readouts, mute
+  button — and the strips sit side by side, scrolling sideways to keep the
+  selected channel on screen. The meter fills bottom-up in eighth-height
+  blocks, so it resolves to eight times the rows the panel has, and colours
+  each cell by the level that cell stands for: green to −20 dBFS, yellow to
+  −9, red above it, the way OBS does. A peak marker jumps to the loudest
+  reading and slides back down on the clock rather than with the signal, a
+  clipping channel flashes its name, and a channel that has never reported a
+  level shows a searching dot instead of an empty column, so "no signal" reads
+  differently from "silent". Panels give up rows from the bottom as they
+  shrink — dB readout first, then gain, then the mute button — and the meter is
+  the last thing to go.
+
+  The keys turned with the layout. On the audio matrix `←`/`→` and `h`/`l` now
+  move between channels and `↑`/`↓` and `k`/`j` ride the gain of the selected
+  one, which is the way the strips are actually arranged; every other panel is
+  still keyed as a list. `Ctrl` with those keys still leaves the panel, and
+  `gg`/`G`, `Home`/`End` and the half-panel keys still move between channels.
+  The mouse follows the same layout: a channel is picked out by column, the
+  wheel is a gain control over any part of a strip, and the mute button is the
+  row at its foot.
+
+- The README is written for someone who has never enabled obs-websocket
+  before: a one-line install at the top, a five-step first run that says which
+  OBS menu to open and what should happen after each step, cheat sheets instead
+  of prose, and a symptom-to-fix table for when it goes wrong. The reference
+  material it used to carry in full now sits behind links and `<details>`.
+
+### Added
+
+- Spinner widgets in CryTUI, ported from
+  [`tui-spinner`](https://github.com/sorinirimies/tui-spinner): `FluxSpinner`
+  (a glyph cycling a frame sequence, or a wave when it is more than one cell
+  wide), `LinearSpinner`, `SquareSpinner`, `RectSpinner`, `CircleSpinner`, and
+  `BarSpinner`, with all 21 frame presets, 16 bar symbol styles, four motions,
+  four track styles, and both spin directions. The port was checked frame by
+  frame against the crate over the whole matrix of widget, preset, motion,
+  spin, size and tick — 65,600 rendered rows, byte-identical — and the golden
+  values are pinned in `spec/crytui/spinners_spec.cr`. The ring, circle and bar
+  engines fold a long-running tick back into one period, so a dashboard left
+  open overnight costs the same per frame as one just started, which the
+  stateless originals do not.
+
+  They are used throughout: the splash screen's sweep, wave, and the two rings
+  bookending its telemetry block; a wave in the header that only moves while
+  the daemon is answering; a glow along the live bar while something is being
+  sent out; the searching ring on the daemon-unavailable screen; the turning
+  dish on the log panel; and the searching dot in an audio channel with no
+  meter reading. The ASCII interface gets the same widgets driven by ASCII
+  frame sequences rather than a separate code path.
+
+- Screenshots, rendered rather than photographed. `make readme-shots` draws the
+  dashboard, the leader menu, the command line, and the appearance lab with the
+  real widget code and serialises each CryTUI buffer to SVG in `docs/assets`, so
+  a screenshot cannot show a dashboard the binary no longer produces. The hero
+  shot has a light variant, which GitHub serves to readers on a light theme.
+  The showcase state behind them is now shared with the microsite's frame
+  renderer instead of being duplicated.
+
 ## [0.6.0] - 2026-08-02
 
 ### Added
@@ -277,7 +353,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/worxbend/obsctl/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/worxbend/obsctl/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/worxbend/obsctl/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/worxbend/obsctl/compare/v0.3.0...v0.4.0

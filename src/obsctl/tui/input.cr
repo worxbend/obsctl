@@ -40,9 +40,9 @@ module Obsctl
         sequence_start(key) ||
           global_key(model, key) ||
           pane_focus_key(key) ||
+          audio_key(model, key) ||
           navigation_key(key) ||
-          activation_key(model, key) ||
-          audio_key(model, key)
+          activation_key(model, key)
       end
 
       # Resolves a mouse report to an action, or nil when the pointer is not
@@ -223,13 +223,21 @@ module Obsctl
         nil
       end
 
+      # The audio matrix is a mixing desk laid out sideways, so its keys follow
+      # its axes rather than the list conventions the other panels use: left
+      # and right walk the channel strips, up and down ride the fader of the
+      # one selected. Checked before `navigation_key` so the vertical keys
+      # reach the fader, but after `pane_focus_key` so `Ctrl-h` still leaves
+      # the panel.
       private def audio_key(model : Model, key : CryTUI::KeyEvent) : Action?
         return unless model.focus.audio?
 
         character = key.character
         return action(ActionKind::ToggleMute) if character == 'm'
-        return action(ActionKind::VolumeDown) if key.code.left? || character == 'h'
-        return action(ActionKind::VolumeUp) if key.code.right? || character == 'l'
+        return action(ActionKind::NavigateUp) if key.code.left? || character == 'h'
+        return action(ActionKind::NavigateDown) if key.code.right? || character == 'l'
+        return action(ActionKind::VolumeUp) if key.code.up? || character == 'k'
+        return action(ActionKind::VolumeDown) if key.code.down? || character == 'j'
         nil
       end
 

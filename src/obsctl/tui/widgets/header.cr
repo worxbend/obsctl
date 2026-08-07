@@ -18,16 +18,32 @@ module Obsctl
           )
           daemon = model.connected_to_daemon
           obs = model.obs_connected?
+          identity = [
+            CryTUI::Span.new("#{model.symbol("⚡", "#")} obsctl", CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold)),
+            CryTUI::Span.new("  studio automation console", CryTUI::Style.new(foreground: theme.muted)),
+            CryTUI::Span.new(model.advanced_ui ? "  •  " : "  |  ", CryTUI::Style.new(foreground: theme.border)),
+            CryTUI::Span.new("frame #{model.anim.frame.to_s.rjust(6, '0')}", CryTUI::Style.new(foreground: theme.info)),
+          ]
           lines = [
-            CryTUI::Line.new([
-              CryTUI::Span.new("#{model.symbol("⚡", "#")} obsctl", CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold)),
-              CryTUI::Span.new("  studio automation console", CryTUI::Style.new(foreground: theme.muted)),
-              CryTUI::Span.new(model.advanced_ui ? "  •  " : "  |  ", CryTUI::Style.new(foreground: theme.border)),
-              CryTUI::Span.new("frame #{model.anim.frame.to_s.rjust(6, '0')}", CryTUI::Style.new(foreground: theme.info)),
-            ]),
+            CryTUI::Line.new(identity + pulse_spans(model, daemon)),
             status_line(model, daemon, obs),
           ]
           CryTUI::Widgets::StyledText.new(lines, block: block).render(area, buffer)
+        end
+
+        # A wave that only moves while the daemon is answering, so a frozen
+        # header is visible as a frozen header rather than as a stale number.
+        private def pulse_spans(model : Model, daemon : Bool) : Array(CryTUI::Span)
+          return [] of CryTUI::Span unless model.advanced_ui
+          theme = model.theme
+          spinner = CryTUI::Widgets::FluxSpinner.new(
+            daemon ? model.anim.frame : 0_u64,
+            width: 6,
+            frames: CryTUI::Widgets::FluxFrames::ORBIT,
+            color: daemon ? theme.accent_alt : theme.muted,
+            ticks_per_step: 2_u64
+          )
+          [CryTUI::Span.new("  •  ", CryTUI::Style.new(foreground: theme.border))] + Anim.spans(spinner.lines)
         end
 
         private def status_line(model : Model, daemon : Bool, obs : Bool) : CryTUI::Line

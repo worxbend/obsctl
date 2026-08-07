@@ -22,12 +22,39 @@ describe Obsctl::TUI::Input do
     action_kind(model, CryTUI::KeyEvent.new(CryTUI::KeyCode::Function, function: 2)).should eq(Obsctl::TUI::ActionKind::OpenSettings)
   end
 
-  it "gives control pane navigation precedence over audio volume" do
+  it "keys the audio matrix along its own axes, because its strips run sideways" do
     model = Obsctl::TUI::Model.new
     model.focus = Obsctl::TUI::FocusPanel::Audio
-    action_kind(model, tui_key(CryTUI::KeyCode::Left)).should eq(Obsctl::TUI::ActionKind::VolumeDown)
+
+    # Left and right walk the channel strips.
+    action_kind(model, tui_key(CryTUI::KeyCode::Left)).should eq(Obsctl::TUI::ActionKind::NavigateUp)
+    action_kind(model, tui_key(CryTUI::KeyCode::Right)).should eq(Obsctl::TUI::ActionKind::NavigateDown)
+    action_kind(model, tui_char('h')).should eq(Obsctl::TUI::ActionKind::NavigateUp)
+    action_kind(model, tui_char('l')).should eq(Obsctl::TUI::ActionKind::NavigateDown)
+
+    # Up and down ride the fader of the one selected.
+    action_kind(model, tui_key(CryTUI::KeyCode::Up)).should eq(Obsctl::TUI::ActionKind::VolumeUp)
+    action_kind(model, tui_key(CryTUI::KeyCode::Down)).should eq(Obsctl::TUI::ActionKind::VolumeDown)
+    action_kind(model, tui_char('k')).should eq(Obsctl::TUI::ActionKind::VolumeUp)
+    action_kind(model, tui_char('j')).should eq(Obsctl::TUI::ActionKind::VolumeDown)
+
+    action_kind(model, tui_char('m')).should eq(Obsctl::TUI::ActionKind::ToggleMute)
+  end
+
+  it "gives control pane navigation precedence over the audio matrix keys" do
+    model = Obsctl::TUI::Model.new
+    model.focus = Obsctl::TUI::FocusPanel::Audio
     action_kind(model, tui_key(CryTUI::KeyCode::Left, CryTUI::KeyModifiers::Control)).should eq(Obsctl::TUI::ActionKind::FocusPaneLeft)
     action_kind(model, tui_char('h', CryTUI::KeyModifiers::Control)).should eq(Obsctl::TUI::ActionKind::FocusPaneLeft)
+    action_kind(model, tui_char('j', CryTUI::KeyModifiers::Control)).should eq(Obsctl::TUI::ActionKind::FocusPaneDown)
+  end
+
+  it "leaves the other panels keyed as lists" do
+    model = Obsctl::TUI::Model.new
+    model.focus = Obsctl::TUI::FocusPanel::Scenes
+    action_kind(model, tui_key(CryTUI::KeyCode::Down)).should eq(Obsctl::TUI::ActionKind::NavigateDown)
+    action_kind(model, tui_char('k')).should eq(Obsctl::TUI::ActionKind::NavigateUp)
+    action_kind(model, tui_key(CryTUI::KeyCode::Left)).should be_nil
   end
 
   it "routes palette keys before global bindings" do

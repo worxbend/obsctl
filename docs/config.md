@@ -11,7 +11,7 @@ Top-level fields:
 - `ui`: refresh interval, palette prefix, icon flag, theme name, locale
 - `scenes`: configured scene aliases, shortcuts, groups, and stale markers
 - `audio.inputs`: configured audio aliases, shortcuts, kind, and stale markers
-- `keymap`: keyboard bindings for the TUI
+- `keymap`: dashboard key bindings
 
 Minimal shape:
 
@@ -42,7 +42,18 @@ ui:
   show_icons: true
   theme: default
   locale: en
+keymap:
+  quit: ["q", "ctrl+c"]
+  command_palette: ["/", ":"]
+  reload_config: ["r"]
+  dump_config: ["D"]
 ```
+
+`keymap` is part of the on-disk schema and round-trips through `config
+migrate`, so a config written by the Rust reference loads unchanged. The
+dashboard still resolves these four actions from its built-in bindings, which
+are the defaults shown above, so overriding them does not change what the keys
+do yet.
 
 The TUI accepts 29 built-in themes matching the Rust reference. Set `theme:
 custom` and add any subset of `custom_theme` colors (`bg`, `accent`,

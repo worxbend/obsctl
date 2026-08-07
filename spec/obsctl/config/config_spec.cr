@@ -38,6 +38,28 @@ describe Obsctl::Config::Config do
     error.message.should eq("unsupported top-level config field: future_field")
   end
 
+  it "loads and rewrites the keymap section a Rust-written config carries" do
+    yaml = <<-YAML
+      version: 1
+      keymap:
+        quit: ["Q"]
+        command_palette: [":"]
+      YAML
+
+    config = Obsctl::Config::Config.from_yaml(yaml)
+    config.keymap.quit.should eq(["Q"])
+    config.keymap.command_palette.should eq([":"])
+    # Sections the file left out keep their defaults rather than emptying.
+    config.keymap.reload_config.should eq(["r"])
+    config.keymap.dump_config.should eq(["D"])
+
+    # A rewrite has to carry the section back out, or `config migrate` would
+    # drop bindings the user wrote.
+    rewritten = Obsctl::Config::Config.from_yaml(config.to_yaml)
+    rewritten.keymap.quit.should eq(["Q"])
+    rewritten.keymap.command_palette.should eq([":"])
+  end
+
   it "preserves an intentionally blank password_env as no env password" do
     config = Obsctl::Config::Config.from_yaml(<<-YAML)
       version: 1

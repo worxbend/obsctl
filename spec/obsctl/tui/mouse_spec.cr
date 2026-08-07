@@ -52,6 +52,11 @@ private def first_item_row(area : CryTUI::Rect)
   area.y + 1
 end
 
+# A column inside the nth channel strip of the mixer.
+private def audio_strip_column(area : CryTUI::Rect, index : Int32)
+  area.x + 1 + index * Obsctl::TUI::MixerLayout.stride + 3
+end
+
 describe Obsctl::TUI::HitTest do
   it "resolves a point to the panel and row drawn there" do
     model = mouse_model
@@ -79,25 +84,26 @@ describe Obsctl::TUI::HitTest do
     target.index.should be_nil
   end
 
-  it "counts an audio input as two rows once it has a meter" do
+  it "picks a mixer channel by column, because the strips run side by side" do
     model = mouse_model
-    # Only the first input has a level, so only it grows a meter row.
-    model.meter_levels["Mic/Aux"] = 0.5
     areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
-    top = first_item_row(areas.audio)
+    row = first_item_row(areas.audio) + 1
 
-    Obsctl::TUI::HitTest.resolve(model, AREA, areas.audio.x + 8, top).not_nil!.index.should eq(0)
-    Obsctl::TUI::HitTest.resolve(model, AREA, areas.audio.x + 8, top + 1).not_nil!.index.should eq(0)
-    Obsctl::TUI::HitTest.resolve(model, AREA, areas.audio.x + 8, top + 2).not_nil!.index.should eq(1)
+    Obsctl::TUI::HitTest.resolve(model, AREA, audio_strip_column(areas.audio, 0), row).not_nil!.index.should eq(0)
+    Obsctl::TUI::HitTest.resolve(model, AREA, audio_strip_column(areas.audio, 1), row).not_nil!.index.should eq(1)
+    # The gutter between two strips belongs to neither of them.
+    gutter = areas.audio.x + 1 + Obsctl::TUI::MixerLayout::STRIP_WIDTH
+    Obsctl::TUI::HitTest.resolve(model, AREA, gutter, row).not_nil!.index.should be_nil
   end
 
-  it "marks the mute glyph at the start of an audio row" do
+  it "marks the mute button at the foot of a channel strip" do
     model = mouse_model
     areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
-    top = first_item_row(areas.audio)
+    mute = Obsctl::TUI::MixerLayout.rows(areas.audio).mute.not_nil!
+    column = audio_strip_column(areas.audio, 0)
 
-    Obsctl::TUI::HitTest.resolve(model, AREA, areas.audio.x + 1, top).not_nil!.on_mute_control.should be_true
-    Obsctl::TUI::HitTest.resolve(model, AREA, areas.audio.x + 8, top).not_nil!.on_mute_control.should be_false
+    Obsctl::TUI::HitTest.resolve(model, AREA, column, mute).not_nil!.on_mute_control.should be_true
+    Obsctl::TUI::HitTest.resolve(model, AREA, column, mute - 1).not_nil!.on_mute_control.should be_false
   end
 
   it "follows the list as it scrolls, so a click lands on what is drawn" do
@@ -162,11 +168,12 @@ describe "mouse input" do
     action.kind.should eq(Obsctl::TUI::ActionKind::PointerFocus)
   end
 
-  it "toggles mute from the glyph without needing the row selected first" do
+  it "toggles mute from the button without needing the strip selected first" do
     model = mouse_model
     areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
+    mute = Obsctl::TUI::MixerLayout.rows(areas.audio).mute.not_nil!
 
-    action = click(model, areas.audio.x + 1, first_item_row(areas.audio) + 1).not_nil!
+    action = click(model, audio_strip_column(areas.audio, 1), mute).not_nil!
     action.kind.should eq(Obsctl::TUI::ActionKind::PointerToggleMute)
     action.panel.should eq(Obsctl::TUI::FocusPanel::Audio)
     action.index.should eq(1)
@@ -188,14 +195,15 @@ describe "mouse input" do
   it "treats the wheel as a gain control over the audio matrix" do
     model = mouse_model
     areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
-    second_row = first_item_row(areas.audio) + 1
+    meter_row = first_item_row(areas.audio) + 1
+    column = audio_strip_column(areas.audio, 1)
 
-    # No selection needed first: the wheel acts on the input it is over.
-    up = wheel(model, areas.audio.x + 8, second_row, true).not_nil!
+    # No selection needed first: the wheel acts on the strip it is over.
+    up = wheel(model, column, meter_row, true).not_nil!
     up.kind.should eq(Obsctl::TUI::ActionKind::PointerVolumeUp)
     up.index.should eq(1)
 
-    down = wheel(model, areas.audio.x + 8, second_row, false).not_nil!
+    down = wheel(model, column, meter_row, false).not_nil!
     down.kind.should eq(Obsctl::TUI::ActionKind::PointerVolumeDown)
     down.index.should eq(1)
   end
@@ -205,7 +213,7 @@ describe "mouse input" do
     model.focus = Obsctl::TUI::FocusPanel::Audio
     areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
 
-    action = wheel(model, areas.audio.x + 8, first_item_row(areas.audio), false, CryTUI::KeyModifiers::Shift).not_nil!
+    action = wheel(model, audio_strip_column(areas.audio, 0), first_item_row(areas.audio), false, CryTUI::KeyModifiers::Shift).not_nil!
     action.kind.should eq(Obsctl::TUI::ActionKind::NavigateDown)
   end
 
@@ -213,7 +221,8 @@ describe "mouse input" do
     model = mouse_model
     areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
 
-    action = wheel(model, areas.audio.x + 8, areas.audio.bottom - 2, true).not_nil!
+    # Past the last strip: the panel is under the pointer, no channel is.
+    action = wheel(model, areas.audio.right - 3, first_item_row(areas.audio) + 1, true).not_nil!
     action.kind.should eq(Obsctl::TUI::ActionKind::PointerFocus)
   end
 

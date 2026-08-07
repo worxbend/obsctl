@@ -83,6 +83,111 @@ module Obsctl
       end
     end
 
+    # The screen rows a channel strip is divided into. A row is nil when the
+    # panel is too short to afford it; the meter always survives, because a
+    # mixer without meters is not a mixer.
+    record MixerRows,
+      name : Int32?,
+      meter_top : Int32,
+      meter_height : Int32,
+      decibels : Int32?,
+      value : Int32?,
+      mute : Int32?
+
+    # The columns inside one strip: a meter, then a fader beside it.
+    record MixerColumns,
+      meter : Int32,
+      meter_width : Int32,
+      fader : Int32
+
+    # Where the vertical mixer puts its channel strips.
+    #
+    # Shared by the widget and the hit test, the same way the dashboard layout
+    # is: the strips are a pure function of the area, the input count and the
+    # cursor, so a click can be resolved by recomputing them rather than by
+    # remembering where the last frame drew them.
+    module MixerLayout
+      extend self
+
+      STRIP_WIDTH = 8
+      GAP         = 1
+      METER_WIDTH = 3
+      # Meter, a blank column, then the fader.
+      CONTENT_WIDTH = METER_WIDTH + 2
+
+      def stride : Int32
+        STRIP_WIDTH + GAP
+      end
+
+      # Panels are drawn inside a one-cell border on every side.
+      def inner(area : CryTUI::Rect) : CryTUI::Rect
+        CryTUI::Rect.new(area.x + 1, area.y + 1, {area.width - 2, 0}.max, {area.height - 2, 0}.max)
+      end
+
+      # Strips that fit side by side. Always at least one, so a panel too
+      # narrow for a whole strip still shows the selected channel clipped
+      # rather than nothing at all.
+      def capacity(area : CryTUI::Rect) : Int32
+        {(inner(area).width + GAP) // stride, 1}.max
+      end
+
+      # The first channel drawn. Derived from the cursor rather than stored, so
+      # the widget and the hit test cannot disagree about where the strips are.
+      def offset(count : Int32, cursor : Int32, area : CryTUI::Rect) : Int32
+        room = capacity(area)
+        return 0 if count <= room
+        cursor = cursor.clamp(0, count - 1)
+        start = cursor >= room ? cursor - room + 1 : 0
+        start.clamp(0, count - room)
+      end
+
+      # `{channel index, strip rectangle}` for every strip on screen, in draw
+      # order. A strip that would not fit whole is left out rather than drawn
+      # cut in half -- except on a panel too narrow for even one, where the
+      # selected channel is clipped so something is still shown.
+      def strips(count : Int32, cursor : Int32, area : CryTUI::Rect) : Array(Tuple(Int32, CryTUI::Rect))
+        content = inner(area)
+        return [] of Tuple(Int32, CryTUI::Rect) if count <= 0 || content.empty?
+
+        first = offset(count, cursor, area)
+        room = {capacity(area), count - first}.min
+        (0...room).compact_map do |position|
+          x = content.x + position * stride
+          width = {STRIP_WIDTH, content.right - x}.min
+          next if width <= 0
+          {first + position, CryTUI::Rect.new(x, content.y, width, content.height)}
+        end.to_a
+      end
+
+      # The channel under a column, or nil for the gutter between strips.
+      def index_at(count : Int32, cursor : Int32, area : CryTUI::Rect, column : Int32) : Int32?
+        strips(count, cursor, area).each do |index, rect|
+          return index if column >= rect.x && column < rect.right
+        end
+        nil
+      end
+
+      # Rows are given up from the bottom as the panel shrinks: the dB readout
+      # goes first, then the gain readout, then the mute badge.
+      def rows(area : CryTUI::Rect) : MixerRows
+        content = inner(area)
+        height = content.height
+        name = height >= 2 ? content.y : nil
+        mute = height >= 3 ? content.bottom - 1 : nil
+        value = height >= 5 ? content.bottom - 2 : nil
+        decibels = height >= 7 ? content.bottom - 3 : nil
+        top = content.y + (name ? 1 : 0)
+        bottom = content.bottom - [mute, value, decibels].count { |row| row }
+        MixerRows.new(name, top, {bottom - top, 0}.max, decibels, value, mute)
+      end
+
+      def columns(strip : CryTUI::Rect) : MixerColumns
+        pad = {(strip.width - CONTENT_WIDTH) // 2, 0}.max
+        meter = strip.x + pad
+        MixerColumns.new(meter, METER_WIDTH, meter + METER_WIDTH + 1)
+      end
+    end
+
     record SettingsAreas, themes : CryTUI::Rect, preview : CryTUI::Rect
 
     # The appearance lab's two columns, shared by its widget and its hit test so

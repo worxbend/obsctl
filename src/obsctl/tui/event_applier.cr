@@ -125,7 +125,7 @@ module Obsctl
         inputs.each do |input|
           name = input["name"]?.try(&.as_s?) || input["inputName"]?.try(&.as_s?)
           level = number(input["level"]?) || meter_level(input["inputLevelsMul"]?)
-          model.meter_levels[name] = level if name && level
+          model.record_meter_level(name, level) if name && level
         end
         false
       end

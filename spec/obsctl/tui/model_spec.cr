@@ -101,6 +101,32 @@ describe Obsctl::TUI::Model do
     model.revealed_last_result(2).should eq("Ки")
   end
 
+  it "holds a meter peak and lets it fall back on its own" do
+    model = Obsctl::TUI::Model.new
+    model.record_meter_level("Mic", 1.0)
+    held = model.meter_peak("Mic").not_nil!
+    held.should be_close(1.0, 0.0001)
+
+    # A quieter reading leaves the hold where it was; the marker falls with the
+    # clock rather than with the signal.
+    10.times { model.anim.tick }
+    model.record_meter_level("Mic", 0.001)
+    faded = model.meter_peak("Mic").not_nil!
+    faded.should be < held
+    faded.should be_close(1.0 - 10 * Obsctl::TUI::Meter::PEAK_FALL_PER_FRAME, 0.0001)
+
+    # A louder reading takes the hold back to the top.
+    model.record_meter_level("Mic", 1.0)
+    model.meter_peak("Mic").not_nil!.should be_close(1.0, 0.0001)
+  end
+
+  it "drops a meter peak once it has fallen all the way to the floor" do
+    model = Obsctl::TUI::Model.new
+    model.record_meter_level("Mic", 0.5)
+    (2 + (1.0 / Obsctl::TUI::Meter::PEAK_FALL_PER_FRAME).to_i).times { model.anim.tick }
+    model.meter_peak("Mic").should be_nil
+  end
+
   it "cycles palette completions in both directions" do
     palette = Obsctl::TUI::CommandPaletteState.new(completions: ["/scene Main", "/scene Cam"])
     palette.cycle_next

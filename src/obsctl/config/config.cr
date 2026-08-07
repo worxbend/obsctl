@@ -110,6 +110,21 @@ module Obsctl
       )
     end
 
+    # Dashboard key bindings.
+    #
+    # Part of the on-disk schema so a config written by the Rust reference
+    # loads here unchanged and survives a rewrite. The dashboard still resolves
+    # these four actions from its built-in bindings -- which are the defaults
+    # below -- so overriding them does not yet change what the keys do.
+    struct KeymapConfig
+      config_value(
+        quit : Array(String) = ["q", "ctrl+c"],
+        command_palette : Array(String) = ["/", ":"],
+        reload_config : Array(String) = ["r"],
+        dump_config : Array(String) = ["D"],
+      )
+    end
+
     # Parsed obsctl configuration with canonical top-level server and reconnect sections.
     class Config
       ALLOWED_TOP_LEVEL_KEYS = Set{
@@ -120,6 +135,7 @@ module Obsctl
         "scenes",
         "audio",
         "ui",
+        "keymap",
       }
 
       # The document exactly as it appears on disk.
@@ -137,6 +153,7 @@ module Obsctl
         getter scenes : Array(SceneConfig) = [] of SceneConfig
         getter audio : AudioConfig = AudioConfig.new
         getter ui : UiConfig = UiConfig.new
+        getter keymap : KeymapConfig = KeymapConfig.new
       end
 
       property version : Int32
@@ -146,6 +163,7 @@ module Obsctl
       property scenes : Array(SceneConfig)
       property audio : AudioConfig
       property ui : UiConfig
+      property keymap : KeymapConfig
 
       # Builds a config object, migrating legacy `connection.reconnect` into the
       # canonical top-level `reconnect` field when present.
@@ -157,6 +175,7 @@ module Obsctl
         @scenes : Array(SceneConfig) = [] of SceneConfig,
         @audio : AudioConfig = AudioConfig.new,
         @ui : UiConfig = UiConfig.new,
+        @keymap : KeymapConfig = KeymapConfig.new,
       )
         if legacy_reconnect = @connection.reconnect
           @reconnect = legacy_reconnect
@@ -184,6 +203,7 @@ module Obsctl
           scenes: document.scenes,
           audio: document.audio,
           ui: document.ui,
+          keymap: document.keymap,
         )
       rescue ex : YAML::ParseException
         raise Domain::ConfigInvalid.new("invalid YAML: #{ex.message}")
@@ -315,6 +335,13 @@ module Obsctl
               end
               write_optional(yaml, "locale", @ui.locale)
             end
+            yaml.scalar "keymap"
+            yaml.mapping do
+              write_keys(yaml, "quit", @keymap.quit)
+              write_keys(yaml, "command_palette", @keymap.command_palette)
+              write_keys(yaml, "reload_config", @keymap.reload_config)
+              write_keys(yaml, "dump_config", @keymap.dump_config)
+            end
           end
         end
       end
@@ -322,6 +349,11 @@ module Obsctl
       # Serializes the config to canonical YAML.
       def to_yaml : String
         String.build { |io| to_yaml(io) }
+      end
+
+      private def write_keys(yaml : YAML::Builder, key : String, keys : Array(String)) : Nil
+        yaml.scalar key
+        yaml.sequence { keys.each { |binding| yaml.scalar binding } }
       end
 
       private def write_optional(yaml : YAML::Builder, key : String, value : String?) : Nil

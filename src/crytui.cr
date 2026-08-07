@@ -8,6 +8,7 @@ require "./crytui/terminal_size"
 require "./crytui/ansi_backend"
 require "./crytui/input"
 require "./crytui/widgets"
+require "./crytui/spinners"
 
 module CryTUI
   VERSION = "0.1.0"

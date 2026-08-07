@@ -2,6 +2,7 @@ require "../obs/state/obs_snapshot"
 require "../runtime/logger"
 require "./theme"
 require "./anim"
+require "./meter"
 require "./localization"
 
 module Obsctl
@@ -107,6 +108,11 @@ module Obsctl
       property profile_cursor : Int32
       property collection_cursor : Int32
       property meter_levels : Hash(String, Float64)
+      # The highest point each meter has reached and the frame it reached it
+      # on. Storing the frame rather than decaying the value every tick keeps
+      # the peak marker a pure function of the clock, so nothing has to run
+      # between renders for it to fall.
+      property meter_peaks : Hash(String, Tuple(Float64, UInt64))
       property cpu_history : Array(Float64)
       property bitrate_history : Array(Float64)
       property fps_history : Array(Float64)
@@ -137,6 +143,7 @@ module Obsctl
         @profile_cursor = 0
         @collection_cursor = 0
         @meter_levels = {} of String => Float64
+        @meter_peaks = {} of String => Tuple(Float64, UInt64)
         @cpu_history = [] of Float64
         @bitrate_history = [] of Float64
         @fps_history = [] of Float64
@@ -240,6 +247,24 @@ module Obsctl
           )
         end
         @snapshot = snapshot.copy_with(audio_inputs: inputs)
+      end
+
+      # Records a meter reading and raises the peak hold when the reading beats
+      # whatever is left of the last one.
+      def record_meter_level(input_name : String, level : Float64) : Nil
+        @meter_levels[input_name] = level
+        fraction = Meter.fraction(level)
+        held = meter_peak(input_name)
+        @meter_peaks[input_name] = {fraction, @anim.frame} if held.nil? || fraction >= held
+      end
+
+      # How far up the meter the peak marker has fallen to by now, or nil once
+      # it has slid all the way back to the floor.
+      def meter_peak(input_name : String) : Float64?
+        peak = @meter_peaks[input_name]?
+        return unless peak
+        remaining = peak[0] - (@anim.frame - peak[1]).to_f64 * Meter::PEAK_FALL_PER_FRAME
+        remaining > 0.0 ? remaining : nil
       end
 
       def push_log(entry : LogEntry)
