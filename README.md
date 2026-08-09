@@ -21,13 +21,9 @@ curl -fsSL https://worxbend.github.io/obsctl/install.sh | sh
 
 [Website](https://worxbend.github.io/obsctl/) · [Install](#-install) · [First 5 minutes](#-your-first-five-minutes) · [Cheat sheet](#-cheat-sheet) · [Scripting](#-scripting) · [Docs](#-more-docs)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/shot-dashboard.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/assets/shot-dashboard-light.svg">
-  <img src="docs/assets/shot-dashboard.svg" alt="The obsctl dashboard: scenes, audio matrix, profiles, collections, logs and stream stats" width="900">
-</picture>
+<img src="docs/demo/obsctl.gif" alt="An obsctl session: the splash, the dashboard, scene switching, the audio matrix with its vertical channel strips, the command palette, and live stream stats" width="772">
 
-<sub>👆 Not a mockup — every screenshot here is rendered from the real widget code by <code>make readme-shots</code>.</sub>
+<sub>👆 An unedited session, sped up 2×. The same recording <a href="https://worxbend.github.io/obsctl/#demo">plays as sharp, scrubbable text on the website</a> — or locally with <code>asciinema play docs/demo/obsctl.cast</code>.</sub>
 
 </div>
 
@@ -202,24 +198,20 @@ That's it — you're in. Now play:
 
 ## 📸 The tour
 
-<div align="center">
+Everything below happens in [the recording at the top of this
+page](#-obsctl) — it's the whole tour, and it's deliberately the only
+showcase here. A screenshot goes stale the moment a panel is redrawn and
+nothing catches it; a recording gets re-made from the code it documents. 🎬
 
-**Press `Space` and obsctl tells you what's next** — the which-key menu, exactly like AstroNvim.
-
-<img src="docs/assets/shot-which-key.svg" alt="The leader menu open, listing find, mute, obs, quit and ui groups" width="880">
-
-**Type `:` for a command line**, with completion for every scene and input you have.
-
-<img src="docs/assets/shot-command-line.svg" alt="The command line open with :scene and four completions" width="880">
-
-**41 built-in themes**, previewed live before you commit. `F2` or `<leader>ut`.
-Twelve of them are `vivid`: near-black grounds under a gradient that swings
-across the colour wheel — violet into toxic green, orange into gold, cyan into
-hot pink.
-
-<img src="docs/assets/shot-themes.svg" alt="The appearance lab, previewing a theme" width="880">
-
-</div>
+- **Press `Space` and obsctl tells you what's next** — the which-key menu,
+  exactly like AstroNvim.
+- **Type `:` for a command line**, with completion for every scene and input
+  you have.
+- **41 built-in themes**, previewed live before you commit. `F2` or
+  `<leader>ut`. Twelve of them are `vivid`: near-black grounds under a gradient
+  that swings across the colour wheel — violet into toxic green, orange into
+  gold, cyan into hot pink. The [website](https://worxbend.github.io/obsctl/#console)
+  will repaint itself in eight of them if you click a swatch.
 
 ### 🎚️ A mixing desk, not a list
 
@@ -574,6 +566,7 @@ real PTY backends.
 | [Configuration](docs/config.md) | Every setting, with defaults and examples |
 | [Protocol](docs/protocol.md) | IPC framing, topics, and the compatibility fixtures |
 | [CryTUI notes](docs/tui-research.md) | How the rendering layer came to be |
+| [Demo recording](docs/demo/README.md) | How the cast above is recorded, trimmed, and turned into a GIF |
 | [Contributing](CONTRIBUTING.md) | Setup, the four build gates, project layout |
 | [Changelog](CHANGELOG.md) | What changed, and why |
 | [Security](SECURITY.md) | Reporting holes, and how credentials are handled |
@@ -595,12 +588,16 @@ fake obs-websocket server, real Unix sockets, and real PTYs in the repo. Add a
 regression test at the narrowest layer that catches your bug, and you're
 golden.
 
-Changed a widget or a theme? Redraw the pictures:
+Changed a theme? Re-export the palettes the website styles itself from
+(CI fails if the committed copy is stale):
 
 ```bash
-make readme-shots     # the screenshots above
-make site-frames      # the website's terminal frames
+make site-themes      # site/themes.js, read from the real theme table
 ```
+
+Changed the dashboard enough that the demo no longer matches? Re-record it —
+[`docs/demo/README.md`](docs/demo/README.md) has the exact commands, including
+how to trim the recording and regenerate the GIF above. 🎬
 
 **Filing an issue?** Include your OBS and obs-websocket versions, your terminal
 and `$TERM`, what you ran, what you expected, and what you got. For rendering

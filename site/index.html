@@ -10,12 +10,15 @@
 <meta property="og:title" content="obsctl — your OBS control room, in the terminal" />
 <meta property="og:description" content="A Crystal TUI, an automation-friendly CLI, and a resilient local daemon for OBS Studio." />
 <meta property="og:type" content="website" />
+<!-- asciinema-player 3.17.0, vendored rather than pulled from a CDN so the
+     page stays self-contained and has no third-party runtime dependency. -->
+<link rel="stylesheet" href="vendor/asciinema-player.css" />
 <style>
 /* ------------------------------------------------------------------ *
  * obsctl microsite
  *
  * The palette is not invented here. Every colour is a real obsctl theme,
- * shipped from src/obsctl/tui/theme.cr through site/frames.js, and the
+ * shipped from src/obsctl/tui/theme.cr through site/themes.js, and the
  * switcher restyles this page with the same values it uses to paint the
  * terminal. The page and the product are always wearing the same theme.
  * ------------------------------------------------------------------ */
@@ -270,50 +273,15 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
 }
 .term__lamps { display: flex; gap: .35rem; }
 .term__lamps i { width: 9px; height: 9px; border-radius: 50%; display: block; }
-.term__scroll { overflow-x: auto; padding: .55rem .7rem; }
 
-/* The frame is pre-rendered character data: never wrap it, never let the
-   page scroll sideways because of it. */
-.frame {
-  display: block;
-  font-family: var(--mono);
-  font-size: clamp(7px, 1.05vw, 15px);
-  /* Exactly 1: box-drawing glyphs fill their em box, so any leading at all
-     breaks the vertical strokes into dashes and opens gaps between rows. */
-  line-height: 1;
-  white-space: pre;
-  margin: 0;
-  width: max-content;
-  min-width: 100%;
-  tab-size: 1;
-}
-/* Each row is its own line. The generator emits no newline between rows,
-   because one would land inside `white-space: pre` and double the spacing. */
-.frame .row { display: block; }
-
-/* A run holding non-ASCII glyphs. Its width is set inline to the number of
-   terminal cells it occupies, so an emoji the browser draws at 1.4 advances
-   still consumes its true 2 columns and the row stays on the grid. */
-.frame .g {
-  display: inline-block;
-  width: 1ch;
-  text-align: center;
-  vertical-align: top;
-  white-space: pre;
-  /* Deliberately not `overflow: hidden`: the fixed width already pins the
-     layout, and emoji ink routinely exceeds the em box, so clipping would
-     shave their tops and bottoms for no benefit. */
-}
-
-/* Page-load: the console paints itself, top to bottom, once. */
-.frame--boot .row {
-  opacity: 0;
-  animation: paint 260ms ease forwards;
-}
-@keyframes paint { to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) {
-  .frame--boot .row { opacity: 1; animation: none; }
-}
+/* The recording is 112 columns by 57 rows, so its natural shape is close to
+   square. Left at full page width it would tower over the fold, so cap it and
+   centre it; the player scales the text to whatever width it is given. */
+.term--cast { max-width: 900px; margin-inline: auto; }
+/* The player paints its own background from the theme recorded in the cast,
+   so square its corners off against the frame rather than letting a rounded
+   box float inside a sharp one. */
+.term--cast div.ap-wrapper div.ap-player { border-radius: 0; }
 
 .term__foot {
   display: flex;
@@ -439,6 +407,14 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
 .codes td:last-child { color: var(--ink-dim); }
 .codes tr:last-child td { border-bottom: 0; }
 
+/* The health table reuses this component, but its first column is a label
+   rather than a two-character exit code: give it the room it needs, and the
+   ordinary reading colour rather than the exit-code amber. */
+/* The nth-child selector is repeated only to out-specify the exit-code rule
+   above, which paints the second column brighter than the rest. */
+.codes--labels td, .codes--labels td:nth-child(2) { color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.codes--labels td:first-child { color: var(--ink); width: auto; white-space: nowrap; }
+
 /* -- signal path ------------------------------------------------------ */
 
 .path {
@@ -533,8 +509,8 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
 
 <main id="top">
 
-  <!-- The thesis: the actual product, painting itself on load. -->
-  <section class="wrap hero">
+  <!-- The thesis: an unedited recording of the actual product, playing. -->
+  <section class="wrap hero" id="demo">
     <div class="hero__grid">
       <div class="hero__intro">
         <h1>obsctl<span class="dim">.</span></h1>
@@ -551,21 +527,19 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
         </div>
       </div>
 
-      <figure class="term" style="margin:0">
+      <figure class="term term--cast" style="margin:0">
         <figcaption class="term__bar">
           <span class="term__lamps">
             <i style="background:var(--danger)"></i>
             <i style="background:var(--warning)"></i>
             <i style="background:var(--success)"></i>
           </span>
-          <span>obsctl · $XDG_RUNTIME_DIR/obsctl/obsctl.sock</span>
+          <span>asciinema rec — obsctl tui</span>
         </figcaption>
-        <div class="term__scroll">
-          <pre class="frame frame--boot" id="hero-frame" aria-label="The obsctl terminal dashboard during a live stream"></pre>
-        </div>
+        <div id="castPlayer" aria-label="A recorded obsctl session: the splash, the dashboard, scene switching, the audio matrix, and the command palette"></div>
         <div class="term__foot">
-          <span><b>Live</b> render</span>
-          <span>Not a screenshot — this frame is drawn by the real widget code</span>
+          <span><b>Real</b> session</span>
+          <span>Not a screenshot and not a video — it is text, so it stays sharp at any size, and you can scrub, pause and copy out of it</span>
         </div>
       </figure>
     </div>
@@ -583,9 +557,9 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
         <h2 style="font-size:1.5rem;letter-spacing:-.02em;margin-bottom:.9rem">Pick a look.<br />The whole room changes.</h2>
         <p class="lede">
           obsctl ships 29 built-in themes, and custom themes can override any
-          subset of the palette. These eight are rendered above — and the
-          page you are reading restyles itself from the same values, because
-          there is only one palette and both are using it.
+          subset of the palette. Pick one of these eight and the page you are
+          reading restyles itself from that theme's real colours — the same
+          values the terminal paints with, read straight out of the binary.
         </p>
         <p class="lede">
           Press <code style="font-family:var(--mono);color:var(--accent)">Ctrl-T</code>
@@ -731,16 +705,25 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
           this session, so a 30 fps profile reads as healthy at 30.
         </p>
       </div>
-      <figure class="term" style="margin:0">
-        <figcaption class="term__bar">
-          <span class="term__lamps"><i style="background:var(--success)"></i></span>
-          <span>Stats — stream health</span>
-        </figcaption>
-        <div class="term__scroll">
-          <pre class="frame" id="stats-frame" style="font-size:clamp(9px,1.35vw,15px)" aria-label="The obsctl stream health panel"></pre>
-        </div>
-        <div class="term__foot"><span>Reads the telemetry the daemon already polls — <b>no extra OBS traffic</b></span></div>
-      </figure>
+      <div style="overflow-x:auto">
+        <table class="codes codes--labels">
+          <caption>Every reading is coloured by the same three-step verdict</caption>
+          <thead>
+            <tr><th>Reading</th><th>Nominal</th><th>Degraded</th><th>Critical</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Frames missed (render lag)</td><td>&lt; 1%</td><td>1–5%</td><td>≥ 5%</td></tr>
+            <tr><td>Frames skipped (encode lag)</td><td>&lt; 1%</td><td>1–5%</td><td>≥ 5%</td></tr>
+            <tr><td>Frame budget used</td><td>&lt; 50%</td><td>50–80%</td><td>≥ 80%</td></tr>
+            <tr><td>Output FPS vs. session best</td><td>≥ 95%</td><td>80–95%</td><td>&lt; 80%</td></tr>
+          </tbody>
+        </table>
+        <p class="lede" style="margin-top:1.1rem">
+          The panel reads the telemetry the daemon already polls for the header bar, so it
+          costs no extra OBS traffic and cannot disagree with the numbers above it. Watch it
+          fill in during <a href="#demo">the recording at the top of this page</a>.
+        </p>
+      </div>
     </div>
   </section>
 
@@ -868,21 +851,19 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
   </div>
 </footer>
 
-<script src="frames.js"></script>
+<script src="themes.js"></script>
 <script>
 (function () {
   "use strict";
 
-  var frames = window.OBSCTL_FRAMES || {};
+  var frames = window.OBSCTL_THEMES || {};
   var ids = Object.keys(frames);
   if (!ids.length) return;
 
-  var heroFrame = document.getElementById("hero-frame");
-  var statsFrame = document.getElementById("stats-frame");
   var switcher = document.getElementById("themes");
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  // Palette keys in frames.js -> the custom properties this page styles from.
+  // Palette keys in themes.js -> the custom properties this page styles from.
   var TOKENS = {
     background: "--ground",
     foreground: "--ink",
@@ -903,9 +884,6 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
     for (var key in TOKENS) {
       if (theme[key]) document.documentElement.style.setProperty(TOKENS[key], theme[key]);
     }
-
-    heroFrame.innerHTML = theme.html;
-    statsFrame.innerHTML = theme.statsHtml;
 
     Array.prototype.forEach.call(switcher.children, function (button) {
       button.setAttribute("aria-pressed", String(button.dataset.theme === id));
@@ -954,17 +932,30 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
   }
 
   apply(preferred(), false);
+})();
+</script>
 
-  // Paint the hero frame row by row, once, like a console coming up.
-  if (!reduceMotion) {
-    var rows = heroFrame.querySelectorAll(".row");
-    var step = 900 / Math.max(rows.length, 1);
-    Array.prototype.forEach.call(rows, function (row, index) {
-      row.style.animationDelay = (index * step).toFixed(1) + "ms";
-    });
-  } else {
-    heroFrame.classList.remove("frame--boot");
-  }
+<!-- The recording. Vendored player, and the cast is copied in from
+     docs/demo/ by the Pages workflow at deploy time. -->
+<script src="vendor/asciinema-player.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var mount = document.getElementById("castPlayer");
+  if (!mount || !window.AsciinemaPlayer) return;
+
+  AsciinemaPlayer.create("demo/obsctl.cast", mount, {
+    // The recording is 112x57; fit to the column width and let the height
+    // follow, so no part of the dashboard is cropped.
+    fit: "width",
+    // Park on a frame where the dashboard is already up, so the section reads
+    // as the app rather than as an empty splash screen.
+    poster: "npt:0:12",
+    // Long pauses in a real session are dead air on a page; cap them.
+    idleTimeLimit: 2,
+    controls: true
+  });
 })();
 </script>
 </body>

@@ -6,6 +6,10 @@ on:
       - master
     paths:
       - "site/**"
+      # The recording the site plays and the installer it serves both live
+      # outside site/ and are copied in at deploy time, so a change to either
+      # still has to redeploy.
+      - "docs/demo/obsctl.cast"
       - "install.sh"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
@@ -32,10 +36,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # site/frames.js is generated from the widget code by
-      # scripts/render_site_frames.cr. It is committed so the deploy needs no
-      # Crystal toolchain, but a stale copy would quietly ship a dashboard that
-      # no longer matches the binary, so fail loudly instead.
+      # site/themes.js is exported from the real theme table by
+      # scripts/render_site_themes.cr. It is committed so the deploy needs no
+      # Crystal toolchain, but a stale copy would quietly ship colours that no
+      # longer match the binary, so fail loudly instead.
       - name: Install Crystal
         uses: crystal-lang/install-crystal@v1
         with:
@@ -44,21 +48,27 @@ jobs:
       - name: Install shards
         run: shards install --production
 
-      - name: Check the rendered frames are current
+      - name: Check the exported themes are current
         run: |
-          cp site/frames.js /tmp/frames.committed.js
-          make site-frames
-          if ! diff -q /tmp/frames.committed.js site/frames.js >/dev/null; then
-            echo "::error::site/frames.js is stale. Run 'make site-frames' and commit the result." >&2
-            diff /tmp/frames.committed.js site/frames.js | head -20 >&2
+          cp site/themes.js /tmp/themes.committed.js
+          make site-themes
+          if ! diff -q /tmp/themes.committed.js site/themes.js >/dev/null; then
+            echo "::error::site/themes.js is stale. Run 'make site-themes' and commit the result." >&2
+            diff /tmp/themes.committed.js site/themes.js | head -20 >&2
             exit 1
           fi
 
-      # Copied in at deploy time rather than kept as a second copy in the repo,
-      # so `curl .../install.sh` can never serve a script that has drifted from
-      # the one in the tree.
+      # Both copied in at deploy time rather than kept as second copies in the
+      # repo: `curl .../install.sh` can then never serve a script that has
+      # drifted from the one in the tree, and the demo recording the README
+      # links to is byte-for-byte the one the site plays.
       - name: Publish the installer alongside the site
         run: cp install.sh site/install.sh
+
+      - name: Publish the demo recording alongside the site
+        run: |
+          mkdir -p site/demo
+          cp docs/demo/obsctl.cast site/demo/obsctl.cast
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

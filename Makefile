@@ -1,6 +1,6 @@
 CRYSTAL ?= crystal
 
-.PHONY: build test format format-check lint check bootstrap-obsctl-rs-contract-fixtures contract-rs-compat run release site-frames readme-shots
+.PHONY: build test format format-check lint check bootstrap-obsctl-rs-contract-fixtures contract-rs-compat run release site-themes
 
 # Every gate CI enforces, in the order a contributor should hit them.
 check: format-check lint build test
@@ -44,13 +44,8 @@ release:
 	mkdir -p bin
 	$(CRYSTAL) build --release src/obsctl.cr -o bin/obsctl
 
-# Redraws the microsite's terminal frames from the real widget code. Run after
-# changing a widget or a theme; the Pages workflow fails if the committed
-# frames no longer match.
-site-frames:
-	$(CRYSTAL) run scripts/render_site_frames.cr
-
-# Redraws the README screenshots from the same widget code. They are committed
-# under docs/assets, so run this after changing a widget or a theme.
-readme-shots:
-	$(CRYSTAL) run scripts/render_readme_shots.cr
+# Re-exports the microsite's theme palettes from the real theme table. Run
+# after changing a theme; the Pages workflow fails if the committed palettes no
+# longer match.
+site-themes:
+	$(CRYSTAL) run scripts/render_site_themes.cr

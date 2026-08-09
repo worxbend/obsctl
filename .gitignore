@@ -4,3 +4,7 @@
 /.crystal/
 *.dwarf
 *.log
+# The demo recording lives in docs/demo/ and is copied here by the Pages
+# workflow at deploy time; a local preview copy must not become a second copy
+# in the repository.
+/site/demo/

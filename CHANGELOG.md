@@ -48,10 +48,33 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Changed
 
+- The README and the website show a recording of a real session instead of
+  rendered screenshots. `docs/demo/obsctl.cast` is an
+  [asciinema](https://asciinema.org) cast — a terminal session stored as text
+  rather than as pixels — of an unedited `obsctl tui` run, trimmed to the
+  session itself. The website plays it with a vendored asciinema player, so it
+  stays sharp at any size and can be paused, scrubbed and copied out of; the
+  README embeds `docs/demo/obsctl.gif`, because GitHub cannot play a cast
+  inline. A still frame goes stale the moment a panel is redrawn and nothing
+  catches it, and half of what the dashboard is — spinners, meters, the
+  gradient chrome, the beacon — cannot be shown in one. The recipe for
+  re-recording and re-rendering both files is in `docs/demo/README.md`.
 - The command line types a result out three times faster — nine graphemes per
   animation tick rather than three. The reveal is there to draw the eye to a
   new message, and at the old rate a long error string took long enough to
   finish that it read as something to wait through instead.
+- `make site-frames` is now `make site-themes`, and it writes `site/themes.js`
+  instead of `site/frames.js`. The website no longer renders dashboard frames
+  of its own, so the generator only exports the theme palettes the page
+  restyles itself from — 2 KB of colours rather than 312 KB of pre-rendered
+  HTML. The Pages workflow still fails if the committed copy is stale.
+
+### Removed
+
+- The rendered screenshots and the code that produced them: `make
+  readme-shots`, `scripts/render_readme_shots.cr`,
+  `scripts/render_site_frames.cr`, `scripts/support/showcase.cr`, and the five
+  SVGs under `docs/assets/`. The recording replaces all of them.
 
 ## [0.7.0] - 2026-08-07
 
