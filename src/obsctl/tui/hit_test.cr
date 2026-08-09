@@ -67,6 +67,18 @@ module Obsctl
           .index { |span| column >= span[0] && column <= span[1] }
       end
 
+      # The scene under the pointer in the scene picker, or nil for a click on
+      # its chrome, past its last row, or anywhere outside it -- all of which
+      # the caller treats as a request to close.
+      def scene_picker_index(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Int32?
+        return unless model.scene_picker_active
+
+        rect = ScenePickerLayout.compute(area, model)
+        return unless contains?(rect, column, row)
+
+        item_at(rect, Array.new(model.scene_picker_entries.size, 1), model.scene_picker_cursor, row)
+      end
+
       # Where the which-key menu is drawn for the sequence being typed.
       def which_key_area(model : Model, area : CryTUI::Rect) : CryTUI::Rect
         WhichKeyLayout.compute(area, Keymap.continuations(model.pending_sequence), palette_area(model, area))

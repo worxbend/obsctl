@@ -27,6 +27,18 @@ module Obsctl
         def status_dot(active : Bool, fancy : Bool) : String
           active ? (fancy ? "●" : "*") : (fancy ? "○" : "-")
         end
+
+        # How long an output has been up. `mm:ss` until the first hour so the
+        # common case stays narrow, and a placeholder while the daemon has not
+        # reported a duration yet.
+        def duration(duration_ms : Int64?) : String
+          return "--:--" unless duration_ms
+          total_seconds = duration_ms // 1000
+          hours = total_seconds // 3600
+          minutes = (total_seconds % 3600) // 60
+          seconds = total_seconds % 60
+          hours > 0 ? "%02d:%02d:%02d" % {hours, minutes, seconds} : "%02d:%02d" % {minutes, seconds}
+        end
       end
     end
   end

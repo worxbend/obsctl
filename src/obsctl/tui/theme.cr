@@ -63,7 +63,38 @@ module Obsctl
       ZENBURN          = palette("zenburn", "Zenburn", %w[3F3F3F DCA3A3 8CD0D3 DCDCCC 7F9F7F 5F5F5F DCA3A3 7F9F7F F0DFAF CC9393 8CD0D3 DCA3A3 3F3F3F])
       MONO             = new("mono", "Mono (TTY-safe)", CryTUI::Color::RESET, CryTUI::Color::WHITE, CryTUI::Color::GRAY, CryTUI::Color::WHITE, CryTUI::Color::DARK_GRAY, CryTUI::Color::DARK_GRAY, CryTUI::Color::WHITE, CryTUI::Color::GREEN, CryTUI::Color::YELLOW, CryTUI::Color::RED, CryTUI::Color::CYAN, CryTUI::Color::WHITE, CryTUI::Color::BLACK)
 
-      ALL = [EMBER, SLATE, BTOP, NORD, DRACULA, GRUVBOX, SOLARIZED_DARK, MONOKAI, ONE_DARK, TOKYO_NIGHT, CATPPUCCIN_MOCHA, ROSE_PINE, KANAGAWA_WAVE, EVERFOREST_DARK, AYU_MIRAGE, GITHUB_DARK, SOLARIZED_LIGHT, CATPPUCCIN_LATTE, GITHUB_LIGHT, ROSE_PINE_DAWN, NIGHT_OWL, MATERIAL_OCEAN, HORIZON, ICEBERG, MOONFLY, SYNTHWAVE_84, MATRIX, ZENBURN, MONO]
+      # Near-black grounds under a vibrant two-colour gradient. The header
+      # title, the panel headings and the splash all blend `accent` into
+      # `accent_alt`, so in this group those two are picked to travel across a
+      # hue -- violet into toxic green, orange into gold -- rather than to
+      # shade one. The background is kept close to black so the gradient is the
+      # only bright thing on the screen, and `success`/`warning`/`danger`/`info`
+      # stay recognisably green/amber/red/blue even where the gradient sits on
+      # top of those hues, because the status dots are read by colour alone.
+      TOXIC_VIOLET = palette("toxic-violet", "Toxic Violet", %w[0A0713 A855F7 7CFF3D EDE4FF 7A6B99 2B2046 A855F7 5CFF8F FFC53D FF3B6B 4DD8FF A855F7 0A0713])
+      EMBER_RIOT   = palette("ember-riot", "Ember Riot", %w[100705 FF5A1F FFC93C FFECDF 9C7460 3D2114 FF5A1F 5FE08A FFB020 FF3131 5CC8FF FF5A1F 100705])
+      ACID_RAIN    = palette("acid-rain", "Acid Rain", %w[040B08 A6FF00 00E5C0 E4FFF2 5F8A79 143028 A6FF00 66FF8F E8E24D FF4D5E 4DE8FF A6FF00 040B08])
+      NEON_CRIMSON = palette("neon-crimson", "Neon Crimson", %w[0D0509 FF1744 FF4FC3 FFE4EE 96667E 3A1226 FF1744 4DE88A FFB13D FF1744 6BB8FF FF1744 0D0509])
+      PLASMA_DRIFT = palette("plasma-drift", "Plasma Drift", %w[0B0710 FF3DCB FFA23A FFE6F7 8E6E93 331F3D FF3DCB 5FE8A8 FFA23A FF3355 7AA8FF FF3DCB 0B0710])
+      ULTRAVIOLET  = palette("ultraviolet", "Ultraviolet", %w[06070F 7C4DFF 22E4FF E6EAFF 6B7099 1E2145 7C4DFF 4DFFA8 FFD24D FF4D7A 22E4FF 7C4DFF 06070F])
+      RADIOACTIVE  = palette("radioactive", "Radioactive", %w[070A04 39FF14 FFF34D E8FFDC 6E8A5C 1C2E14 39FF14 39FF14 FFF34D FF3D2E 4DE0FF 39FF14 070A04])
+      BLOOD_ORANGE = palette("blood-orange", "Blood Orange", %w[0F0604 FF2E3C FF9A1F FFE8E0 9E6B5E 3B1A14 FF2E3C 66DD8A FF9A1F FF2E3C 5FB8FF FF2E3C 0F0604])
+      HYPERDRIVE   = palette("hyperdrive", "Hyperdrive", %w[04080E 00F0FF FF5FD2 E0F7FF 5F8299 12303D 00F0FF 4DFFB0 FFD24D FF476F 00F0FF 00F0FF 04080E])
+      NIGHTSHADE   = palette("nightshade", "Nightshade", %w[090614 8B5CFF 00FFA3 E9E4FF 6E6699 241E47 8B5CFF 00FFA3 FFCF4D FF4D6E 5FB0FF 8B5CFF 090614])
+      MAGMA_CORE   = palette("magma-core", "Magma Core", %w[0D0503 FF6A00 FF1E56 FFE9DC 9E6E52 3D1C0D FF6A00 5FE08A FFB800 FF1E56 5FA8FF FF6A00 0D0503])
+      DUSK_RIOT    = palette("dusk-riot", "Dusk Riot", %w[0B0610 9D4EDD FF7A00 F2E6FF 7E6690 2E1C3D 9D4EDD 5FE8A0 FF7A00 FF3D6B 6BC5FF 9D4EDD 0B0610])
+
+      # The obsctl-rs catalog, in its order. A config written against the Rust
+      # build has to keep resolving to the same palette, so nothing here is
+      # reordered or renamed -- new palettes go in `VIVID`.
+      REFERENCE = [EMBER, SLATE, BTOP, NORD, DRACULA, GRUVBOX, SOLARIZED_DARK, MONOKAI, ONE_DARK, TOKYO_NIGHT, CATPPUCCIN_MOCHA, ROSE_PINE, KANAGAWA_WAVE, EVERFOREST_DARK, AYU_MIRAGE, GITHUB_DARK, SOLARIZED_LIGHT, CATPPUCCIN_LATTE, GITHUB_LIGHT, ROSE_PINE_DAWN, NIGHT_OWL, MATERIAL_OCEAN, HORIZON, ICEBERG, MOONFLY, SYNTHWAVE_84, MATRIX, ZENBURN]
+
+      VIVID = [TOXIC_VIOLET, EMBER_RIOT, ACID_RAIN, NEON_CRIMSON, PLASMA_DRIFT, ULTRAVIOLET, RADIOACTIVE, BLOOD_ORANGE, HYPERDRIVE, NIGHTSHADE, MAGMA_CORE, DUSK_RIOT]
+
+      # `mono` closes the picker rather than sitting in the middle of it: it is
+      # what a terminal without colour falls back to, not a palette anyone
+      # scrolls looking for.
+      ALL = REFERENCE + VIVID + [MONO]
 
       # Theme ids that were renamed, kept resolvable so an existing
       # config.yml naming the old id still selects the same palette.

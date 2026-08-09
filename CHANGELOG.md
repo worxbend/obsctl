@@ -8,6 +8,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
+## [Unreleased]
+
+### Added
+
+- A scene picker on `<leader>s`, so switching scene costs two keystrokes
+  instead of a cursor walk: the overlay lists every scene beside a single key
+  that switches to it, labelled `1`-`9` and then `a`-`z`. A scene configured
+  with a single-character `shortcut` claims that key ahead of the automatic
+  sequence, because the scenes panel already advertises it as `[b]` and the two
+  surfaces must not disagree about which key reaches a scene; multi-character
+  shortcuts are left to the command line, which can accept them. The picker
+  captures every key while open — `q` and `m` are scene labels in there, not
+  quit and mute — and an unlabelled key is ignored rather than closing it, so a
+  typo costs one keystroke. Arrows and `Enter` reach the scenes past the
+  thirty-fifth label, clicking a row switches to it, and the picker refuses to
+  open with no scenes rather than swallowing keys for an empty box.
+- A status beacon in the top-right corner of the header. Each output state
+  gets a motion of its own rather than only a colour, because the corner has
+  to be readable out of the edge of an eye and on a terminal whose palette
+  cannot be trusted: nothing moves while OBS is away, a lone arc drifts back
+  and forth while idle, the bar breathes in place while recording, arcs run
+  outwards from the centre while streaming, and they chase in one direction
+  when both outputs are live. The badge beside it names the state and counts
+  the elapsed time. The beacon is given a column of the header rather than
+  drawn over it, and asks only for the width its own badge needs, so a long
+  scene or profile name can never run underneath it; on a header too narrow to
+  afford both, the beacon drops out and the status line keeps every column.
+  Plain (`advanced_ui: false`) terminals keep every cadence in ASCII rather
+  than losing the animation.
+- Twelve `vivid` themes — `toxic-violet`, `ember-riot`, `acid-rain`,
+  `neon-crimson`, `plasma-drift`, `ultraviolet`, `radioactive`,
+  `blood-orange`, `hyperdrive`, `nightshade`, `magma-core` and `dusk-riot`.
+  Near-black grounds under a two-colour gradient that changes hue rather than
+  shade, since the header, panel titles and splash all blend `accent` into
+  `accent_alt` and a pair that only differs in brightness renders as a flat
+  title. The reference catalog still opens the theme picker in its own order
+  and `mono` still closes it, so an existing `theme:` setting is unaffected.
+
+### Changed
+
+- The command line types a result out three times faster — nine graphemes per
+  animation tick rather than three. The reveal is there to draw the eye to a
+  new message, and at the old rate a long error string took long enough to
+  finish that it read as something to wait through instead.
+
 ## [0.7.0] - 2026-08-07
 
 ### Fixed

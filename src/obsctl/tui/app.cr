@@ -7,6 +7,7 @@ require "./widgets/dashboard"
 require "./widgets/connection"
 require "./widgets/settings"
 require "./widgets/splash"
+require "./widgets/scene_picker"
 require "./widgets/which_key"
 require "./theme_persistence"
 
@@ -168,8 +169,10 @@ module Obsctl
             frame.buffer.set_style(frame.area, CryTUI::Style.new(background: @model.theme.background, foreground: @model.theme.foreground))
             Widgets::Connection.render_unavailable(frame.area, frame.buffer, @model)
           end
-          # Last, so a half-typed key sequence floats over whichever view is
-          # underneath it.
+          # Both float over whichever view is underneath. The which-key menu is
+          # last because it is the more transient of the two: it belongs on top
+          # even of the picker in the frame where `<leader>s` is still pending.
+          Widgets::ScenePicker.render(frame.area, frame.buffer, @model)
           Widgets::WhichKey.render(frame.area, frame.buffer, @model)
         end
       end

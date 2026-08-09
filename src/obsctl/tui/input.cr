@@ -3,6 +3,7 @@ require "./action"
 require "./hit_test"
 require "./keymap"
 require "./model"
+require "./scene_picker"
 
 module Obsctl
   module TUI
@@ -27,12 +28,14 @@ module Obsctl
 
       # Resolves a key press to an action, or nil when nothing is bound.
       #
-      # The palette and settings views capture every key, so they short-circuit.
-      # A half-typed key sequence captures every key too -- that is what makes
-      # `<leader>` and `g` behave like prefixes rather than like a keystroke
-      # that also does something on its own. Otherwise the binding groups are
-      # tried in priority order; each returns nil to pass the key along.
+      # The scene picker, the palette and the settings views capture every key,
+      # so they short-circuit. A half-typed key sequence captures every key too
+      # -- that is what makes `<leader>` and `g` behave like prefixes rather
+      # than like a keystroke that also does something on its own. Otherwise
+      # the binding groups are tried in priority order; each returns nil to
+      # pass the key along.
       def handle_key(model : Model, key : CryTUI::KeyEvent) : Action?
+        return scene_picker_key(model, key) if model.scene_picker_active
         return palette_key(key) if model.command_palette.active
         return settings_key(key) if model.view.settings?
         return sequence_key(model.pending_sequence, key) unless model.pending_sequence.empty?
@@ -53,6 +56,7 @@ module Obsctl
       # click cannot cut the programme scene mid-broadcast, and it needs no
       # double-click timer to do it.
       def handle_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
+        return scene_picker_mouse(model, event, area) if model.scene_picker_active
         return which_key_mouse(model, event, area) unless model.pending_sequence.empty?
         return settings_mouse(model, event, area) if model.view.settings?
         return palette_mouse(model, event, area) if model.command_palette.active
@@ -105,6 +109,44 @@ module Obsctl
         return action(ActionKind::ClearSequence) unless entry
 
         resolve_sequence(entry.sequence)
+      end
+
+      # While the scene picker is open every key belongs to it: a label switches
+      # straight to its scene, the arrows walk the list for scenes that ran out
+      # of labels, Enter takes the one under the cursor, and Esc leaves.
+      #
+      # Nothing falls through to the dashboard, which is the point -- `q`, `a`
+      # and `m` are all labels here, and a picker that let them quit or move
+      # focus instead would be unusable. An unlabelled key does nothing rather
+      # than closing, so a mistyped key costs a keystroke and not the picker.
+      private def scene_picker_key(model : Model, key : CryTUI::KeyEvent) : Action?
+        character = key.character
+        control = key.modifiers.control?
+
+        return action(ActionKind::CloseScenePicker) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::ScenePickerActivate) if key.code.enter?
+        return action(ActionKind::ScenePickerNavigateUp) if key.code.up?
+        return action(ActionKind::ScenePickerNavigateDown) if key.code.down?
+        # Control-modified keys are not labels; the only one the picker answers
+        # to is the `Ctrl-C` handled above.
+        return if control
+        return unless character && key.code.character?
+
+        index = ScenePicker.index_for(model.scene_picker_entries, character)
+        index ? Action.new(ActionKind::PickScene, index: index) : nil
+      end
+
+      # The picker is clickable as well as typable, following the same rules the
+      # which-key menu does: a click on a row runs it, a click anywhere else
+      # means the same thing Esc does. The wheel moves the cursor.
+      private def scene_picker_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
+        if event.scroll?
+          return action(event.kind.scroll_up? ? ActionKind::ScenePickerNavigateUp : ActionKind::ScenePickerNavigateDown)
+        end
+
+        return unless event.kind.press? && event.button.left?
+        index = HitTest.scene_picker_index(model, area, event.column, event.row)
+        index ? Action.new(ActionKind::PickScene, index: index) : action(ActionKind::CloseScenePicker)
       end
 
       # Clicking a theme previews it and clicking the previewed theme applies

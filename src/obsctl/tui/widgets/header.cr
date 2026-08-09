@@ -1,4 +1,5 @@
 require "./chrome"
+require "./status_beacon"
 require "../anim"
 
 module Obsctl
@@ -28,7 +29,13 @@ module Obsctl
             CryTUI::Line.new(identity + pulse_spans(model, daemon)),
             status_line(model, daemon, obs),
           ]
-          CryTUI::Widgets::StyledText.new(lines, block: block).render(area, buffer)
+          # The beacon is given a column of the header rather than drawn over
+          # it, so a long scene or profile name can never run underneath the
+          # one indicator that has to stay legible.
+          block.render(area, buffer)
+          text_area, beacon_area = StatusBeacon.reserve(block.inner(area), model)
+          CryTUI::Widgets::StyledText.new(lines).render(text_area, buffer)
+          beacon_area.try { |rect| StatusBeacon.render(rect, buffer, model) }
         end
 
         # A wave that only moves while the daemon is answering, so a frozen

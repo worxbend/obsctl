@@ -67,7 +67,7 @@ module Obsctl
           if active
             dot = pulse > 0.5 ? model.symbol("●", "*") : model.symbol("◉", "*")
             color = Anim.blend(model.theme.danger, model.theme.warning, pulse * 0.45)
-            CryTUI::Span.new(" #{dot} #{label} #{format_duration(duration_ms)} ", CryTUI::Style.new(foreground: color, modifiers: CryTUI::Modifier::Bold | CryTUI::Modifier::Reversed))
+            CryTUI::Span.new(" #{dot} #{label} #{Chrome.duration(duration_ms)} ", CryTUI::Style.new(foreground: color, modifiers: CryTUI::Modifier::Bold | CryTUI::Modifier::Reversed))
           else
             CryTUI::Span.new(" #{model.symbol("○", "-")} #{label} off ", CryTUI::Style.new(foreground: model.theme.muted))
           end
@@ -96,15 +96,6 @@ module Obsctl
         private def metric(label : String, value : String, graph : String, color : CryTUI::Color) : CryTUI::Span
           suffix = graph.empty? ? "" : " #{graph}"
           CryTUI::Span.new("#{label} #{value}#{suffix}", CryTUI::Style.new(foreground: color, modifiers: CryTUI::Modifier::Bold))
-        end
-
-        private def format_duration(duration_ms : Int64?) : String
-          return "--:--" unless duration_ms
-          total_seconds = duration_ms // 1000
-          hours = total_seconds // 3600
-          minutes = (total_seconds % 3600) // 60
-          seconds = total_seconds % 60
-          hours > 0 ? "%02d:%02d:%02d" % {hours, minutes, seconds} : "%02d:%02d" % {minutes, seconds}
         end
 
         private def separator(model : Model) : CryTUI::Span

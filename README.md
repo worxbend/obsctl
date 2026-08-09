@@ -40,7 +40,8 @@ game on another monitor. **obsctl** is OBS in a terminal window:
 
 - 🎛️ **A dashboard** — scenes, audio levels, profiles, collections, logs and
   stream health on one screen. Switch scenes with `Enter`, ride the mic gain
-  with `↑`/`↓`.
+  with `↑`/`↓`. A beacon in the header corner animates differently for idle,
+  recording, on air, and both — so you can tell what OBS is doing at a glance.
 - 🤖 **A CLI** — `obsctl scene brb`, `obsctl mute mic`. Perfect for hotkeys,
   Stream Deck buttons, cron jobs, or a chat bot.
 - 🧠 **A tiny daemon** — one background process holds the OBS connection and
@@ -186,6 +187,7 @@ That's it — you're in. Now play:
 | `a` then `←` `→` | pick the audio panel, walk the channels 🎚️ |
 | `↑` `↓` on a channel | ride its gain 🔊 |
 | `m` | mute / unmute the selected input 🔇 |
+| `Space` then `s` | jump straight to any scene by its number 🎬 |
 | `Space` | open the leader menu — it shows you every option ✨ |
 | `:` | command line, e.g. `:scene brb` |
 | `F2` | pick a prettier theme 🎨 |
@@ -210,7 +212,10 @@ That's it — you're in. Now play:
 
 <img src="docs/assets/shot-command-line.svg" alt="The command line open with :scene and four completions" width="880">
 
-**29 built-in themes**, previewed live before you commit. `F2` or `<leader>ut`.
+**41 built-in themes**, previewed live before you commit. `F2` or `<leader>ut`.
+Twelve of them are `vivid`: near-black grounds under a gradient that swings
+across the colour wheel — violet into toxic green, orange into gold, cyan into
+hot pink.
 
 <img src="docs/assets/shot-themes.svg" alt="The appearance lab, previewing a theme" width="880">
 
@@ -292,6 +297,7 @@ Press `Space` and a menu appears showing every next key. No memorising.
 
 | Keys | What it does |
 | --- | --- |
+| `<leader>s` | 🎬 Switch scene — the quick picker, see below |
 | `<leader>f` → `s` `a` `p` `c` | 🔍 Find: scenes, audio, profiles, collections |
 | `<leader>u` → `t` | 🎨 UI: theme picker |
 | `<leader>o` → `r` `d` `c` | 🔧 OBS: reload config, dump config, reconnect |
@@ -300,6 +306,41 @@ Press `Space` and a menu appears showing every next key. No memorising.
 
 `Esc` (or any key that leads nowhere) closes it. The old single letters —
 `s` `a` `p` `c` `r` `D` `R` — still work too.
+
+### 🎬 Switch scenes in two keys (`<leader>s`)
+
+Press `Space` then `s`. Every scene appears with **one key** next to it — and
+that key switches to it. No cursor, no `Enter`.
+
+```text
+╭─ 🎬  Switch scene  03  ↑↓ move  ↵ switch  esc close ─╮
+│ 1  Main Camera                                       │
+│ 2  Screen Share                                      │
+│ 3  BRB                                               │
+╰──────────────────────────────────────────────────────╯
+```
+
+`Space` `s` `2` and you're on Screen Share. Three keystrokes, mid-stream.
+
+| Key | What it does |
+| --- | --- |
+| `1`–`9` then `a`–`z` | Switch to that scene, immediately |
+| `↑` `↓` | Move the cursor (for scene 36 and beyond, which run out of keys) |
+| `Enter` | Switch to the one under the cursor |
+| `Esc` | Never mind |
+| Click a row | Switch to it |
+
+Two things worth knowing:
+
+- **The picker takes every key while it's open.** `q` doesn't quit and `m`
+  doesn't mute — they're scene labels in here. Only `Esc` leaves. A key that
+  isn't a label does nothing at all, so a typo costs you a keystroke and not
+  your place.
+- **Your configured shortcuts win.** If a scene has `shortcut: b` in your
+  config, it keeps `b` here, and the automatic labels work around it. The key
+  the scenes panel shows you as `[b]` is the key that works. Shortcuts longer
+  than one character (`brb`) still work on the command line and in the CLI —
+  they just can't be a single press.
 
 ### The command line (`:`)
 
@@ -331,6 +372,7 @@ Yes, `:q`, `:qa`, `:wq` and `:x` all quit. `:h` lists everything. 😄
 | Wheel over a channel strip | Volume up / down, like a real mixer 🎚️ |
 | `Shift` + wheel over audio | Scroll through the channels instead |
 | Click a which-key entry | Run it, or open its group |
+| Click a row in the scene picker | Switch to that scene; click outside to close |
 | Click a completion chip | Put it on the command line |
 | Click a theme | Preview it; click again to keep it |
 
@@ -421,7 +463,7 @@ reconnect:
   endless: true
 
 ui:
-  theme: ember          # 29 to choose from, or roll your own colours
+  theme: ember          # 41 to choose from, or roll your own colours
   advanced_ui: true     # false = plain ASCII, no fancy glyphs
   show_icons: true
   locale: en            # en | uk

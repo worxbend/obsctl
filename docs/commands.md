@@ -444,11 +444,20 @@ TUI keyboard input:
   between channels.
 - `Ctrl-W` followed by `h`/`j`/`k`/`l`, or `Ctrl` with those keys or the
   arrows, moves between panels.
-- `Space` is the leader: `<leader>f` finds panels (`s`/`a`/`p`/`c`),
-  `<leader>u t` opens themes, `<leader>o` sends OBS commands (`r` reload,
-  `d` dump, `c` reconnect), `<leader>m` toggles mute, and `<leader>q` exits.
-  A which-key menu lists the continuations while a sequence is pending; `Esc`
-  or an unbound key cancels it.
+- `Space` is the leader: `<leader>s` opens the scene picker, `<leader>f` finds
+  panels (`s`/`a`/`p`/`c`), `<leader>u t` opens themes, `<leader>o` sends OBS
+  commands (`r` reload, `d` dump, `c` reconnect), `<leader>m` toggles mute, and
+  `<leader>q` exits. A which-key menu lists the continuations while a sequence
+  is pending; `Esc` or an unbound key cancels it.
+- The scene picker labels each scene with one key and switches to it on that
+  key alone. Labels are assigned `1`-`9` and then `a`-`z`, in list order,
+  except that a scene configured with a single-character `shortcut` claims that
+  key first and the automatic sequence skips it. Scenes past the thirty-fifth
+  label get none and are reached with the arrows. The picker captures every
+  key while it is open: `↑`/`↓` move, `Enter` switches to the scene under the
+  cursor, `Esc` or `Ctrl-C` closes, and an unlabelled key does nothing rather
+  than falling through to the dashboard. It does not open when there are no
+  scenes to switch to.
 - `q` exits from the dashboard.
 - `r` sends `/reload-config` from the dashboard.
 - `D` sends `/dump-config` from the dashboard.
@@ -464,6 +473,8 @@ TUI mouse input:
   move over the other panels; `Shift` with the wheel moves between channels.
 - Clicking a which-key entry runs its binding or opens its group; clicking
   elsewhere cancels the sequence.
+- Clicking a scene picker row switches to that scene; clicking outside the box
+  closes it, and the wheel moves its cursor.
 - Clicking a completion chip puts it on the command line, the wheel cycles
   completions, and a click outside the panel closes the line.
 - In theme settings a click previews the theme under the pointer, a second

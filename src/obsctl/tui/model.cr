@@ -4,6 +4,7 @@ require "./theme"
 require "./anim"
 require "./meter"
 require "./localization"
+require "./scene_picker"
 
 module Obsctl
   module TUI
@@ -129,6 +130,14 @@ module Obsctl
       # Keys of a multi-key binding pressed so far, e.g. `<leader>f`. Non-empty
       # means the which-key menu is open and the next key completes or cancels.
       property pending_sequence : String
+      # True while the scene picker overlay is open, during which it captures
+      # every key.
+      property scene_picker_active : Bool
+      # The picker keeps its own cursor rather than borrowing `scene_cursor`,
+      # so opening it does not move the dashboard's selection out from under
+      # whichever panel is focused, and closing it without picking leaves the
+      # dashboard exactly as it was.
+      property scene_picker_cursor : Int32
 
       def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true, @command_palette_prefix = "/", @locale = "en")
         @snapshot = nil
@@ -153,6 +162,18 @@ module Obsctl
         @settings_cursor = 0
         @theme_preview_origin = nil
         @pending_sequence = ""
+        @scene_picker_active = false
+        @scene_picker_cursor = 0
+      end
+
+      # The scene picker's rows, rebuilt from the current scenes on every call
+      # rather than stored.
+      #
+      # Input resolution, the widget and the hit test all ask for them; a
+      # stored copy could disagree with the scene list after an OBS event lands
+      # mid-frame, which would point a label at the wrong scene.
+      def scene_picker_entries : Array(ScenePicker::Entry)
+        ScenePicker.entries(scenes)
       end
 
       def rich_ui? : Bool
@@ -339,6 +360,7 @@ module Obsctl
         @audio_cursor = @audio_cursor.clamp(0, {audio_inputs.size - 1, 0}.max)
         @profile_cursor = @profile_cursor.clamp(0, {profiles.size - 1, 0}.max)
         @collection_cursor = @collection_cursor.clamp(0, {scene_collections.size - 1, 0}.max)
+        @scene_picker_cursor = @scene_picker_cursor.clamp(0, {scenes.size - 1, 0}.max)
       end
 
       def focused_scene : OBS::State::SceneState?

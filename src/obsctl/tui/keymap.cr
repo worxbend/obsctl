@@ -32,6 +32,7 @@ module Obsctl
         Binding.new("<C-w>l", ActionKind::FocusPaneRight, "pane right"),
         Binding.new("#{LEADER}q", ActionKind::Quit, "quit"),
         Binding.new("#{LEADER}m", ActionKind::ToggleMute, "toggle mute"),
+        Binding.new("#{LEADER}s", ActionKind::OpenScenePicker, "switch scene"),
         Binding.new("#{LEADER}fs", ActionKind::FocusScenes, "scenes"),
         Binding.new("#{LEADER}fa", ActionKind::FocusAudio, "audio"),
         Binding.new("#{LEADER}fp", ActionKind::FocusProfiles, "profiles"),

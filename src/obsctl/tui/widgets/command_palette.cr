@@ -7,7 +7,11 @@ module Obsctl
       module CommandPalette
         extend self
 
-        REVEAL_PER_FRAME = 3
+        # Graphemes added per animation tick as a result types itself out.
+        # Three tripled: the reveal reads as instant feedback rather than as
+        # something to wait through, which matters most for the long error
+        # strings that used to take a visible moment to finish.
+        REVEAL_PER_FRAME = 9
 
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           palette = model.command_palette

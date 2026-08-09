@@ -1,5 +1,6 @@
 require "../../spec_helper"
 require "../../../src/obsctl/tui/widgets/header"
+require "../../../src/obsctl/tui/widgets/status_beacon"
 require "../../../src/obsctl/tui/widgets/scenes"
 require "../../../src/obsctl/tui/widgets/audio"
 require "../../../src/obsctl/tui/widgets/connection"
@@ -37,6 +38,26 @@ end
 
 private def rendered_text(buffer : CryTUI::Buffer)
   buffer.lines.join("\n")
+end
+
+private def beacon_model(streaming = false, recording = false, connected = true, advanced = true)
+  model = widget_model
+  model.advanced_ui = advanced
+  model.snapshot = model.snapshot.not_nil!.copy_with(
+    connected: connected,
+    output: Obsctl::OBS::State::OutputState.new(streaming: streaming, recording: recording),
+    stream_duration_ms: 5_025_000_i64,
+    record_duration_ms: 754_000_i64
+  )
+  model
+end
+
+# The beacon's two rows on a given frame: the motion track, then the badge.
+private def beacon_rows(model : Obsctl::TUI::Model, frame : UInt64 = 0_u64) : Array(String)
+  model.anim.frame = frame
+  buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 24, 2))
+  Obsctl::TUI::Widgets::StatusBeacon.render(buffer.area, buffer, model)
+  buffer.lines
 end
 
 private def streaming_model
@@ -286,6 +307,78 @@ describe Obsctl::TUI::Widgets::Header do
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 70, 4))
     Obsctl::TUI::Widgets::Header.render(buffer.area, buffer, model)
     rendered_text(buffer).should contain("daemon: disconnected")
+  end
+
+  it "keeps the beacon beside the status line instead of over it" do
+    model = beacon_model(streaming: true)
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 4))
+    Obsctl::TUI::Widgets::Header.render(buffer.area, buffer, model)
+
+    status_line = buffer.lines[2].strip('│')
+    status_line.should contain("profile: Default")
+    status_line.rstrip.should end_with("ON AIR 01:23:45")
+  end
+
+  it "gives the beacon up rather than crowd a narrow header" do
+    model = beacon_model(streaming: true)
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 60, 4))
+    Obsctl::TUI::Widgets::Header.render(buffer.area, buffer, model)
+
+    rendered_text(buffer).should_not contain("ON AIR")
+  end
+end
+
+describe Obsctl::TUI::Widgets::StatusBeacon do
+  it "resolves the output state it reports on" do
+    Obsctl::TUI::Widgets::StatusBeacon.mode(beacon_model(connected: false)).should eq(Obsctl::TUI::Widgets::BeaconMode::Offline)
+    Obsctl::TUI::Widgets::StatusBeacon.mode(beacon_model).should eq(Obsctl::TUI::Widgets::BeaconMode::Idle)
+    Obsctl::TUI::Widgets::StatusBeacon.mode(beacon_model(recording: true)).should eq(Obsctl::TUI::Widgets::BeaconMode::Recording)
+    Obsctl::TUI::Widgets::StatusBeacon.mode(beacon_model(streaming: true)).should eq(Obsctl::TUI::Widgets::BeaconMode::Streaming)
+    Obsctl::TUI::Widgets::StatusBeacon.mode(beacon_model(streaming: true, recording: true)).should eq(Obsctl::TUI::Widgets::BeaconMode::Simulcast)
+  end
+
+  it "badges each state with its own label and elapsed time" do
+    beacon_rows(beacon_model(connected: false))[1].should contain("OFFLINE")
+    beacon_rows(beacon_model)[1].should contain("IDLE")
+    beacon_rows(beacon_model(recording: true))[1].should contain("REC 12:34")
+    beacon_rows(beacon_model(streaming: true))[1].should contain("ON AIR 01:23:45")
+    beacon_rows(beacon_model(streaming: true, recording: true))[1].should contain("LIVE+REC 01:23:45")
+  end
+
+  it "gives every live state a motion the others do not have" do
+    tracks = [
+      beacon_model,
+      beacon_model(recording: true),
+      beacon_model(streaming: true),
+      beacon_model(streaming: true, recording: true),
+    ].map do |model|
+      (0_u64..7_u64).map { |frame| beacon_rows(model, frame)[0] }
+    end
+
+    tracks.map(&.join("\n")).uniq!.size.should eq(4)
+    tracks.each(&.uniq!.size.should(be > 1))
+  end
+
+  it "stops the track dead while OBS is away" do
+    model = beacon_model(connected: false)
+    (0_u64..7_u64).map { |frame| beacon_rows(model, frame)[0] }.uniq!.size.should eq(1)
+  end
+
+  it "keeps an animated cadence in ASCII when braille is off" do
+    model = beacon_model(streaming: true, advanced: false)
+    frames = (0_u64..7_u64).map { |frame| beacon_rows(model, frame)[0].strip }
+
+    frames.uniq.size.should be > 1
+    frames.each(&.should(match(/\A[.<>*]+\z/)))
+    beacon_rows(model)[1].should contain("* ON AIR")
+  end
+
+  it "asks for no more of the header than its own badge needs" do
+    idle = Obsctl::TUI::Widgets::StatusBeacon.width(beacon_model)
+    live = Obsctl::TUI::Widgets::StatusBeacon.width(beacon_model(streaming: true, recording: true))
+
+    idle.should eq(Obsctl::TUI::Widgets::StatusBeacon::MIN_WIDTH)
+    live.should be > idle
   end
 end
 
@@ -605,7 +698,7 @@ describe Obsctl::TUI::Widgets::Settings do
     Obsctl::TUI::Widgets::Settings.render(buffer.area, buffer, model)
     text = rendered_text(buffer)
 
-    text.should contain("Themes // 29 palettes")
+    text.should contain("Themes // 41 palettes")
     text.should contain("Mono (TTY-safe)")
     text.should contain("Preview: Mono (TTY-safe)")
     text.should contain("SCENE ACTIVE")

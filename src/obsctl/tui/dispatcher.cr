@@ -65,10 +65,55 @@ module Obsctl
 
         pointer_action(action) ||
           palette_action(action) ||
+          scene_picker_action(action) ||
           navigation_action(action) ||
           settings_action(action) ||
           command_action(action) ||
           ActionOutcome.new
+      end
+
+      private def scene_picker_action(action : Action) : ActionOutcome?
+        case action.kind
+        when .open_scene_picker?
+          # Refusing to open on an empty list rather than showing an empty box:
+          # the picker swallows every key while it is open, so a picker with
+          # nothing to pick would be a dead end with no visible reason.
+          return ActionOutcome.new(message: "no scenes to switch to") if @model.scenes.empty?
+
+          # Opens on the scene that is live, so the cursor starts where the eye
+          # already is instead of at the top of the list.
+          @model.scene_picker_cursor = @model.scenes.index(&.active) || 0
+          @model.scene_picker_active = true
+          ActionOutcome.new
+        when .close_scene_picker?
+          @model.scene_picker_active = false
+          ActionOutcome.new
+        when .scene_picker_navigate_up?
+          @model.scene_picker_cursor = {@model.scene_picker_cursor - 1, 0}.max
+          ActionOutcome.new
+        when .scene_picker_navigate_down?
+          @model.scene_picker_cursor = {@model.scene_picker_cursor + 1, {@model.scenes.size - 1, 0}.max}.min
+          ActionOutcome.new
+        when .scene_picker_activate?
+          switch_scene(@model.scene_picker_cursor)
+        when .pick_scene?
+          index = action.index
+          index ? switch_scene(index) : ActionOutcome.new
+        end
+      end
+
+      # Closes the picker and sends the switch.
+      #
+      # The dashboard's own scene cursor is moved to match, so the panel
+      # underneath agrees with what was just picked and a later Enter on the
+      # scenes panel repeats the same switch rather than a stale one.
+      private def switch_scene(index : Int32) : ActionOutcome
+        @model.scene_picker_active = false
+        scene = @model.scenes[index]?
+        return ActionOutcome.new unless scene
+
+        @model.scene_cursor = index
+        target_command("set_scene", scene.name)
       end
 
       private def palette_action(action : Action) : ActionOutcome?

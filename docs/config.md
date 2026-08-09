@@ -55,7 +55,11 @@ dashboard still resolves these four actions from its built-in bindings, which
 are the defaults shown above, so overriding them does not change what the keys
 do yet.
 
-The TUI accepts 29 built-in themes matching the Rust reference. Set `theme:
+The TUI accepts 41 built-in themes: the 29 matching the Rust reference, plus 12
+`vivid` palettes — near-black grounds under a two-colour gradient that changes
+hue rather than shade (`toxic-violet`, `ember-riot`, `acid-rain`,
+`neon-crimson`, `plasma-drift`, `ultraviolet`, `radioactive`, `blood-orange`,
+`hyperdrive`, `nightshade`, `magma-core`, `dusk-riot`). Set `theme:
 custom` and add any subset of `custom_theme` colors (`bg`, `accent`,
 `accent_alt`, `fg`, `muted`, `border`, `border_focus`, `success`, `warning`,
 `danger`, `info`, `highlight_bg`, and `highlight_fg`) as six-digit RGB hex.

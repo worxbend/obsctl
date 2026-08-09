@@ -89,7 +89,7 @@ describe Obsctl::TUI::App do
     app.render(terminal)
     settings = backend.buffer.lines.join("\n")
     settings.should contain("Settings // Appearance")
-    settings.should contain("Themes // 29 palettes")
+    settings.should contain("Themes // 41 palettes")
     settings.should contain("Preview: Ember")
   end
 

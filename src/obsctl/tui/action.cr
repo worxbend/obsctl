@@ -41,6 +41,15 @@ module Obsctl
       SettingsNavigateUp
       SettingsNavigateDown
       ApplySettingsTheme
+      OpenScenePicker
+      CloseScenePicker
+      ScenePickerNavigateUp
+      ScenePickerNavigateDown
+      ScenePickerActivate
+      # Switch to the scene at `index`, from a label press or a click on the
+      # picker. It names its own scene rather than acting on a cursor, so the
+      # switch cannot land on the wrong one if the list moves underneath it.
+      PickScene
       # A key that begins a multi-key sequence, e.g. `g` or the leader.
       PendingSequence
       ClearSequence

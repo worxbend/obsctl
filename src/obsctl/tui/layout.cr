@@ -1,6 +1,7 @@
 require "../../crytui"
 require "./keymap"
 require "./model"
+require "./scene_picker"
 
 module Obsctl
   module TUI
@@ -237,6 +238,77 @@ module Obsctl
           x += width + GAP
           span
         end
+      end
+    end
+
+    # The scene picker overlay: a centred box listing every scene beside the
+    # key that switches to it.
+    #
+    # Centred rather than anchored to the scenes panel because it is a modal --
+    # while it is open nothing else takes keys, so putting it in the middle of
+    # the screen says so. Shared with the hit test, the same way every other
+    # overlay's geometry is, so a click resolves against the row that was
+    # actually painted.
+    module ScenePickerLayout
+      extend self
+
+      MIN_WIDTH = 24
+      # Long scene names are truncated by the list rather than allowed to push
+      # the box out to the full width of a wide terminal.
+      MAX_WIDTH = 64
+      # A border row above and below, so the box is this much taller than the
+      # rows it can show.
+      CHROME_HEIGHT = 2
+      # Below this the box would show one scene at most, which is worse than
+      # leaving the dashboard alone and saying nothing.
+      MIN_HEIGHT = 5
+
+      # Takes the model rather than a scene list so the title it measures is
+      # built by the same code the widget draws, which is what stops the box
+      # from being sized to something other than what it renders.
+      def compute(area : CryTUI::Rect, model : Model) : CryTUI::Rect
+        entries = model.scene_picker_entries
+        empty = CryTUI::Rect.new(area.x, area.y, 0, 0)
+        return empty if entries.empty?
+        return empty if area.width < MIN_WIDTH + 4 || area.height < MIN_HEIGHT + 2
+
+        widest = entries.max_of { |entry| CryTUI::TextWidth.width(row_text(entry)) }
+        # Widened to the title as well as to the rows: a picker whose scene
+        # names are all short would otherwise be too narrow to print its own
+        # "esc close" hint, which is the only way out of a modal.
+        # Both get `+ 2` for the border cell either side, which is the space
+        # the block takes before any of its content is drawn.
+        title = CryTUI::TextWidth.width(title_parts(model, entries.size).join)
+        wanted = {widest + 2, title + 2, MIN_WIDTH}.max
+        width = {wanted, MAX_WIDTH, area.width - 4}.min
+        height = {entries.size + CHROME_HEIGHT, area.height - 2}.min
+        CryTUI::Rect.new(
+          area.x + (area.width - width) // 2,
+          area.y + (area.height - height) // 2,
+          width,
+          height
+        )
+      end
+
+      # The title in the three pieces the widget styles separately: heading,
+      # scene count, key hint. They concatenate to exactly what `compute`
+      # measured.
+      def title_parts(model : Model, count : Int32) : Tuple(String, String, String)
+        {
+          " #{model.symbol("🎬", "S")}  Switch scene ",
+          " #{count.to_s.rjust(2, '0')} ",
+          "  #{model.symbol("↵ switch · esc close", "Enter switch  Esc close")} ",
+        }
+      end
+
+      # One picker row. The widget splits this into styled spans that
+      # concatenate back to exactly this string, so the width measured here is
+      # the width that gets drawn.
+      #
+      # Unlabelled scenes keep the same indent as labelled ones so the names
+      # stay in one column.
+      def row_text(entry : ScenePicker::Entry) : String
+        " #{entry.label || ' '}  #{entry.scene.name} "
       end
     end
 
