@@ -33,6 +33,14 @@ vulnerability.
 - Storing the password in plaintext under `connection.password` is supported but
   discouraged; `obsctl validate-config` emits a warning when it is set. Prefer
   `connection.password_env`.
+- Do not export the password from a shell startup file (`~/.bashrc`, `~/.zshrc`,
+  `~/.profile`). Those files are commonly mode `644` and commonly published in a
+  dotfiles repository, and a variable exported there is inherited by every
+  process started from that shell rather than by the daemon alone. Scope the
+  secret to the daemon instead: read it from a password manager at launch
+  (`OBS_WEBSOCKET_PASSWORD="$(pass show …)" obsctl server --headless`), or put it
+  in a mode `600` file referenced by `EnvironmentFile=` in a systemd drop-in
+  under `~/.config/systemd/user/obsctl.service.d/`.
 - The password is never sent to OBS directly. It is combined with the
   server-supplied salt and challenge into a SHA-256 authentication string, as
   the obs-websocket 5.x protocol specifies.

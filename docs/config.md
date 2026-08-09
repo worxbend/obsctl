@@ -81,6 +81,13 @@ authentication field. `validate-config`
 prints a warning when plaintext `connection.password` is configured and does
 not echo the secret value.
 
+Set that variable in the environment of the process that runs the daemon, not in
+a shell startup file: `~/.bashrc` and friends are usually world-readable, are
+often committed to a public dotfiles repository, and export the value to every
+process the shell starts. Read it from a password manager on the command that
+launches the daemon, or from an `EnvironmentFile=` with mode `600` in a systemd
+drop-in under `~/.config/systemd/user/obsctl.service.d/`.
+
 Scene lookup priority is shortcut, alias, exact OBS name, case-insensitive alias, then case-insensitive OBS name. Ambiguous matches fail without executing an action.
 Scene and audio names discovered in the current OBS snapshot remain selectable
 even when they do not yet have entries in the config; configured aliases and

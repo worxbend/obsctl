@@ -146,14 +146,80 @@ have to edit it yet.
 
 ### 3️⃣ Hand over the password
 
-obsctl never stores your password in a file. Put it in the environment:
+obsctl reads the password from an environment variable —
+`OBS_WEBSOCKET_PASSWORD` — and never writes it anywhere itself. 🔒
+
+For right now, type it into this shell only. `read -rs` means "read a line
+without printing it", so the password never appears on screen and never lands
+in your shell history:
 
 ```bash
-export OBS_WEBSOCKET_PASSWORD='the password you copied'
+printf 'OBS WebSocket password: '
+read -rs OBS_WEBSOCKET_PASSWORD
+echo
+export OBS_WEBSOCKET_PASSWORD
 ```
 
-Put that line in your `~/.bashrc` / `~/.zshrc` so it sticks around. 🔒
-No authentication? Skip this — obsctl connects with an empty password.
+That lasts until you close the terminal, which is exactly what you want while
+you're finding your feet. No authentication turned on? Skip this entirely —
+obsctl connects with an empty password.
+
+> [!WARNING]
+> **Don't put that `export` line in `~/.bashrc` or `~/.zshrc`.** Shell startup
+> files are usually world-readable (mode `644`), they very often end up in a
+> public dotfiles repository, and a variable exported there is handed to *every*
+> program you launch from that shell — not just obsctl. A password that only
+> the daemon needs shouldn't be sitting in the environment of your text editor.
+
+<details>
+<summary>🔐 Making it stick — two ways that don't leak it</summary>
+
+**Ask a password manager at launch.** Nothing is stored in plaintext at all;
+the secret exists only in the daemon's own environment, for as long as it runs:
+
+```bash
+# pass (https://www.passwordstore.org/)
+OBS_WEBSOCKET_PASSWORD="$(pass show obs/websocket)" obsctl server --headless
+
+# GNOME Keyring / any libsecret store
+OBS_WEBSOCKET_PASSWORD="$(secret-tool lookup service obs-websocket)" obsctl server --headless
+```
+
+**Or give systemd a private env file**, if you want the daemon started for you
+by `obsctl service install`. The file is readable only by you, and only the
+service reads it:
+
+```bash
+# 1. write the password into a file only you can read
+mkdir -p ~/.config/obsctl
+touch ~/.config/obsctl/obsctl.env
+chmod 600 ~/.config/obsctl/obsctl.env
+printf 'OBS WebSocket password: '
+read -rs pw
+echo
+printf 'OBS_WEBSOCKET_PASSWORD=%s\n' "$pw" > ~/.config/obsctl/obsctl.env
+unset pw
+
+# 2. tell the service unit to read it
+mkdir -p ~/.config/systemd/user/obsctl.service.d
+cat > ~/.config/systemd/user/obsctl.service.d/password.conf <<'CONF'
+[Service]
+EnvironmentFile=%h/.config/obsctl/obsctl.env
+CONF
+systemctl --user daemon-reload
+systemctl --user restart obsctl
+```
+
+`chmod 600` is the part that matters: it means "only my user account can read
+this file". A drop-in under `obsctl.service.d/` survives
+`obsctl service install` rewriting the unit, so you only do this once.
+
+<sub>One quirk of systemd's env-file format: a value that *starts* with `"` or
+`'` is treated as quoted and the matching quote is stripped. Spaces anywhere
+else are fine. If your password begins with a quote character, wrap the whole
+value in single quotes.</sub>
+
+</details>
 
 ### 4️⃣ Start the daemon
 
@@ -509,7 +575,7 @@ unit, and prints a fix for anything it doesn't like.
 | Symptom | Usually means | Fix |
 | --- | --- | --- |
 | 😴 `server unavailable` (exit `3`) | The daemon isn't running | `obsctl server --headless` or `obsctl service start` |
-| 🔑 `authentication failed` | Wrong or missing password | Re-copy it from **Tools ▸ WebSocket Server Settings**, `export OBS_WEBSOCKET_PASSWORD=…` |
+| 🔑 `authentication failed` | Wrong or missing password | Re-copy it from **Tools ▸ WebSocket Server Settings** and hand it over again — see step 3 of the first-run walkthrough |
 | 🔌 `connection refused` | WebSocket server is off, or wrong port | Enable it in OBS; check `connection.port` matches (4455) |
 | 🤷 `unknown scene` | Name doesn't match OBS | `obsctl status` to see real names, or `obsctl dump-config` |
 | 🧟 OBS was closed when it started | Nothing — it retries | `obsctl reconnect` to hurry it up |

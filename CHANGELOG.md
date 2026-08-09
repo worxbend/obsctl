@@ -48,6 +48,16 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ### Changed
 
+- The first-run guide no longer tells you to export `OBS_WEBSOCKET_PASSWORD`
+  from `~/.bashrc` or `~/.zshrc`. Shell startup files are usually mode `644`,
+  are routinely published in a dotfiles repository, and hand the variable to
+  every process started from that shell rather than to the daemon alone. The
+  README, the website, `docs/config.md` and `SECURITY.md` now show `read -rs`
+  for the current shell, and — for a password that has to survive a reboot —
+  reading it from a password manager on the launch command, or from a mode
+  `600` `EnvironmentFile=` in a systemd drop-in under
+  `~/.config/systemd/user/obsctl.service.d/`, which `obsctl service install`
+  leaves alone when it rewrites the unit.
 - The README and the website show a recording of a real session instead of
   rendered screenshots. `docs/demo/obsctl.cast` is an
   [asciinema](https://asciinema.org) cast — a terminal session stored as text

@@ -815,7 +815,10 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
           <div class="step__head">First run</div>
           <pre class="code"><code><span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> init
 <span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> validate-config
-<span class="c-prompt">$</span> <span class="c-cmd">export</span> OBS_WEBSOCKET_PASSWORD=<span class="c-str">'…'</span>
+
+<span class="c-comment"># the password, typed into this shell only</span>
+<span class="c-prompt">$</span> <span class="c-cmd">read</span> <span class="c-flag">-rs</span> OBS_WEBSOCKET_PASSWORD
+<span class="c-prompt">$</span> <span class="c-cmd">export</span> OBS_WEBSOCKET_PASSWORD
 
 <span class="c-comment"># one terminal: the daemon</span>
 <span class="c-prompt">$</span> <span class="c-cmd">obsctl</span> server <span class="c-flag">--headless</span>
@@ -824,8 +827,13 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 700; text-wrap: balance; mar
 <span class="c-prompt">$</span> <span class="c-cmd">obsctl</span></code></pre>
           <p class="lede" style="margin-top:.8rem;font-size:.9rem">
             Config lives at <code style="font-family:var(--mono)">~/.config/obsctl/config.yml</code>.
-            Secrets belong in environment variables — a plaintext password in the file
-            earns you a warning.
+            A plaintext password in it earns you a warning. The password belongs in the
+            daemon's environment — not in the config file, and not exported from your
+            <code style="font-family:var(--mono)">~/.bashrc</code>, where every program you
+            launch inherits it. To make it survive a reboot, read it from a password
+            manager at launch or from a <code style="font-family:var(--mono)">chmod 600</code>
+            <code style="font-family:var(--mono)">EnvironmentFile</code> in the systemd unit —
+            <a href="https://github.com/worxbend/obsctl#-your-first-five-minutes">both are in the README</a>.
           </p>
         </div>
         <div>
