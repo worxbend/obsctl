@@ -16,6 +16,15 @@ private def contrast(left : CryTUI::Color, right : CryTUI::Color) : Float64
   (luminances.max + 0.05) / (luminances.min + 0.05)
 end
 
+# How far apart two colours are as raw RGB, summed over the three channels.
+# Blunter than hue or luminance on purpose: it answers "which of these two
+# colours was this one mixed from", which is what a tint has to be checked for.
+private def channel_distance(left : CryTUI::Color, right : CryTUI::Color) : Int32
+  (left.red.to_i - right.red.to_i).abs +
+    (left.green.to_i - right.green.to_i).abs +
+    (left.blue.to_i - right.blue.to_i).abs
+end
+
 private def relative_luminance(color : CryTUI::Color) : Float64
   channels = [color.red, color.green, color.blue].map do |raw|
     value = raw.to_f64 / 255.0
@@ -89,6 +98,35 @@ describe Obsctl::TUI::Theme do
         hue_gap(pair[0], pair[1]).should be > 20
       end
     end
+  end
+
+  # A selection bar used to be a solid slab of `accent` with the row's own
+  # text left on top of it, which put muted grey on bright cyan often enough
+  # to be a readability bug rather than a taste one. It is now the accent
+  # mixed into the background, so the bar marks the row without repainting it.
+  it "tints every selection bar into the theme background instead of filling it" do
+    (Obsctl::TUI::Theme::ALL - [Obsctl::TUI::Theme::MONO]).each do |theme|
+      # Nearer the ground it sits on than the accent it is made of -- that is
+      # what "a bit transparent" means once the terminal has no alpha channel.
+      channel_distance(theme.highlight_background, theme.background)
+        .should be < channel_distance(theme.highlight_background, theme.accent)
+
+      # Still visibly a different colour from the ground, or nothing marks the
+      # selected row at all.
+      contrast(theme.highlight_background, theme.background).should be > 1.2
+
+      # The row's text is drawn in the ordinary foreground on top of the bar,
+      # so that pair has to clear the WCAG floor for body text.
+      contrast(theme.highlight_foreground, theme.highlight_background).should be > 2.5
+    end
+  end
+
+  # `mono` is the palette for terminals that may have 16 colours and their own
+  # opinion about what "dark grey" means. A tint there could come out
+  # indistinguishable from the background, so it keeps the reversed bar.
+  it "leaves the TTY-safe palette with a solid reversed selection bar" do
+    Obsctl::TUI::Theme::MONO.highlight_background.should eq(CryTUI::Color::WHITE)
+    Obsctl::TUI::Theme::MONO.highlight_foreground.should eq(CryTUI::Color::BLACK)
   end
 
   it "resolves names case-insensitively and defaults unknown names" do

@@ -65,6 +65,14 @@ custom` and add any subset of `custom_theme` colors (`bg`, `accent`,
 `danger`, `info`, `highlight_bg`, and `highlight_fg`) as six-digit RGB hex.
 Missing or invalid custom values fall back to the default Ember palette.
 
+`highlight_bg` and `highlight_fg` are the selection bar — the block drawn
+behind the row the cursor is on. Leave them out and they are derived the way
+every built-in palette derives them: the bar is `accent` mixed 28% into `bg`,
+which is how a terminal with no alpha channel gets a see-through highlight,
+and the text on it is plain `fg`. Set either one and that colour is used
+as given. The `mono` palette is the exception and keeps a solid reversed bar,
+because a tint is not guaranteed to be visible on a 16-colour terminal.
+
 The TUI supports `en` and `uk` for the localized header and connection
 surface, matching the Rust reference. Set `ui.locale`, or override it for one
 process with `OBSCTL_LOCALE`; the environment value takes precedence and
