@@ -1,4 +1,5 @@
 require "../../crytui"
+require "./anim"
 
 module Obsctl
   module TUI
@@ -59,8 +60,10 @@ module Obsctl
       # what the terminal would have shown had it been able to composite the
       # two itself. 0.28 was picked because it is enough for the selected row
       # to read as selected at a glance, and little enough that the row's own
-      # text -- which keeps the colours it was given for the plain background,
-      # see below -- stays as legible as every other row.
+      # text stays legible on it. Spans whose colour does not survive the bar
+      # are caught by `CryTUI::ForegroundGuard` and redrawn in
+      # `highlight_foreground`, so this ratio does not have to work for every
+      # colour a row can contain -- only for most of them.
       HIGHLIGHT_TINT = 0.28
 
       EMBER            = palette("ember", "Ember", %w[1B1916 D97757 E8C59E ECE8E1 8A867D 4A4640 D97757 87B37B E0B44C E06C5F 7BA9C7])
@@ -204,26 +207,18 @@ module Obsctl
         )
       end
 
-      # `color` composited over `background` at `HIGHLIGHT_TINT` opacity --
-      # channel by channel, which is what alpha blending two opaque colours
-      # comes down to. Example: an accent of #D97757 over a #1B1916 ground
-      # gives #503328 -- a dark warm brown that still reads as "the orange one".
+      # The selection bar for a palette: `color` composited over `background`
+      # at `HIGHLIGHT_TINT` opacity. Example: an accent of #D97757 over a
+      # #1B1916 ground gives #503328 -- a dark warm brown that still reads as
+      # "the orange one".
       #
-      # Indexed and reset colours have no channels to mix, so they come back
-      # untouched: the `mono` palette and any terminal running without truecolour
-      # keep whatever they were given.
+      # A terminal cell has no alpha channel, so the see-through look has to be
+      # baked into a solid colour. `Anim.blend` already performs exactly that
+      # mix and is what `chrome.cr` and `audio.cr` use for their own blends, so
+      # this delegates rather than keeping a second copy of the same three
+      # lines of channel arithmetic in step with it.
       private def self.tint(color : CryTUI::Color, background : CryTUI::Color) : CryTUI::Color
-        return color unless color.kind.rgb? && background.kind.rgb?
-
-        CryTUI::Color.rgb(
-          mix_channel(color.red, background.red),
-          mix_channel(color.green, background.green),
-          mix_channel(color.blue, background.blue)
-        )
-      end
-
-      private def self.mix_channel(color : UInt8, background : UInt8) : Int32
-        (color.to_f64 * HIGHLIGHT_TINT + background.to_f64 * (1.0 - HIGHLIGHT_TINT)).round.to_i
+        Anim.blend(background, color, HIGHLIGHT_TINT)
       end
 
       private def self.pick(value : String?, fallback : CryTUI::Color) : CryTUI::Color
