@@ -34,6 +34,18 @@ describe Obsctl::Config::ConfigDump do
     merged.ui.show_icons.should be_false
   end
 
+  it "preserves a customized keymap" do
+    # `dump-config` rewrites the whole file, so any section the merge forgets to
+    # carry across is silently replaced by its defaults on disk.
+    config = Obsctl::Config::Config.new(
+      keymap: Obsctl::Config::KeymapConfig.new(quit: ["Q"])
+    )
+
+    merged = Obsctl::Config::ConfigDump.merge(config, ["Main Camera"], ["Mic/Aux"])
+
+    merged.keymap.quit.should eq(["Q"])
+  end
+
   it "reports duplicate aliases before writing a dumped config" do
     config = Obsctl::Config::Config.new(
       scenes: [

@@ -37,6 +37,11 @@ module Obsctl
           scenes: scenes,
           audio: AudioConfig.new(inputs),
           ui: config.ui,
+          # Every field the merge does not touch must be carried across
+          # verbatim: this object is handed straight to `ConfigWriter`, so
+          # anything omitted here falls back to its default and is written over
+          # the user's own value.
+          keymap: config.keymap,
         )
         validate_conflicts!(merged)
         merged
