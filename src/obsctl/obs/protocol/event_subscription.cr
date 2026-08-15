@@ -36,13 +36,26 @@ module Obsctl
             UI |
             CANVASES
 
-        # Every category the supervisor's event handler acts on. obs-websocket
-        # only delivers an event to clients subscribed to its category, so a
-        # missing bit here silently turns the matching handler arm into dead
-        # code: `OUTPUTS` is what carries `StreamStateChanged`, and without it
-        # a stream started from the OBS UI or another client never reached
-        # daemon state. Keep this in sync with `ObsSupervisor#apply_event`.
-        SERVER_DEFAULT = GENERAL | CONFIG | SCENES | INPUTS | OUTPUTS
+        # Every category the daemon needs. obs-websocket only delivers an event
+        # to clients subscribed to its category, so a missing bit here silently
+        # turns the matching handler arm into dead code: `OUTPUTS` is what
+        # carries `StreamStateChanged`, and without it a stream started from
+        # the OBS UI or another client never reached daemon state.
+        #
+        # Two sets of consumers have to be represented, which is easy to forget
+        # because only one of them lives in this process:
+        #
+        #   - `ObsSupervisor#apply_event`, which folds events into daemon state;
+        #   - the dashboard, which reads the raw events fanned out over IPC.
+        #     `INPUT_VOLUME_METERS` is here for it alone — the supervisor
+        #     ignores that category, but without the bit the TUI's audio meters
+        #     have no data to draw and sit at silence forever.
+        #
+        # `INPUT_VOLUME_METERS` is the one high-volume category included. OBS
+        # emits it tens of times a second, which is the price of a live meter;
+        # broadcasts to IPC clients are individually bounded, so a subscriber
+        # that cannot keep up is dropped rather than slowing the daemon down.
+        SERVER_DEFAULT = GENERAL | CONFIG | SCENES | INPUTS | OUTPUTS | INPUT_VOLUME_METERS
       end
     end
   end

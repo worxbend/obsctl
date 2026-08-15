@@ -12,7 +12,8 @@ describe Obsctl::OBS::Protocol::EventSubscription do
       Obsctl::OBS::Protocol::EventSubscription::CONFIG |
       Obsctl::OBS::Protocol::EventSubscription::SCENES |
       Obsctl::OBS::Protocol::EventSubscription::INPUTS |
-      Obsctl::OBS::Protocol::EventSubscription::OUTPUTS
+      Obsctl::OBS::Protocol::EventSubscription::OUTPUTS |
+      Obsctl::OBS::Protocol::EventSubscription::INPUT_VOLUME_METERS
     )
   end
 
@@ -26,10 +27,19 @@ describe Obsctl::OBS::Protocol::EventSubscription do
     (mask & Obsctl::OBS::Protocol::EventSubscription::CONFIG).should_not eq(0)
   end
 
-  it "leaves the high-volume categories out of the server mask" do
+  it "subscribes to volume meters so the dashboard has meter data to draw" do
     mask = Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT
 
-    (mask & Obsctl::OBS::Protocol::EventSubscription::INPUT_VOLUME_METERS).should eq(0)
+    # The supervisor itself ignores this category; the bit exists purely so the
+    # events reach IPC subscribers. Without it the TUI's whole meter path —
+    # `EventApplier#apply_obs_event`, `Model#record_meter_level`, the mixer
+    # widget — is unreachable and the meters read silent forever.
+    (mask & Obsctl::OBS::Protocol::EventSubscription::INPUT_VOLUME_METERS).should_not eq(0)
+  end
+
+  it "leaves unused high-volume categories out of the server mask" do
+    mask = Obsctl::OBS::Protocol::EventSubscription::SERVER_DEFAULT
+
     (mask & Obsctl::OBS::Protocol::EventSubscription::SCENE_ITEM_TRANSFORM_CHANGED).should eq(0)
   end
 end
