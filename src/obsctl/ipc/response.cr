@@ -64,8 +64,11 @@ module Obsctl
           AUDIO_INPUT_NOT_FOUND
         when Domain::AliasAmbiguous
           ALIAS_AMBIGUOUS
+        when Domain::ShutdownDisabled
+          # Must precede `CommandParseError`, which it inherits from.
+          SHUTDOWN_DISABLED
         when Domain::CommandParseError
-          error.message == "remote shutdown is disabled" ? SHUTDOWN_DISABLED : COMMAND_PARSE_ERROR
+          COMMAND_PARSE_ERROR
         when Domain::IpcProtocolError
           IPC_PROTOCOL_ERROR
         else

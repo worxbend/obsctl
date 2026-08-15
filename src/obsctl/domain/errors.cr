@@ -119,6 +119,21 @@ module Obsctl
       end
     end
 
+    # Raised when `shutdown_server` is refused by `server.allow_remote_shutdown`.
+    #
+    # A subclass of `CommandParseError` so it keeps the same exit code and is
+    # still caught by everything that handles a rejected command. It exists as
+    # its own type because the IPC layer has to map it to the public
+    # `SHUTDOWN_DISABLED` error code, and matching a type is something the
+    # compiler checks — matching the wording of a message is not.
+    class ShutdownDisabled < CommandParseError
+      DEFAULT_MESSAGE = "remote shutdown is disabled"
+
+      def initialize(message : String? = nil)
+        super(message || DEFAULT_MESSAGE)
+      end
+    end
+
     # Raised when Unix socket IPC cannot connect or continue.
     class IpcConnectionFailed < ObsctlError
       def initialize(message : String)

@@ -302,7 +302,7 @@ describe Obsctl::CLI::ClientCommands do
       {Obsctl::Domain::AudioInputNotFound.new("missing").as(Obsctl::Domain::ObsctlError), Obsctl::IPC::ErrorCode::AUDIO_INPUT_NOT_FOUND, Obsctl::Domain::ExitCode::ObsRequest},
       {Obsctl::Domain::AliasAmbiguous.new("scene", "cam").as(Obsctl::Domain::ObsctlError), Obsctl::IPC::ErrorCode::ALIAS_AMBIGUOUS, Obsctl::Domain::ExitCode::CommandParse},
       {Obsctl::Domain::CommandParseError.new("bad command").as(Obsctl::Domain::ObsctlError), Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR, Obsctl::Domain::ExitCode::CommandParse},
-      {Obsctl::Domain::CommandParseError.new("remote shutdown is disabled").as(Obsctl::Domain::ObsctlError), Obsctl::IPC::ErrorCode::SHUTDOWN_DISABLED, Obsctl::Domain::ExitCode::CommandParse},
+      {Obsctl::Domain::ShutdownDisabled.new.as(Obsctl::Domain::ObsctlError), Obsctl::IPC::ErrorCode::SHUTDOWN_DISABLED, Obsctl::Domain::ExitCode::CommandParse},
       {Obsctl::Domain::IpcProtocolError.new("bad frame").as(Obsctl::Domain::ObsctlError), Obsctl::IPC::ErrorCode::IPC_PROTOCOL_ERROR, Obsctl::Domain::ExitCode::Ipc},
       {Obsctl::Domain::ServiceInstallFailed.new("systemctl failed").as(Obsctl::Domain::ObsctlError), Obsctl::IPC::ErrorCode::SERVER_ERROR, Obsctl::Domain::ExitCode::Failure},
     ]

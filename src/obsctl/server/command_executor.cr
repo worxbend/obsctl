@@ -71,7 +71,7 @@ module Obsctl
           object({"message" => "OBS reconnect requested"})
         when "shutdown_server"
           unless @config.server.allow_remote_shutdown
-            raise Domain::CommandParseError.new("remote shutdown is disabled")
+            raise Domain::ShutdownDisabled.new
           end
           object({"message" => "server shutdown requested"})
         end
