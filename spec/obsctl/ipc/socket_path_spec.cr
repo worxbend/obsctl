@@ -25,6 +25,15 @@ describe Obsctl::IPC::SocketPath do
     Obsctl::IPC::SocketPath.resolve(nil, env).should eq("/run/user/1000/obsctl/obsctl.sock")
   end
 
+  it "treats an empty XDG_RUNTIME_DIR as unset" do
+    # Trimmed cron and container environments export it empty. Joining onto ""
+    # yields "/obsctl/obsctl.sock", and the daemon then tries to create a
+    # directory at the filesystem root.
+    env = {"XDG_RUNTIME_DIR" => ""}
+
+    Obsctl::IPC::SocketPath.resolve(nil, env).should contain("/tmp/obsctl-")
+  end
+
   it "falls back to a per-user tmp path" do
     Obsctl::IPC::SocketPath.resolve(nil, {} of String => String).should contain("/tmp/obsctl-")
     Obsctl::IPC::SocketPath.resolve(nil, {} of String => String).should end_with("/obsctl.sock")

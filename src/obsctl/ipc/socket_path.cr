@@ -10,7 +10,13 @@ module Obsctl
       def self.resolve(configured_path : String? = nil, env = ENV) : String
         return File.expand_path(configured_path) if configured_path && !configured_path.empty?
 
-        if runtime_dir = env["XDG_RUNTIME_DIR"]?
+        # Exported-but-empty counts as unset. Trimmed environments — cron,
+        # systemd units, containers — hand out `XDG_RUNTIME_DIR=""`, and
+        # joining onto an empty string produces the absolute path
+        # "/obsctl/obsctl.sock", which the daemon then tries to create a
+        # directory for at the filesystem root.
+        runtime_dir = env["XDG_RUNTIME_DIR"]?
+        if runtime_dir && !runtime_dir.empty?
           return File.join(runtime_dir, "obsctl", DEFAULT_SOCKET_NAME)
         end
 
