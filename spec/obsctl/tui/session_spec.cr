@@ -67,4 +67,38 @@ describe Obsctl::TUI::CommandClient do
   ensure
     server.try(&.close)
   end
+
+  it "gives up on a daemon that accepts the request and never answers" do
+    # The dashboard sends commands from its render-loop fiber, so a wait with
+    # no deadline is a frozen terminal rather than a slow one.
+    path = File.join(Dir.tempdir, "obsctl-tui-command-stuck-#{Random.rand(1_000_000)}.sock")
+    server = Obsctl::IPC::UnixServer.new(path)
+    ready = Channel(Nil).new
+    release = Channel(Nil).new
+    spawn do
+      server.bind
+      ready.send(nil)
+      client = server.accept
+      client.read_message
+      # Deliberately no response: hold the connection open until the spec is
+      # done asserting that the client stopped waiting.
+      release.receive
+      client.close
+    rescue
+    end
+
+    ready.receive
+    client = Obsctl::TUI::CommandClient.new(path, timeout: 200.milliseconds)
+
+    begin
+      expect_raises(Obsctl::Domain::RequestTimeout) do
+        client.send(Obsctl::IPC::CommandPayload.new("set_scene", "Main"))
+      end
+    ensure
+      release.send(nil)
+      server.close
+    end
+  ensure
+    server.try(&.close)
+  end
 end

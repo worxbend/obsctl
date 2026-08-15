@@ -38,7 +38,18 @@ module Obsctl
     end
 
     class CommandClient
-      def initialize(@socket_path : String)
+      # How long a dashboard keypress waits for the daemon to answer.
+      #
+      # `Dispatcher#command` runs on the same fiber as the render loop, so an
+      # unbounded wait here is a frozen dashboard: nothing repaints, no key is
+      # processed, and even `q` and Ctrl-C only queue up behind the stuck read.
+      # Five seconds is far longer than any local command needs and short
+      # enough that the user gets a status-line error instead of a dead
+      # terminal. The timeout surfaces as `Domain::RequestTimeout`, which
+      # `Dispatcher#command` already renders as an ordinary error message.
+      COMMAND_TIMEOUT = 5.seconds
+
+      def initialize(@socket_path : String, @timeout : Time::Span? = COMMAND_TIMEOUT)
         @sequence = 0
         @lock = Mutex.new
       end
@@ -48,7 +59,7 @@ module Obsctl
           @sequence += 1
           "tui-%06d" % @sequence
         end
-        IPC::UnixClient.new(@socket_path).request(IPC::Request.new(id, IPC::Request::TYPE_COMMAND, payload))
+        IPC::UnixClient.new(@socket_path, timeout: @timeout).request(IPC::Request.new(id, IPC::Request::TYPE_COMMAND, payload))
       rescue ex : Domain::IpcConnectionFailed
         raise Domain::ServerUnavailable.new(ex.message)
       end
