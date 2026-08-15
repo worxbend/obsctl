@@ -155,11 +155,9 @@ module Obsctl
         until stopped?(generation)
           client = OBS::Client.new(@config, event_subscriptions: OBS::Protocol::EventSubscription::SERVER_DEFAULT)
           handled_request_epoch = reconnect_signal.latest_request_epoch
-          connected = false
           begin
             @state.mark_reconnect_attempt
             client.connect
-            connected = true
             break unless claim_client(generation, client)
 
             @state.mark_connected(client.snapshot)
@@ -177,7 +175,7 @@ module Obsctl
             delay = policy.delay_for(attempt)
             warning = retry_warning(message, delay, attempt)
             publish_log("warn", disconnect_log_code(message), warning)
-            next_attempt = settle_after_failure(generation, client, connected, delay, reconnect_signal, handled_request_epoch, attempt)
+            next_attempt = settle_after_failure(generation, client, delay, reconnect_signal, handled_request_epoch, attempt)
             break unless next_attempt
             attempt = next_attempt
           rescue ex
@@ -191,7 +189,7 @@ module Obsctl
               publish_log("warn", "obs_reconnect_scheduled", retry_warning(message, delay, attempt))
             end
 
-            next_attempt = settle_after_failure(generation, client, connected, delay, reconnect_signal, handled_request_epoch, attempt)
+            next_attempt = settle_after_failure(generation, client, delay, reconnect_signal, handled_request_epoch, attempt)
             break unless next_attempt
             attempt = next_attempt
           end
@@ -208,13 +206,15 @@ module Obsctl
       private def settle_after_failure(
         generation : UInt64,
         client : OBS::Client,
-        connected : Bool,
         delay : Time::Span,
         reconnect_signal : ReconnectSignal,
         handled_request_epoch : UInt64,
         attempt : Int32,
       ) : Int32?
-        client.close if connected
+        # Unconditional: a client whose socket opened but whose Identify failed
+        # (a wrong password, say) still holds an fd and a live reader fiber.
+        # `Client#close` is a no-op when the socket never opened.
+        client.close
         @client_lock.synchronize { @client = nil if @client == client }
         return if stopped?(generation) || !@config.reconnect.enabled
 

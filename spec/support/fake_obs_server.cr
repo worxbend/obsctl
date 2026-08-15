@@ -73,6 +73,11 @@ module Obsctl
         @stream_bytes : Int64 = 1_000_000_i64,
         @stream_bytes_per_status : Int64 = 0_i64,
         @authentication : Bool = false,
+        # Rejects Identify the way obs-websocket rejects a wrong password: close
+        # code 4009, after the socket is already open. Lets specs reach the
+        # "connected enough to hold an fd, not connected enough to be
+        # identified" state that a leak can hide in.
+        @reject_identify : Bool = false,
       )
         @host = "127.0.0.1"
         @server = HTTP::Server.new([websocket_handler])
@@ -384,7 +389,11 @@ module Obsctl
             @event_subscriptions[websocket] = identify["eventSubscriptions"]?.try(&.as_i64?) || OBS::Protocol::EventSubscription::ALL.to_i64
           end
           notify_identify(identify)
-          send_frame(websocket, identified_frame)
+          if @reject_identify
+            websocket.close(4009, "Authentication failed")
+          else
+            send_frame(websocket, identified_frame)
+          end
         when 6
           request = frame["d"]
           request_type = request["requestType"].as_s

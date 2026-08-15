@@ -179,6 +179,38 @@ describe Obsctl::OBS::Client do
     end
   end
 
+  it "reports an open socket after Identify is rejected so the caller still closes it" do
+    # A rejected Identify leaves the socket open and its reader fiber running.
+    # Before this was tracked separately from `connected?`, the supervisor's
+    # cleanup skipped `close` here and leaked one fd per reconnect attempt.
+    server = Obsctl::SpecSupport::FakeObsServer.new(reject_identify: true).start
+    client = Obsctl::OBS::Client.new(server.config)
+
+    begin
+      expect_raises(Obsctl::Domain::ObsctlError) { client.connect }
+
+      client.connected?.should be_false
+      client.socket_open?.should be_true
+    ensure
+      client.close
+      server.stop
+    end
+  end
+
+  it "closes without raising when the socket was never opened" do
+    # `@ws` is `uninitialized` until `connect` assigns it, so an unconditional
+    # `close` from an error path must not dereference it.
+    server = Obsctl::SpecSupport::FakeObsServer.new.start
+    client = Obsctl::OBS::Client.new(server.config)
+
+    begin
+      client.socket_open?.should be_false
+      client.close
+    ensure
+      server.stop
+    end
+  end
+
   it "fails an in-flight request when the websocket closes" do
     server = Obsctl::SpecSupport::FakeObsServer.new(
       request_delays: {"GetVersion" => 2.seconds},

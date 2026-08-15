@@ -46,6 +46,11 @@ module Obsctl
         @terminal_error_lock = Mutex.new
         @close_notifications = Channel(Domain::ConnectionFailed).new(1)
         @close_requested = false
+        # `@ws` is `uninitialized` until `connect` assigns it, so reading it
+        # before then is undefined behaviour. This flag records the one moment
+        # that stops being true: the socket is open and owns an fd plus a reader
+        # fiber, and `close` must run even if Identify later fails.
+        @socket_open = false
       end
 
       # Channel of parsed OBS events from opcode 5 frames.
@@ -82,6 +87,7 @@ module Obsctl
       def connect : Nil
         reset_terminal_state
         @ws = Connection.new(@config.connection).connect
+        @socket_open = true
         @ws.on_message { |message| handle_frame(message) }
         @ws.on_close do |code, reason|
           fail_all_pending(close_terminal_error(code, reason))
@@ -96,10 +102,19 @@ module Obsctl
         @identified = true
       end
 
+      # Returns true once `connect` has opened the socket, whether or not the
+      # Hello/Identify handshake that follows it succeeded.
+      def socket_open? : Bool
+        @socket_open
+      end
+
       # Closes the WebSocket and marks this client as no longer identified.
+      #
+      # Safe to call on a client that never connected, and safe to call twice.
       def close : Nil
         @terminal_error_lock.synchronize { @close_requested = true }
         @identified = false
+        return unless @socket_open
         @ws.close unless @ws.closed?
       rescue
       end
