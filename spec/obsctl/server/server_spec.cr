@@ -622,7 +622,12 @@ describe Obsctl::Server::Server do
 
     log = read_log_until(logs, "obs_disconnected")
     log["message"].as_s.should contain("OBS WebSocket disconnected")
-    log["message"].as_s.should contain("reconnect attempt 1 scheduled in 500ms")
+    # The delay carries up to `reconnect.jitter_ms` (250 by default) on top of
+    # the 500ms initial delay, so the exact number is not fixed.
+    scheduled = log["message"].as_s.match(/reconnect attempt 1 scheduled in (\d+)ms/)
+    scheduled.should_not be_nil
+    scheduled.not_nil![1].to_i.should be >= 500
+    scheduled.not_nil![1].to_i.should be < 750
 
     response = client.request(
       Obsctl::IPC::Request.new(
