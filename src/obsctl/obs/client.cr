@@ -31,6 +31,14 @@ module Obsctl
 
     # obs-websocket 5.x client used by the server-owned OBS supervisor.
     class Client
+      # How many OBS events may wait for the supervisor to drain them.
+      #
+      # Sized for a burst: with volume meters subscribed OBS emits tens of
+      # events a second, and the supervisor drains between its own 100ms
+      # disconnect checks. Deep enough that a normal burst never overflows,
+      # shallow enough that a stalled consumer cannot grow it without bound.
+      EVENT_BUFFER_SIZE = 256
+
       def initialize(
         @config : Config::Config,
         @event_subscriptions : Int32? = nil,
@@ -39,7 +47,12 @@ module Obsctl
         @identified = false
         @ws = uninitialized HTTP::WebSocket
         @system_frames = Channel(String | Exception).new(8)
-        @events = Channel(Protocol::Event).new
+        # Buffered, so `handle_frame` can hand off an event without waiting for
+        # the supervisor to be at the receiving end. It used to spawn a fiber
+        # per event onto an unbuffered channel, which leaked a parked fiber for
+        # every event that arrived once nobody was draining any more, and let
+        # two updates for the same input be applied out of order.
+        @events = Channel(Protocol::Event).new(EVENT_BUFFER_SIZE)
         @pending = {} of String => Channel(Protocol::Response | Exception)
         @pending_lock = Mutex.new
         @terminal_error = nil.as(Domain::ConnectionFailed?)
@@ -454,6 +467,22 @@ module Obsctl
         value.as_f? || value.as_i?.try(&.to_f64)
       end
 
+      # Hands an event to the supervisor without blocking the reader fiber.
+      #
+      # This runs on the single fiber that reads the WebSocket, so it must
+      # never park: blocking here stops request responses being routed too.
+      # A full buffer means the supervisor is behind, and the useful thing to
+      # do with a burst of stale volume meters is drop it — daemon state is
+      # reconciled by the telemetry poll every two seconds regardless.
+      private def queue_event(event : Protocol::Event) : Nil
+        select
+        when @events.send(event)
+          # Queued.
+        else
+          # Buffer full; drop rather than stall the reader.
+        end
+      end
+
       private def handle_frame(frame : String) : Nil
         opcode = Protocol::Message.opcode(frame)
         begin
@@ -462,7 +491,7 @@ module Obsctl
             route_response(frame)
           when 5
             if event = Protocol::Event.from_frame(frame)
-              spawn { @events.send(event) }
+              queue_event(event)
             end
           else
             @system_frames.send(frame)

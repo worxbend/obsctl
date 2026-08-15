@@ -197,6 +197,35 @@ describe Obsctl::OBS::Client do
     end
   end
 
+  it "delivers events in the order OBS sent them" do
+    # Events used to be handed to the channel by one spawned fiber each, which
+    # left the scheduler free to run them in any order — so an older volume for
+    # an input could overwrite a newer one in daemon state.
+    server = Obsctl::SpecSupport::FakeObsServer.new.start
+    client = Obsctl::OBS::Client.new(server.config)
+
+    begin
+      client.connect
+      expected = (0...25).map { |index| "Scene #{index}" }
+      expected.each { |name| server.emit_current_scene_changed(name) }
+
+      received = expected.map do
+        event = nil.as(Obsctl::OBS::Protocol::Event?)
+        select
+        when incoming = client.events.receive
+          event = incoming
+        when timeout(2.seconds)
+        end
+        event.not_nil!.event_data.not_nil!["sceneName"].as_s
+      end
+
+      received.should eq(expected)
+    ensure
+      client.close
+      server.stop
+    end
+  end
+
   it "closes without raising when the socket was never opened" do
     # `@ws` is `uninitialized` until `connect` assigns it, so an unconditional
     # `close` from an error path must not dereference it.
