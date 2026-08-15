@@ -17,6 +17,15 @@ module Obsctl
         socket.read_timeout = span
       end
 
+      # Bounds how long a `write_message` may block; nil blocks indefinitely.
+      #
+      # A peer that stops reading eventually fills its socket buffer, at which
+      # point a write parks the calling fiber. Setting this turns that into an
+      # `IO::TimeoutError` the caller can treat as a dead peer.
+      def write_timeout=(span : Time::Span?) : Nil
+        socket.write_timeout = span
+      end
+
       # Reads and decodes one message, returning nil when the peer closes.
       def read_message : Message?
         line = socket.gets
