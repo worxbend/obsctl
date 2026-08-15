@@ -413,8 +413,7 @@ describe Obsctl::Server::Server do
     status = wait_for_obs_snapshot(client) do |payload|
       payload["scenes"].as_a.any? { |scene| scene["alias"]?.try(&.as_s?) == "reloaded-alias" }
     end
-    status["scenes"].as_a.find { |scene| scene["name"].as_s == scene_name }
-      .not_nil!["alias"].as_s.should eq("reloaded-alias")
+    status["scenes"].as_a.find! { |scene| scene["name"].as_s == scene_name }["alias"].as_s.should eq("reloaded-alias")
   ensure
     server.try(&.stop)
     obs.try(&.stop)
