@@ -33,7 +33,14 @@ module CryTUI
       @spans.sum(&.width)
     end
 
-    def render(buffer : Buffer, area : Rect, inherited_style = Style.new)
+    # Draws the line's spans across `area`.
+    #
+    # `guard` rescues spans whose own colour is unreadable on the background
+    # they end up on. It exists for the selected row of a list: each span picks
+    # a colour for the ordinary background — an index in `muted`, a shortcut in
+    # `warning` — and some of those choices stop working once the row is
+    # repainted in the highlight colours.
+    def render(buffer : Buffer, area : Rect, inherited_style = Style.new, guard : ForegroundGuard? = nil)
       return if area.empty?
       start = case @alignment
               when .center? then area.x + ((area.width - width) // 2).clamp(0, Int32::MAX)
@@ -45,7 +52,9 @@ module CryTUI
       base = inherited_style.patch(@style)
       @spans.each do |span|
         break if remaining <= 0
-        written = buffer.set_string(cursor, area.y, span.content, base.patch(span.style), remaining)
+        style = base.patch(span.style)
+        style = style.with_foreground(guard.replacement) if guard && guard.insufficient?(style.foreground)
+        written = buffer.set_string(cursor, area.y, span.content, style, remaining)
         cursor += written
         remaining -= written
       end
