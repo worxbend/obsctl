@@ -33,6 +33,37 @@ describe Obsctl::Server::ClientRegistry do
     end
   end
 
+  it "lets nothing be broadcast to a subscriber before its priming writes" do
+    # A client's first two frames must be its subscribe acknowledgement and the
+    # initial state snapshot. If a pushed update can land in front of them, the
+    # client either fails the handshake outright or renders state older than
+    # what it already applied.
+    server_side, client_side = UNIXSocket.pair
+    registry = Obsctl::Server::ClientRegistry.new
+    session = Obsctl::IPC::ClientSession.new(server_side)
+    broadcaster_started = Channel(Nil).new
+
+    begin
+      registry.add(session, ["events"]) do
+        # A concurrent broadcaster, released while the registration is still in
+        # progress. It must not be able to write before the priming frame.
+        spawn do
+          broadcaster_started.send(nil)
+          registry.broadcast("events", JSON.parse({"pushed" => true}.to_json))
+        end
+        broadcaster_started.receive
+        Fiber.yield
+        session.write_message(Obsctl::IPC::Event.new("events", JSON.parse({"primed" => true}.to_json)))
+      end
+
+      first = JSON.parse(client_side.gets.not_nil!)
+      first["data"]["primed"]?.should_not be_nil
+    ensure
+      server_side.close rescue nil
+      client_side.close rescue nil
+    end
+  end
+
   it "keeps a subscriber that drains its socket" do
     server_side, client_side = UNIXSocket.pair
     registry = Obsctl::Server::ClientRegistry.new

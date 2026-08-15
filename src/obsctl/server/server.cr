@@ -112,9 +112,12 @@ module Obsctl
           end
 
           if request.subscribe?
-            @registry.add(session, request.topics)
-            session.write_message(IPC::Response.new(request.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
-            session.write_message(IPC::Event.new("state", @state.snapshot_json)) if request.topics.includes?("state")
+            # The acknowledgement and the initial snapshot are written inside
+            # the registration so no pushed update can slip in front of them.
+            @registry.add(session, request.topics) do
+              session.write_message(IPC::Response.new(request.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
+              session.write_message(IPC::Event.new("state", @state.snapshot_json)) if request.topics.includes?("state")
+            end
           elsif request.command?
             response = @executor.execute(request)
             session.write_message(response)

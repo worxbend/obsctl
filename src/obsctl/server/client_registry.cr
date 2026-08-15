@@ -31,12 +31,37 @@ module Obsctl
       end
 
       # Adds or replaces a subscription for a connected client session.
-      def add(session : IPC::ClientSession, topics : Array(String)) : Nil
+      #
+      # An optional block runs while the registry lock is still held, right
+      # after the session is registered. It is where the caller writes whatever
+      # the client must receive before any pushed update — the subscribe
+      # acknowledgement and the initial state snapshot.
+      #
+      # Holding the lock across those writes is what makes the handoff safe.
+      # Registering first and writing afterwards lets a broadcast overtake the
+      # acknowledgement, which clients treat as a protocol violation, or
+      # overtake the initial snapshot, leaving the client showing state older
+      # than the update it already applied. Writing first and registering
+      # afterwards loses any update that lands in between. A broadcast can only
+      # observe the subscriber before this returns or after, never halfway
+      # through — `broadcast` takes the same lock only to read the subscriber
+      # list, so it waits rather than deadlocks. The block may read `StateStore`
+      # for that snapshot: the store publishes updates after releasing its own
+      # lock, so there is no path where one fiber holds the registry lock
+      # waiting for the store while another holds the store waiting for the
+      # registry.
+      def add(session : IPC::ClientSession, topics : Array(String), &) : Nil
         topic_set = validate_topics(topics)
         session.write_timeout = BROADCAST_WRITE_TIMEOUT
         @lock.synchronize do
           @subscriptions[session.object_id] = Subscription.new(session, topic_set)
+          yield
         end
+      end
+
+      # :ditto:
+      def add(session : IPC::ClientSession, topics : Array(String)) : Nil
+        add(session, topics) { }
       end
 
       # Removes a client session from the registry.
