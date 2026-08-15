@@ -43,7 +43,7 @@ module Obsctl
           heading, badge, hint = ScenePickerLayout.title_parts(model, count)
           title = CryTUI::Line.new([
             CryTUI::Span.new(heading, CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold)),
-            CryTUI::Span.new(badge, CryTUI::Style.new(foreground: theme.highlight_foreground, background: theme.highlight_background, modifiers: CryTUI::Modifier::Bold)),
+            CryTUI::Span.new(badge, CryTUI::Style.new(foreground: theme.badge_foreground, background: theme.badge_background, modifiers: CryTUI::Modifier::Bold)),
             CryTUI::Span.new(hint, CryTUI::Style.new(foreground: theme.muted)),
           ])
           CryTUI::Widgets::Block.new(

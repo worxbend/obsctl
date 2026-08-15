@@ -33,6 +33,24 @@ module Obsctl
       info : CryTUI::Color,
       highlight_background : CryTUI::Color,
       highlight_foreground : CryTUI::Color do
+      # Colours for a count badge: the small inverse chip in a panel title,
+      # like the " 03 " next to "Scenes".
+      #
+      # Deliberately not the highlight pair. The two look superficially alike —
+      # both are "text on a coloured block" — but they want opposite things. A
+      # selection bar is a dim wash that has to sit behind a whole row of text
+      # without drowning it; a badge is a small bright chip that has to stand
+      # out from the panel title beside it. Sharing one pair meant that dimming
+      # the selection bar also flattened every badge into the background.
+      def badge_background : CryTUI::Color
+        accent
+      end
+
+      # :ditto:
+      def badge_foreground : CryTUI::Color
+        background
+      end
+
       # How much of the accent survives in a selection bar, from 0 (invisible)
       # to 1 (a solid slab of accent). A terminal cell has no alpha channel --
       # there is no way to ask it for "30% opaque" -- so the see-through look

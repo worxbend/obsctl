@@ -121,6 +121,27 @@ describe Obsctl::TUI::Theme do
     end
   end
 
+  # The count badge in a panel title is a small inverse chip. It shares no
+  # colours with the selection bar, which is a dim wash and wants the opposite
+  # treatment -- when the two were one pair, dimming the bar erased the badge.
+  it "keeps the count badge reading as a chip against the panel ground" do
+    (Obsctl::TUI::Theme::ALL - [Obsctl::TUI::Theme::MONO]).each do |theme|
+      # One measurement covers both things that matter, because the badge is
+      # the panel's own background painted on the accent: the same ratio says
+      # the chip separates from the panel behind it and that its digits read on
+      # the chip. (Contrast is symmetric, so asserting it in both directions
+      # would only be the same number twice.)
+      #
+      # 3:1 is the WCAG floor for a non-text element, and every palette clears
+      # it except rose-pine-dawn at 2.60 -- upstream Rosé Pine Dawn's rose
+      # (#D7827E) really is that close in luminance to its cream ground, so
+      # this is the palette reproduced faithfully rather than a mistake to fix
+      # here. The threshold names that floor rather than claiming a limit the
+      # set does not meet.
+      contrast(theme.badge_foreground, theme.badge_background).should be > 2.5
+    end
+  end
+
   # `mono` is the palette for terminals that may have 16 colours and their own
   # opinion about what "dark grey" means. A tint there could come out
   # indistinguishable from the background, so it keeps the reversed bar.

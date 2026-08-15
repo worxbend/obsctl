@@ -15,7 +15,7 @@ module Obsctl
                   else
                     [CryTUI::Span.new(heading, CryTUI::Style.new(foreground: model.theme.accent, modifiers: CryTUI::Modifier::Bold))]
                   end
-          spans << CryTUI::Span.new(" #{count.to_s.rjust(2, '0')} ", CryTUI::Style.new(foreground: model.theme.highlight_foreground, background: model.theme.highlight_background, modifiers: CryTUI::Modifier::Bold))
+          spans << CryTUI::Span.new(" #{count.to_s.rjust(2, '0')} ", CryTUI::Style.new(foreground: model.theme.badge_foreground, background: model.theme.badge_background, modifiers: CryTUI::Modifier::Bold))
           spans << CryTUI::Span.new("  #{hint} ", CryTUI::Style.new(foreground: model.theme.muted)) unless hint.empty?
           CryTUI::Widgets::Block.new(
             title: CryTUI::Line.new(spans),
