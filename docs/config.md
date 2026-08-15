@@ -63,15 +63,27 @@ hue rather than shade (`toxic-violet`, `ember-riot`, `acid-rain`,
 custom` and add any subset of `custom_theme` colors (`bg`, `accent`,
 `accent_alt`, `fg`, `muted`, `border`, `border_focus`, `success`, `warning`,
 `danger`, `info`, `highlight_bg`, and `highlight_fg`) as six-digit RGB hex.
-Missing or invalid custom values fall back to the default Ember palette.
+A missing or invalid value falls back to the default Ember palette, except for
+`highlight_bg` and `highlight_fg`, which are derived from your own colors as
+described below.
 
 `highlight_bg` and `highlight_fg` are the selection bar — the block drawn
-behind the row the cursor is on. Leave them out and they are derived the way
-every built-in palette derives them: the bar is `accent` mixed 28% into `bg`,
-which is how a terminal with no alpha channel gets a see-through highlight,
-and the text on it is plain `fg`. Set either one and that colour is used
-as given. The `mono` palette is the exception and keeps a solid reversed bar,
-because a tint is not guaranteed to be visible on a 16-colour terminal.
+behind the row the cursor is on. Set either one and that color is used as
+given. Leave them out and they are derived:
+
+- `highlight_bg` is your `accent` mixed 28% into your `bg`, which is how a
+  terminal with no alpha channel gets a see-through highlight.
+- `highlight_fg` is whichever of your `fg` and your `bg` has more contrast
+  against the resulting bar. Those two settings are halves of one decision, so
+  setting a bright `highlight_bg` and leaving `highlight_fg` unset would
+  otherwise put light text on a light bar.
+
+A span whose own color cannot be read on the bar — a row index in `muted`, say
+— is redrawn in `highlight_fg` for that row only, so the selected row stays
+legible whatever the bar turns out to be.
+
+The `mono` palette is the exception and keeps a solid reversed bar, because a
+tint is not guaranteed to be visible on a 16-color terminal.
 
 The TUI supports `en` and `uk` for the localized header and connection
 surface, matching the Rust reference. Set `ui.locale`, or override it for one

@@ -169,6 +169,7 @@ module Obsctl
         background = pick(spec.background, base.background)
         accent = pick(spec.accent, base.accent)
         foreground = pick(spec.foreground, base.foreground)
+        highlight_background = pick(spec.highlight_background, tint(accent, background))
         new(
           "custom", "Custom",
           background, accent,
@@ -176,8 +177,8 @@ module Obsctl
           pick(spec.muted, base.muted), pick(spec.border, base.border),
           pick(spec.border_focus, base.border_focus), pick(spec.success, base.success),
           pick(spec.warning, base.warning), pick(spec.danger, base.danger),
-          pick(spec.info, base.info), pick(spec.highlight_background, tint(accent, background)),
-          pick(spec.highlight_foreground, foreground)
+          pick(spec.info, base.info), highlight_background,
+          pick(spec.highlight_foreground, readable_on(highlight_background, foreground, background))
         )
       end
 
@@ -219,6 +220,27 @@ module Obsctl
       # lines of channel arithmetic in step with it.
       private def self.tint(color : CryTUI::Color, background : CryTUI::Color) : CryTUI::Color
         Anim.blend(background, color, HIGHLIGHT_TINT)
+      end
+
+      # The better of two candidates to write text in on `background`.
+      #
+      # `highlight_bg` and `highlight_fg` are two halves of one decision, but a
+      # user may set only the first. Deriving the second as plain `fg`
+      # regardless is what a bright hand-picked bar does not survive: a
+      # #D97757 bar with Ember's near-white `fg` reads at 2.60:1, while its
+      # near-black `bg` reads at 5.62:1 on the same colour. Measuring picks
+      # whichever actually works, and leaves an explicit `highlight_fg`
+      # untouched.
+      private def self.readable_on(
+        background : CryTUI::Color,
+        first : CryTUI::Color,
+        second : CryTUI::Color,
+      ) : CryTUI::Color
+        first_ratio = CryTUI::Color.contrast_ratio(first, background)
+        second_ratio = CryTUI::Color.contrast_ratio(second, background)
+        return first unless first_ratio && second_ratio
+
+        second_ratio > first_ratio ? second : first
       end
 
       private def self.pick(value : String?, fallback : CryTUI::Color) : CryTUI::Color

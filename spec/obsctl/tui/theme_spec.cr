@@ -207,4 +207,34 @@ describe Obsctl::TUI::Theme do
     custom.background.should eq(CryTUI::Color.rgb(1, 2, 3))
     custom.accent.should eq(Obsctl::TUI::Theme.default.accent)
   end
+
+  it "picks selection-bar text that reads on a hand-picked bar colour" do
+    # `highlight_bg` and `highlight_fg` are two halves of one decision, and a
+    # user may set only the first. Ember's near-white `fg` on a bright rose bar
+    # reads at 2.60; its near-black `bg` reads at 5.62 on the same colour.
+    custom = Obsctl::TUI::Theme.from_custom(Obsctl::TUI::CustomThemeSpec.new(highlight_background: "#D97757"))
+
+    custom.highlight_foreground.should eq(Obsctl::TUI::Theme.default.background)
+    contrast(custom.highlight_foreground, custom.highlight_background).should be > 4.5
+  end
+
+  it "leaves an explicit selection-bar text colour alone" do
+    # Measuring is a fallback for a decision the user did not make, never an
+    # override of one they did.
+    custom = Obsctl::TUI::Theme.from_custom(Obsctl::TUI::CustomThemeSpec.new(
+      highlight_background: "#D97757",
+      highlight_foreground: "#FFFFFF"
+    ))
+
+    custom.highlight_foreground.should eq(CryTUI::Color.rgb(255, 255, 255))
+  end
+
+  it "keeps deriving the bar from the user's own colours when neither is set" do
+    custom = Obsctl::TUI::Theme.from_custom(Obsctl::TUI::CustomThemeSpec.new(
+      background: "#000000",
+      accent: "#00FF00"
+    ))
+
+    custom.highlight_background.should eq(expected_tint(custom.accent, custom.background))
+  end
 end
