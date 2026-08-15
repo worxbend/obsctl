@@ -33,6 +33,9 @@ module Obsctl
       getter model : Model
       getter refresh : Time::Span
 
+      # Whether a frame is owed before the run loop next waits for input.
+      getter? needs_render : Bool
+
       def self.from_config(config : Config::Config, socket_path : String = IPC::SocketPath.resolve, input : IO::FileDescriptor = STDIN, output : IO = STDOUT, config_path : String? = nil) : self
         custom = config.ui.custom_theme.try do |theme|
           CustomThemeSpec.new(
@@ -75,6 +78,9 @@ module Obsctl
         @subscription_generation = 0
         @running = false
         @exit_code = 0
+        # "Something changed since the last frame." The run loop paints its
+        # first frame unconditionally and clears this, so it starts false.
+        @needs_render = false
       end
 
       def run : Int32
@@ -95,16 +101,27 @@ module Obsctl
             viewport: -> { @area }
           )
           connect_subscription
+          # The first frame is unconditional; from here on a frame is painted
+          # only when something has changed since the last one.
+          render(terminal)
+          @needs_render = false
           loop do
-            render(terminal)
             should_quit = select
             when message = @messages.receive
               process(message, dispatcher)
             when timeout(@refresh)
+              # The refresh tick advances spinners and clock-like readouts, so
+              # it always redraws. It is also the backstop that bounds how long
+              # a skipped meter update can go unpainted: at most one interval.
               @model.anim.tick
+              @needs_render = true
               false
             end
             break if should_quit
+            if @needs_render
+              render(terminal)
+              @needs_render = false
+            end
           end
         ensure
           @running = false
@@ -116,7 +133,14 @@ module Obsctl
         1
       end
 
+      # Handles one message and returns whether the dashboard should exit.
+      #
+      # Sets `@needs_render` for anything that changes what is on screen. The
+      # one exception is a pushed event, which decides for itself: volume
+      # meters arrive tens of times a second and are content to be picked up by
+      # the next refresh tick rather than forcing a frame each.
       def process(message : AppMessage, dispatcher : Dispatcher) : Bool
+        @needs_render = true unless message.is_a?(SubscriptionMessage)
         case message
         when CryTUI::KeyEvent
           if action = Input.handle_key(@model, message)
@@ -140,10 +164,15 @@ module Obsctl
         when SubscriptionMessage
           return false unless message.generation == @subscription_generation
           if event = message.event
-            EventApplier.apply(@model, event)
+            # Applied first and combined after: `||=` would short-circuit and
+            # never apply the event at all whenever a redraw is already owed.
+            # The result is OR-ed in so an event that needs no redraw cannot
+            # cancel one owed from an earlier pass.
+            @needs_render = true if EventApplier.apply(@model, event)
           else
             @model.connected_to_daemon = false
             @model.set_last_result(message.error || "server connection closed")
+            @needs_render = true
           end
           false
         when InputClosed

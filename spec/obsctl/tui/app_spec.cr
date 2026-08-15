@@ -28,6 +28,29 @@ describe Obsctl::TUI::App do
     Obsctl::TUI::App.from_config(config).refresh.should eq(50.milliseconds)
   end
 
+  it "skips a frame for meter events but still applies them" do
+    # `EventApplier.apply` returns a redraw hint that the run loop used to
+    # discard, rendering unconditionally. With volume meters arriving tens of
+    # times a second, honouring the hint is what keeps that from forcing a full
+    # frame build per meter update.
+    model = Obsctl::TUI::Model.new
+    app = Obsctl::TUI::App.new(model: model)
+    sender = ->(_payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true, JSON.parse(%({"message":"ok"}))) }
+    dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)
+
+    meters = JSON.parse({type: "InputVolumeMeters", inputs: [{name: "Mic", level: 0.75}]}.to_json)
+    app.process(Obsctl::TUI::SubscriptionMessage.new(0, event: Obsctl::IPC::Event.new("events", meters)), dispatcher)
+
+    # Applied, but no frame owed: the next refresh tick will pick it up.
+    model.meter_levels["Mic"].should eq(0.75)
+    app.needs_render?.should be_false
+
+    # Anything else does owe a frame.
+    logs = JSON.parse({level: "warn", code: "reconnect", message: "retrying", created_at: "2026-07-18T12:00:00Z"}.to_json)
+    app.process(Obsctl::TUI::SubscriptionMessage.new(0, event: Obsctl::IPC::Event.new("logs", logs)), dispatcher)
+    app.needs_render?.should be_true
+  end
+
   it "applies subscription events, palette paste, and quit actions" do
     model = Obsctl::TUI::Model.new
     app = Obsctl::TUI::App.new(model: model)
