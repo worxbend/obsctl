@@ -28,6 +28,28 @@ describe CryTUI::InputParser do
     parser.feed("1~").should eq([CryTUI::PasteEvent.new("hello\nworld")] of CryTUI::InputEvent)
   end
 
+  it "emits non-ASCII paste text unchanged" do
+    # The parser slices by byte offset throughout. Using a character index to
+    # find the terminator dropped one byte per multi-byte character before it
+    # and left the leftovers to be emitted as stray keypresses.
+    parser = CryTUI::InputParser.new
+    parser.feed("\e[200~héllo wörld — ще одне\e[201~").should eq(
+      [CryTUI::PasteEvent.new("héllo wörld — ще одне")] of CryTUI::InputEvent
+    )
+  end
+
+  it "does not split a multi-byte character when a paste spans chunks" do
+    # "é" is two bytes. The parser holds back the last few bytes of each chunk
+    # in case they are a partial terminator, and that cut must land on a
+    # character boundary or both halves become invalid UTF-8.
+    parser = CryTUI::InputParser.new
+    parser.feed("\e[200~caf").should be_empty
+    parser.feed("é").should be_empty
+    parser.feed(" au lait\e[201~").should eq(
+      [CryTUI::PasteEvent.new("café au lait")] of CryTUI::InputEvent
+    )
+  end
+
   it "flushes an ambiguous lone escape" do
     parser = CryTUI::InputParser.new
     parser.feed("\e").should be_empty

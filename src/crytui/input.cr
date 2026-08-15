@@ -97,7 +97,11 @@ module CryTUI
       events = [] of InputEvent
       loop do
         if @pasting
-          if index = @pending.index(PASTE_END)
+          # `byte_index`, not `index`: everything around it slices by byte
+          # offset, while `index` counts characters. The two agree only for
+          # pure-ASCII input, so pasting anything accented or non-Latin used to
+          # cut the text in the wrong place.
+          if index = @pending.byte_index(PASTE_END)
             @paste += @pending.byte_slice(0, index)
             events << PasteEvent.new(@paste)
             @paste = ""
@@ -105,8 +109,12 @@ module CryTUI
             @pending = @pending.byte_slice(index + PASTE_END.bytesize)
             next
           end
+          # No terminator yet. Hold back enough bytes that a terminator split
+          # across two reads can still be recognized, and flush the rest — but
+          # only up to a character boundary, or the split lands mid-codepoint
+          # and both halves become invalid UTF-8.
           keep = {PASTE_END.bytesize - 1, @pending.bytesize}.min
-          consumed = @pending.bytesize - keep
+          consumed = char_boundary_at_or_before(@pending, @pending.bytesize - keep)
           @paste += @pending.byte_slice(0, consumed) if consumed > 0
           @pending = @pending.byte_slice(consumed)
           break
@@ -142,6 +150,19 @@ module CryTUI
       return [] of InputEvent unless @pending == "\e"
       @pending = ""
       [KeyEvent.new(KeyCode::Escape)] of InputEvent
+    end
+
+    # Moves a byte offset back to the nearest character boundary.
+    #
+    # In UTF-8 the first byte of a multi-byte character is tagged `11xxxxxx`
+    # and each byte after it is tagged `10xxxxxx`. Landing on one of those
+    # continuation bytes means the offset is in the middle of a character, so
+    # walk back until it is not.
+    private def char_boundary_at_or_before(text : String, offset : Int32) : Int32
+      while offset > 0 && ((text.byte_at?(offset) || 0_u8) & 0xC0) == 0x80
+        offset -= 1
+      end
+      offset
     end
 
     private def parse_character(char : Char) : KeyEvent
