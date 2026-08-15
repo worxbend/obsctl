@@ -198,7 +198,17 @@ module Obsctl
       # palette cannot end up with a selection bar that disagrees with the
       # colours around it, and it means the tint is defined once instead of
       # forty times.
+      # The count is checked rather than assumed. Everything past index 10 is
+      # ignored, so a palette left at the old thirteen-entry form — with the
+      # trailing highlight pair that is now derived — would compile, run, and
+      # produce a plausible-looking theme with the extra colours silently
+      # dropped. That is precisely the mistake this arity is worth guarding.
+      PALETTE_COLOR_COUNT = 11
+
       private def self.palette(id : String, label : String, colors : Array(String)) : Theme
+        unless colors.size == PALETTE_COLOR_COUNT
+          raise "built-in theme #{id} needs #{PALETTE_COLOR_COUNT} colors, got #{colors.size}"
+        end
         parsed = colors.map { |color| parse_hex(color) || raise "invalid built-in theme color: #{color}" }
         background, accent, foreground = parsed[0], parsed[1], parsed[3]
         new(
