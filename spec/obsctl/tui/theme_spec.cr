@@ -16,13 +16,19 @@ private def contrast(left : CryTUI::Color, right : CryTUI::Color) : Float64
   (luminances.max + 0.05) / (luminances.min + 0.05)
 end
 
-# How far apart two colours are as raw RGB, summed over the three channels.
-# Blunter than hue or luminance on purpose: it answers "which of these two
-# colours was this one mixed from", which is what a tint has to be checked for.
-private def channel_distance(left : CryTUI::Color, right : CryTUI::Color) : Int32
-  (left.red.to_i - right.red.to_i).abs +
-    (left.green.to_i - right.green.to_i).abs +
-    (left.blue.to_i - right.blue.to_i).abs
+# The selection bar a palette should have: `accent` mixed into `background` at
+# HIGHLIGHT_TINT, recomputed here rather than read back from the theme, so the
+# assertion pins the derivation instead of restating it.
+private def expected_tint(accent : CryTUI::Color, background : CryTUI::Color) : CryTUI::Color
+  ratio = Obsctl::TUI::Theme::HIGHLIGHT_TINT
+  channel = ->(color : UInt8, ground : UInt8) do
+    (color.to_f64 * ratio + ground.to_f64 * (1.0 - ratio)).round.to_i
+  end
+  CryTUI::Color.rgb(
+    channel.call(accent.red, background.red),
+    channel.call(accent.green, background.green),
+    channel.call(accent.blue, background.blue)
+  )
 end
 
 private def relative_luminance(color : CryTUI::Color) : Float64
@@ -106,17 +112,41 @@ describe Obsctl::TUI::Theme do
   # mixed into the background, so the bar marks the row without repainting it.
   it "tints every selection bar into the theme background instead of filling it" do
     (Obsctl::TUI::Theme::ALL - [Obsctl::TUI::Theme::MONO]).each do |theme|
-      # Nearer the ground it sits on than the accent it is made of -- that is
-      # what "a bit transparent" means once the terminal has no alpha channel.
-      channel_distance(theme.highlight_background, theme.background)
-        .should be < channel_distance(theme.highlight_background, theme.accent)
+      # The bar is exactly the accent mixed into the background at
+      # HIGHLIGHT_TINT, checked channel by channel against the mix recomputed
+      # here.
+      #
+      # This replaces an earlier assertion that the bar was "nearer the ground
+      # than the accent", which could not fail for any tint below 0.5 no matter
+      # what the colours were -- it reduced to `T < 1 - T` and said nothing
+      # about the palette. Recomputing the mix pins both the ratio and the
+      # derivation, and would catch a palette that spelled its bar out by hand.
+      theme.highlight_background.should eq(expected_tint(theme.accent, theme.background))
 
-      # Still visibly a different colour from the ground, or nothing marks the
+      # Visibly a different colour from the ground, or nothing marks the
       # selected row at all.
+      #
+      # 1.2 is not a standard, and there is no WCAG number for "a wash behind a
+      # row"; it is the honest floor of this palette set. rose-pine-dawn sits
+      # at 1.28 and eleven other palettes are under 1.5, all of them light
+      # ones, where the accent is darker than the ground and a 28% mix moves it
+      # very little. Raising HIGHLIGHT_TINT would separate those bars and cost
+      # text legibility on the dark palettes in exchange -- measured across the
+      # set, a tint of 0.4 lifts the worst bar to 1.43 but drops
+      # material-ocean's text-on-bar from 2.70 to 1.81. The trade was left
+      # where it is deliberately; this records where "here" actually is.
       contrast(theme.highlight_background, theme.background).should be > 1.2
 
-      # The row's text is drawn in the ordinary foreground on top of the bar,
-      # so that pair has to clear the WCAG floor for body text.
+      # Text on the bar. A span whose own colour cannot be read there is
+      # swapped for `highlight_foreground` by `CryTUI::ForegroundGuard`, so
+      # this pair is the floor for everything the selected row can show.
+      #
+      # 2.5 is below WCAG AA for body text, which is 4.5, and below the 3:1
+      # large-text floor too. Five palettes are under 4.5 -- material-ocean
+      # 2.70, solarized-light 3.00, solarized-dark 3.80, one-dark 3.87,
+      # everforest-dark 4.18 -- so a higher threshold here would fail the set
+      # rather than describe it. Named for what it is: a regression floor, not
+      # a standard met.
       contrast(theme.highlight_foreground, theme.highlight_background).should be > 2.5
     end
   end
