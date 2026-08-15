@@ -187,6 +187,29 @@ module Obsctl
         new
       end
 
+      # Adopts every setting from another config, in place.
+      #
+      # The daemon hands one `Config` instance to the supervisor, the command
+      # executor and the live OBS client at startup, and they all keep their
+      # own reference to it. Rebinding a variable to a freshly loaded config
+      # therefore only updates whichever component did the rebinding, leaving
+      # the others reading settings from the old file. Copying the fields into
+      # the shared instance is what makes `obsctl reload-config` visible
+      # everywhere at once.
+      #
+      # Every field is listed deliberately: an omission here is silent, and
+      # shows up as one part of the daemon disagreeing with another.
+      def replace_with(other : self) : Nil
+        @version = other.version
+        @server = other.server
+        @connection = other.connection
+        @reconnect = other.reconnect
+        @scenes = other.scenes
+        @audio = other.audio
+        @ui = other.ui
+        @keymap = other.keymap
+      end
+
       # Parses YAML into the typed config model and rejects unsupported top-level
       # keys so writes cannot silently discard user data.
       def self.from_yaml(yaml : String) : self

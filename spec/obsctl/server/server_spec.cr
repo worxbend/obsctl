@@ -367,6 +367,61 @@ describe Obsctl::Server::Server do
     File.delete(path) if path && File.exists?(path)
   end
 
+  it "applies a reloaded config to the state the OBS client builds" do
+    # The daemon shares one config object between the executor, the supervisor
+    # and the live OBS client. A reload that only rebound the executor's own
+    # reference left the client filling in aliases, groups and hidden flags
+    # from the file as it was at startup, so half the daemon acted on the new
+    # config and half on the old one.
+    obs = Obsctl::SpecSupport::FakeObsServer.new.start
+    path = temp_socket_path
+    config_path = File.join(Dir.tempdir, "obsctl-reload-spec-#{Random.rand(1_000_000)}.yml")
+    config = obs.config
+    File.write(config_path, config.to_yaml)
+    server = Obsctl::Server::Server.new(config, config_path, socket_path: path)
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    until File.exists?(path)
+      Fiber.yield
+    end
+
+    client = Obsctl::IPC::UnixClient.new(path)
+    wait_for_obs_connected(client)
+
+    scene_name = wait_for_obs_snapshot(client) { |status| !status["scenes"].as_a.empty? }["scenes"][0]["name"].as_s
+
+    # Give that scene an alias on disk, then ask the daemon to reload.
+    reloaded = config.dup
+    reloaded.scenes = [Obsctl::Config::SceneConfig.new(name: scene_name, alias: "reloaded-alias")]
+    File.write(config_path, reloaded.to_yaml)
+
+    response = client.request(
+      Obsctl::IPC::Request.new(
+        "req-reload",
+        Obsctl::IPC::Request::TYPE_COMMAND,
+        Obsctl::IPC::CommandPayload.new("reload_config")
+      )
+    )
+    response.ok.should be_true
+
+    status = wait_for_obs_snapshot(client) do |payload|
+      payload["scenes"].as_a.any? { |scene| scene["alias"]?.try(&.as_s?) == "reloaded-alias" }
+    end
+    status["scenes"].as_a.find { |scene| scene["name"].as_s == scene_name }
+      .not_nil!["alias"].as_s.should eq("reloaded-alias")
+  ensure
+    server.try(&.stop)
+    obs.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+    File.delete(config_path) if config_path && File.exists?(config_path)
+  end
+
   it "reflects a stream started outside obsctl in daemon state" do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     path = temp_socket_path

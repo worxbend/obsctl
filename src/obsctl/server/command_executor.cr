@@ -159,12 +159,14 @@ module Obsctl
           @supervisor.with_client do |client|
             merged = Config::ConfigDump.merge(@config, client.scene_names, client.input_names)
             Config::ConfigWriter.new.write(@config_path, merged, backup: true)
-            @config = merged
+            # In place, so the supervisor and the live OBS client — which
+            # hold the same object — see the merged scenes and inputs too.
+            @config.replace_with(merged)
           end
           refresh_snapshot
           object({"message" => "config dumped: #{@config_path}"})
         when "reload_config"
-          @config = Config::ConfigLoader.new.load(@config_path)
+          @config.replace_with(Config::ConfigLoader.new.load(@config_path))
           refresh_snapshot
           object({"message" => "config reloaded: #{@config_path}"})
         end
