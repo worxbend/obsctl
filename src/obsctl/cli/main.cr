@@ -7,6 +7,7 @@ require "../config/config_writer"
 require "../config/config_schema"
 require "../domain/command_parser"
 require "../domain/command_registry"
+require "../domain/local_commands"
 require "../domain/errors"
 require "../ipc/socket_path"
 require "../runtime/logger"
@@ -260,7 +261,8 @@ module Obsctl
       # Completion must never make the shell feel stuck.
       COMPLETION_TIMEOUT = 2.seconds
 
-      CONFIG_ACTIONS = ["explain", "diff", "migrate"]
+      # The registry declares these once; `run_config` routes them.
+      CONFIG_ACTIONS = Domain::LocalCommands.subcommands_for("config")
 
       private def self.run_config(args : Array(String), options : Options, stdout : IO, json_output : Bool) : Int32
         action = args[0]?
@@ -397,27 +399,9 @@ module Obsctl
         {filtered, json}
       end
 
-      # Commands the CLI handles itself rather than proxying to the daemon.
-      LOCAL_JSON_COMMANDS = ["validate-config", "doctor", "config", "watch"]
-
-      # Subcommands that never reach the command registry because they are
-      # served locally, listed here so `--help` covers the whole surface.
-      LOCAL_COMMANDS = [
-        {"init", "Write a default config file"},
-        {"doctor", "Run setup diagnostics"},
-        {"config explain|diff|migrate", "Inspect or migrate the config file"},
-        {"watch [--topics LIST]", "Stream daemon events as newline-delimited JSON"},
-        {"completions bash|zsh|fish", "Print a shell completion script"},
-        {"server [--headless]", "Run the local daemon in the foreground"},
-        {"service install|start|stop|restart|status|uninstall", "Manage the systemd --user unit"},
-        {"tui", "Open the dashboard (the default with no command)"},
-        {"version", "Show the obsctl version"},
-      ]
-
       private def self.help_text(options : Options) : String
         daemon = Domain::CommandRegistry.help_lines(Domain::CommandSurface::Cli)
-        width = LOCAL_COMMANDS.max_of { |name, _| name.size }
-        local = LOCAL_COMMANDS.map { |name, summary| "#{name.ljust(width)}  #{summary}" }
+        local = Domain::LocalCommands.help_lines
 
         String.build do |io|
           io << options.help_text << "\n\n"
@@ -432,7 +416,7 @@ module Obsctl
       private def self.json_command?(command : String?) : Bool
         return false unless command
 
-        LOCAL_JSON_COMMANDS.includes?(command) || Domain::CommandRegistry.json?(command)
+        Domain::LocalCommands.json?(command) || Domain::CommandRegistry.json?(command)
       end
 
       private def self.json_unsupported_message(command : String?) : String

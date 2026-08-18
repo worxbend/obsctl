@@ -1,4 +1,5 @@
 require "../domain/command_registry"
+require "../domain/local_commands"
 require "../domain/errors"
 
 module Obsctl
@@ -15,13 +16,13 @@ module Obsctl
 
       SHELLS = ["bash", "zsh", "fish"]
 
-      # Subcommands the CLI serves locally, with their own fixed arguments.
-      LOCAL_SUBCOMMANDS = {
-        "config"  => ["explain", "diff", "migrate"],
-        "service" => ["install", "uninstall", "start", "stop", "restart", "status"],
-      }
+      # Both derived from `Domain::LocalCommands`, which declares the local
+      # command surface once. `completions` is itself one of them, so a shell
+      # script that offered a different set than `--help` documents would be
+      # this file disagreeing with its own registry.
+      LOCAL_SUBCOMMANDS = Domain::LocalCommands.subcommands
 
-      LOCAL_COMMANDS = ["init", "doctor", "config", "watch", "completions", "server", "service", "tui", "version", "help"]
+      LOCAL_COMMANDS = Domain::LocalCommands.completion_names
 
       GLOBAL_FLAGS = ["--config", "--log-level", "--color", "--timeout", "--force", "--json", "--quiet", "--version", "--help"]
 
