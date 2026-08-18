@@ -34,9 +34,42 @@ module Obsctl
       end
     end
 
+    # Why an OBS connection ended.
+    #
+    # This exists so the daemon can label a disconnect in its logs without
+    # reading its own error messages back. The log codes operators build alerts
+    # on used to be derived by matching regular expressions against the
+    # exception's message text, which meant rewording a diagnostic — for
+    # clarity, say — silently renamed the log code. The kind is set once, where
+    # the cause is actually known, and the message stays free to change.
+    enum DisconnectKind
+      # No more specific cause; the socket ended or never came up.
+      Disconnected
+      # The peer sent a frame this client could not parse at all.
+      MalformedFrame
+      # A response frame arrived but could not be read as a response.
+      ResponseParserError
+      # obsctl asked for the close, so this is not a fault.
+      ClosedCleanly
+
+      # The `code` field used in daemon log entries for this cause.
+      def log_code : String
+        case self
+        in Disconnected        then "obs_disconnected"
+        in MalformedFrame      then "obs_malformed_frame"
+        in ResponseParserError then "obs_response_parser_error"
+        in ClosedCleanly       then "obs_closed_cleanly"
+        end
+      end
+    end
+
     # Raised when a local or OBS connection cannot be established or maintained.
     class ConnectionFailed < ObsctlError
-      def initialize(message : String)
+      # What ended the connection. Defaults to the unspecific case so callers
+      # that have nothing more to say do not have to invent something.
+      getter kind : DisconnectKind
+
+      def initialize(message : String, @kind : DisconnectKind = DisconnectKind::Disconnected)
         super(message, ExitCode::Connection)
       end
     end

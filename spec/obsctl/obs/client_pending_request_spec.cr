@@ -2,9 +2,19 @@ require "../../spec_helper"
 require "../../support/fake_obs_server"
 require "../../../src/obsctl/obs/client"
 
-class Obsctl::OBS::Client
+# The pending-request table belongs to `Transport`; `Client` reaches it through
+# the transport it owns. The leak this spec guards against is the same either
+# way — a timed-out request must not leave an entry behind for a later request
+# to collide with.
+class Obsctl::OBS::Transport
   def pending_request_count_for_spec : Int32
     @pending_lock.synchronize { @pending.size }
+  end
+end
+
+class Obsctl::OBS::Client
+  def pending_request_count_for_spec : Int32
+    @transport.pending_request_count_for_spec
   end
 end
 
