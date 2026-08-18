@@ -1,5 +1,6 @@
 require "json"
 require "../ipc/event"
+require "../ipc/state_snapshot_codec"
 require "./model"
 
 module Obsctl
@@ -41,65 +42,7 @@ module Obsctl
       end
 
       private def parse_snapshot(data : JSON::Any) : OBS::State::ObsSnapshot?
-        scenes = data["scenes"].as_a.map do |scene|
-          OBS::State::SceneState.new(
-            name: scene["name"].as_s,
-            alias: scene["alias"]?.try(&.as_s?),
-            shortcut: scene["shortcut"]?.try(&.as_s?),
-            group: scene["group"]?.try(&.as_s?),
-            active: scene["active"]?.try(&.as_bool?) || false,
-            hidden: scene["hidden"]?.try(&.as_bool?) || false
-          )
-        end
-        inputs = data["audio_inputs"].as_a.map do |input|
-          OBS::State::AudioState.new(
-            name: input["name"].as_s,
-            alias: input["alias"]?.try(&.as_s?),
-            shortcut: input["shortcut"]?.try(&.as_s?),
-            muted: input["muted"]?.try(&.as_bool?),
-            volume_mul: number(input["volume_mul"]?),
-            volume_db: number(input["volume_db"]?),
-            volume_percent: input["volume_percent"]?.try(&.as_i?).try(&.to_i32)
-          )
-        end
-        output = data["output"]?
-        stats = data["stats"]?.try do |value|
-          value.raw.nil? ? nil : OBS::State::ObsStats.new(
-            cpu_usage_percent: number(value["cpu_usage_percent"]?) || 0.0,
-            memory_usage_mb: number(value["memory_usage_mb"]?) || 0.0,
-            available_disk_space_mb: number(value["available_disk_space_mb"]?) || 0.0,
-            active_fps: number(value["active_fps"]?) || 0.0,
-            average_frame_render_time_ms: number(value["average_frame_render_time_ms"]?) || 0.0,
-            render_skipped_frames: value["render_skipped_frames"]?.try(&.as_i64?) || 0_i64,
-            render_total_frames: value["render_total_frames"]?.try(&.as_i64?) || 0_i64,
-            output_skipped_frames: value["output_skipped_frames"]?.try(&.as_i64?) || 0_i64,
-            output_total_frames: value["output_total_frames"]?.try(&.as_i64?) || 0_i64
-          )
-        end
-        OBS::State::ObsSnapshot.new(
-          connected: data["connected"].as_bool,
-          obs_studio_version: data["obs_studio_version"]?.try(&.as_s?),
-          obs_websocket_version: data["obs_websocket_version"]?.try(&.as_s?),
-          current_scene: data["current_scene"]?.try(&.as_s?),
-          scenes: scenes,
-          audio_inputs: inputs,
-          output: OBS::State::OutputState.new(
-            streaming: output.try(&.["streaming"]?).try(&.as_bool?),
-            recording: output.try(&.["recording"]?).try(&.as_bool?)
-          ),
-          profiles: string_array(data["profiles"]?),
-          current_profile: data["current_profile"]?.try(&.as_s?),
-          scene_collections: string_array(data["scene_collections"]?),
-          current_scene_collection: data["current_scene_collection"]?.try(&.as_s?),
-          stats: stats,
-          stream_bitrate_kbps: number(data["stream_bitrate_kbps"]?),
-          stream_duration_ms: data["stream_duration_ms"]?.try(&.as_i64?),
-          record_duration_ms: data["record_duration_ms"]?.try(&.as_i64?),
-          last_error: data["last_error"]?.try(&.as_s?),
-          updated_at: data["updated_at"]?.try(&.as_s?).try { |value| Time.parse_rfc3339(value) } || Time.utc
-        )
-      rescue TypeCastError | KeyError | Time::Format::Error
-        nil
+        IPC::StateSnapshotCodec.decode(data)
       end
 
       private def parse_log(data : JSON::Any) : LogEntry?

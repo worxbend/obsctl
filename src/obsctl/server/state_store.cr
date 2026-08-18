@@ -2,6 +2,7 @@ require "json"
 require "../obs/state/obs_snapshot"
 require "../obs/state/scene_state"
 require "../obs/state/audio_state"
+require "../ipc/state_snapshot_codec"
 
 module Obsctl
   module Server
@@ -45,107 +46,44 @@ module Obsctl
 
       # Updates the current program scene without a full snapshot refetch.
       def update_current_scene(scene_name : String) : Nil
-        next_snapshot = @lock.synchronize do
-          current = @snapshot
-          return unless current.connected
-
-          scenes = current.scenes.map do |scene|
-            OBS::State::SceneState.new(
-              name: scene.name, alias: scene.alias, shortcut: scene.shortcut,
-              group: scene.group, active: scene.name == scene_name, hidden: scene.hidden
-            )
-          end
-          next_snap = current.copy_with(current_scene: scene_name, scenes: scenes, updated_at: Time.utc)
-          @snapshot = next_snap
-          next_snap
+        mutate_connected do |current|
+          scenes = current.scenes.map { |scene| scene.copy_with(active: scene.name == scene_name) }
+          current.copy_with(current_scene: scene_name, scenes: scenes)
         end
-        publish_snapshot(next_snapshot) if next_snapshot
       end
 
       # Updates one audio input's mute state without a full snapshot refetch.
       def update_input_mute(input_name : String, muted : Bool) : Nil
-        next_snapshot = @lock.synchronize do
-          current = @snapshot
-          return unless current.connected
-
-          inputs = current.audio_inputs.map do |inp|
-            next inp unless inp.name == input_name
-            OBS::State::AudioState.new(
-              name: inp.name, alias: inp.alias, shortcut: inp.shortcut,
-              muted: muted, volume_mul: inp.volume_mul,
-              volume_db: inp.volume_db, volume_percent: inp.volume_percent
-            )
-          end
-          next_snap = current.copy_with(audio_inputs: inputs, updated_at: Time.utc)
-          @snapshot = next_snap
-          next_snap
+        mutate_connected do |current|
+          current.copy_with(audio_inputs: map_input(current, input_name, &.copy_with(muted: muted)))
         end
-        publish_snapshot(next_snapshot) if next_snapshot
       end
 
       # Updates one audio input's volume without a full snapshot refetch.
       def update_input_volume(input_name : String, volume_mul : Float64?, volume_db : Float64?) : Nil
-        next_snapshot = @lock.synchronize do
-          current = @snapshot
-          return unless current.connected
-
-          percent = volume_mul.try { |v| (v * 100).round.to_i32.clamp(0, 100) }
-          inputs = current.audio_inputs.map do |inp|
-            next inp unless inp.name == input_name
-            OBS::State::AudioState.new(
-              name: inp.name, alias: inp.alias, shortcut: inp.shortcut,
-              muted: inp.muted, volume_mul: volume_mul,
-              volume_db: volume_db, volume_percent: percent
-            )
-          end
-          next_snap = current.copy_with(audio_inputs: inputs, updated_at: Time.utc)
-          @snapshot = next_snap
-          next_snap
+        percent = volume_mul.try { |v| (v * 100).round.to_i32.clamp(0, 100) }
+        mutate_connected do |current|
+          inputs = map_input(current, input_name, &.copy_with(
+            volume_mul: volume_mul, volume_db: volume_db, volume_percent: percent
+          ))
+          current.copy_with(audio_inputs: inputs)
         end
-        publish_snapshot(next_snapshot) if next_snapshot
       end
 
       # Replaces the scene list in the cached snapshot and publishes.
       def update_scenes(current_scene : String?, scenes : Array(OBS::State::SceneState)) : Nil
-        next_snapshot = @lock.synchronize do
-          current = @snapshot
-          return unless current.connected
-
-          next_snap = current.copy_with(current_scene: current_scene, scenes: scenes, updated_at: Time.utc)
-          @snapshot = next_snap
-          next_snap
-        end
-        publish_snapshot(next_snapshot) if next_snapshot
+        mutate_connected(&.copy_with(current_scene: current_scene, scenes: scenes))
       end
 
       # Replaces the audio input list in the cached snapshot and publishes.
       def update_audio_inputs(audio_inputs : Array(OBS::State::AudioState)) : Nil
-        next_snapshot = @lock.synchronize do
-          current = @snapshot
-          return unless current.connected
-
-          next_snap = current.copy_with(audio_inputs: audio_inputs, updated_at: Time.utc)
-          @snapshot = next_snap
-          next_snap
-        end
-        publish_snapshot(next_snapshot) if next_snapshot
+        mutate_connected(&.copy_with(audio_inputs: audio_inputs))
       end
 
       def update_output(streaming : Bool? = nil, recording : Bool? = nil) : Nil
-        next_snapshot = @lock.synchronize do
-          current = @snapshot
-          return unless current.connected
-          next_snap = current.copy_with(
-            output: OBS::State::OutputState.new(
-              streaming: streaming.nil? ? current.output.streaming : streaming,
-              recording: recording.nil? ? current.output.recording : recording
-            ),
-            updated_at: Time.utc
-          )
-          @snapshot = next_snap
-          next_snap
+        mutate_connected do |current|
+          current.copy_with(output: merged_output(current, streaming, recording))
         end
-        publish_snapshot(next_snapshot) if next_snapshot
       end
 
       # Updates periodically polled performance and output telemetry while
@@ -163,36 +101,72 @@ module Obsctl
         streaming : Bool? = nil,
         recording : Bool? = nil,
       ) : Nil
-        next_snapshot = @lock.synchronize do
-          current = @snapshot
-          return unless current.connected
-          next_snap = current.copy_with(
+        mutate_connected do |current|
+          current.copy_with(
             stats: stats,
-            output: OBS::State::OutputState.new(
-              streaming: streaming.nil? ? current.output.streaming : streaming,
-              recording: recording.nil? ? current.output.recording : recording
-            ),
+            output: merged_output(current, streaming, recording),
             stream_bitrate_kbps: stream_bitrate_kbps,
             stream_duration_ms: stream_duration_ms,
-            record_duration_ms: record_duration_ms,
-            updated_at: Time.utc
+            record_duration_ms: record_duration_ms
           )
-          @snapshot = next_snap
-          next_snap
+        end
+      end
+
+      # Applies an incremental edit to the cached snapshot and publishes it.
+      #
+      # The block receives the current snapshot under the lock and returns the
+      # replacement; `updated_at` is stamped here so no caller has to remember
+      # it. A snapshot taken while OBS is disconnected is not authoritative —
+      # the lists in it are whatever OBS last reported — so an edit against a
+      # disconnected store is dropped rather than applied to stale data.
+      #
+      # The publish deliberately happens after the lock is released. Subscriber
+      # fanout takes `ClientRegistry`'s lock, and that registry may in turn read
+      # this store while holding it (see `ClientRegistry#add`, which sends the
+      # initial snapshot during registration). Publishing from inside
+      # `@lock.synchronize` would let those two locks be taken in both orders,
+      # which is a deadlock. Keeping the publish out here is what makes the
+      # order store-then-registry, always — and having exactly one place that
+      # does it is what keeps it that way.
+      private def mutate_connected(&) : Nil
+        next_snapshot = @lock.synchronize do
+          current = @snapshot
+          next unless current.connected
+
+          updated = (yield current).copy_with(updated_at: Time.utc)
+          @snapshot = updated
+          updated
         end
         publish_snapshot(next_snapshot) if next_snapshot
+      end
+
+      # Replaces one named audio input, leaving the rest of the list untouched.
+      private def map_input(
+        snapshot : OBS::State::ObsSnapshot,
+        input_name : String,
+        &block : OBS::State::AudioState -> OBS::State::AudioState
+      ) : Array(OBS::State::AudioState)
+        snapshot.audio_inputs.map do |input|
+          input.name == input_name ? block.call(input) : input
+        end
+      end
+
+      # Output state with nil meaning "leave whatever is cached alone".
+      private def merged_output(
+        snapshot : OBS::State::ObsSnapshot,
+        streaming : Bool?,
+        recording : Bool?,
+      ) : OBS::State::OutputState
+        OBS::State::OutputState.new(
+          streaming: streaming.nil? ? snapshot.output.streaming : streaming,
+          recording: recording.nil? ? snapshot.output.recording : recording
+        )
       end
 
       # Records that the supervisor is attempting to establish an OBS session.
       def mark_reconnect_attempt(at : Time = Time.utc) : Nil
         @lock.synchronize do
-          @telemetry = ServerTelemetry.new(
-            reconnecting: true,
-            last_connected_at: @telemetry.last_connected_at,
-            last_disconnected_at: @telemetry.last_disconnected_at,
-            last_reconnect_attempt_at: at,
-            last_connection_failed_at: @telemetry.last_connection_failed_at
-          )
+          @telemetry = @telemetry.copy_with(reconnecting: true, last_reconnect_attempt_at: at)
         end
       end
 
@@ -217,13 +191,7 @@ module Obsctl
       # Records a successful OBS connection and publishes its fresh snapshot.
       def mark_connected(snapshot : OBS::State::ObsSnapshot, at : Time = Time.utc) : Nil
         @lock.synchronize do
-          @telemetry = ServerTelemetry.new(
-            reconnecting: false,
-            last_connected_at: at,
-            last_disconnected_at: @telemetry.last_disconnected_at,
-            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at,
-            last_connection_failed_at: @telemetry.last_connection_failed_at
-          )
+          @telemetry = @telemetry.copy_with(reconnecting: false, last_connected_at: at)
           @snapshot = snapshot
         end
         publish_snapshot(snapshot)
@@ -254,11 +222,9 @@ module Obsctl
           current = @snapshot
           updated = current.copy_with(connected: false, last_error: error, updated_at: at)
           was_connected = current.connected
-          @telemetry = ServerTelemetry.new(
+          @telemetry = @telemetry.copy_with(
             reconnecting: reconnecting,
-            last_connected_at: @telemetry.last_connected_at,
             last_disconnected_at: was_connected ? at : @telemetry.last_disconnected_at,
-            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at,
             last_connection_failed_at: was_connected || !connection_failed ? @telemetry.last_connection_failed_at : at
           )
           @snapshot = updated
@@ -273,63 +239,11 @@ module Obsctl
       end
 
       # Converts a snapshot into the stable IPC state-event JSON shape.
+      #
+      # The shape itself belongs to `IPC::StateSnapshotCodec`, which owns both
+      # this direction and the dashboard's decode of it.
       def self.snapshot_to_json(snapshot : OBS::State::ObsSnapshot) : JSON::Any
-        JSON.parse({
-          connected:             snapshot.connected,
-          obs_studio_version:    snapshot.obs_studio_version,
-          obs_websocket_version: snapshot.obs_websocket_version,
-          current_scene:         snapshot.current_scene,
-          scenes:                snapshot.scenes.map do |scene|
-            {
-              name:     scene.name,
-              alias:    scene.alias,
-              shortcut: scene.shortcut,
-              group:    scene.group,
-              active:   scene.active,
-              hidden:   scene.hidden,
-            }
-          end,
-          audio_inputs: snapshot.audio_inputs.map do |input|
-            {
-              name:           input.name,
-              alias:          input.alias,
-              shortcut:       input.shortcut,
-              muted:          input.muted,
-              volume_mul:     input.volume_mul,
-              volume_db:      input.volume_db,
-              volume_percent: input.volume_percent,
-            }
-          end,
-          output: {
-            streaming: snapshot.output.streaming,
-            recording: snapshot.output.recording,
-          },
-          profiles:                 snapshot.profiles,
-          current_profile:          snapshot.current_profile,
-          scene_collections:        snapshot.scene_collections,
-          current_scene_collection: snapshot.current_scene_collection,
-          stats:                    stats_json(snapshot.stats),
-          stream_bitrate_kbps:      snapshot.stream_bitrate_kbps,
-          stream_duration_ms:       snapshot.stream_duration_ms,
-          record_duration_ms:       snapshot.record_duration_ms,
-          last_error:               snapshot.last_error,
-          updated_at:               snapshot.updated_at.to_rfc3339,
-        }.to_json)
-      end
-
-      private def self.stats_json(stats : OBS::State::ObsStats?)
-        return unless stats
-        {
-          cpu_usage_percent:            stats.cpu_usage_percent,
-          memory_usage_mb:              stats.memory_usage_mb,
-          available_disk_space_mb:      stats.available_disk_space_mb,
-          active_fps:                   stats.active_fps,
-          average_frame_render_time_ms: stats.average_frame_render_time_ms,
-          render_skipped_frames:        stats.render_skipped_frames,
-          render_total_frames:          stats.render_total_frames,
-          output_skipped_frames:        stats.output_skipped_frames,
-          output_total_frames:          stats.output_total_frames,
-        }
+        IPC::StateSnapshotCodec.encode(snapshot)
       end
 
       private def snapshot_to_json(snapshot : OBS::State::ObsSnapshot) : JSON::Any
@@ -343,21 +257,9 @@ module Obsctl
         if snapshot.connected
           return @telemetry if current.connected && !@telemetry.last_connected_at.nil? && !@telemetry.reconnecting
 
-          ServerTelemetry.new(
-            reconnecting: false,
-            last_connected_at: Time.utc,
-            last_disconnected_at: @telemetry.last_disconnected_at,
-            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at,
-            last_connection_failed_at: @telemetry.last_connection_failed_at
-          )
+          @telemetry.copy_with(reconnecting: false, last_connected_at: Time.utc)
         elsif current.connected && !snapshot.connected
-          ServerTelemetry.new(
-            reconnecting: @telemetry.reconnecting,
-            last_connected_at: @telemetry.last_connected_at,
-            last_disconnected_at: Time.utc,
-            last_reconnect_attempt_at: @telemetry.last_reconnect_attempt_at,
-            last_connection_failed_at: @telemetry.last_connection_failed_at
-          )
+          @telemetry.copy_with(last_disconnected_at: Time.utc)
         else
           @telemetry
         end
