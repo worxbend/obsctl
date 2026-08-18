@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
-## [Unreleased]
+## [0.8.0] - 2026-08-18
 
 ### Added
 
@@ -78,6 +78,34 @@ development; the `Unreleased` section below becomes that version at tag time.
   of its own, so the generator only exports the theme palettes the page
   restyles itself from — 2 KB of colours rather than 312 KB of pre-rendered
   HTML. The Pages workflow still fails if the committed copy is stale.
+
+- Internal restructuring, with no change to the command line, the dashboard,
+  the IPC protocol or the config format. The obs-websocket connection (socket,
+  handshake, frame routing, request correlation) is now `OBS::Transport`,
+  separate from the `OBS::Client` façade of OBS operations that sits on it.
+  OBS events are translated into typed values before the daemon's supervisor
+  sees them, so the vendor's wire format stops leaking into supervision logic,
+  and disconnect log codes are derived from the error's type rather than by
+  matching regular expressions against its message — reword a diagnostic and
+  the `code` operators alert on no longer changes underneath them. IPC command
+  names, the local (non-daemon) command surface, and both halves of the `state`
+  topic payload are each now declared in exactly one place instead of being
+  repeated across four or five files that nothing kept in step; specs check
+  each of those single sources against the code that consumes it, and a new
+  spec pins the round trip from a daemon-side exception to the process exit
+  code the shell sees.
+
+### Fixed
+
+- The daemon's Unix socket is owner-only from the moment it exists. It used to
+  be created at whatever the process umask allowed — group- and world-readable
+  on a typical desktop — and corrected to mode `600` immediately afterwards,
+  which leaves a brief window at the wrong permissions. Nothing could reach
+  through that window in practice, because the socket's parent directory is
+  mode `700` and a socket cannot be opened through a directory you cannot
+  enter, but that left one guarantee resting on a defence that was not about
+  the socket itself. `bind` now narrows the umask around socket creation, and
+  keeps the `chmod` as a fallback for any platform that ignores it.
 
 ### Removed
 
@@ -431,7 +459,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/worxbend/obsctl/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/worxbend/obsctl/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/worxbend/obsctl/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/worxbend/obsctl/compare/v0.4.0...v0.5.0
