@@ -1,4 +1,5 @@
 require "../domain/command_parser"
+require "../ipc/command_name"
 require "./completion"
 require "./input"
 require "./layout"
@@ -113,7 +114,7 @@ module Obsctl
         return ActionOutcome.new unless scene
 
         @model.scene_cursor = index
-        target_command("set_scene", scene.name)
+        target_command(IPC::CommandName::SET_SCENE, scene.name)
       end
 
       private def palette_action(action : Action) : ActionOutcome?
@@ -293,16 +294,16 @@ module Obsctl
       private def command_action(action : Action) : ActionOutcome?
         case action.kind
         when .quit?           then ActionOutcome.new(quit: true)
-        when .reload_config?  then command(IPC::CommandPayload.new("reload_config"))
-        when .dump_config?    then command(IPC::CommandPayload.new("dump_config"))
+        when .reload_config?  then command(IPC::CommandPayload.new(IPC::CommandName::RELOAD_CONFIG))
+        when .dump_config?    then command(IPC::CommandPayload.new(IPC::CommandName::DUMP_CONFIG))
         when .retry_connect?  then ActionOutcome.new(retry_subscription: true, message: "Reconnected to daemon.")
-        when .activate_scene? then target_command("set_scene", @model.focused_scene.try(&.name))
+        when .activate_scene? then target_command(IPC::CommandName::SET_SCENE, @model.focused_scene.try(&.name))
         when .activate_profile?
-          target_command("set_profile", @model.profiles[@model.profile_cursor]?)
+          target_command(IPC::CommandName::SET_PROFILE, @model.profiles[@model.profile_cursor]?)
         when .activate_collection?
-          target_command("set_scene_collection", @model.scene_collections[@model.collection_cursor]?)
+          target_command(IPC::CommandName::SET_SCENE_COLLECTION, @model.scene_collections[@model.collection_cursor]?)
         when .toggle_mute?
-          target_command("toggle_mute", @model.focused_audio.try(&.name))
+          target_command(IPC::CommandName::TOGGLE_MUTE, @model.focused_audio.try(&.name))
         end
       end
 
@@ -346,8 +347,8 @@ module Obsctl
       # `/status` in the palette should refresh the panels rather than print a
       # report, and `/connect` is a request to re-establish the OBS link.
       TUI_PAYLOAD_OVERRIDES = {
-        Domain::StatusCommand  => "get_snapshot",
-        Domain::ConnectCommand => "reconnect_obs",
+        Domain::StatusCommand  => IPC::CommandName::GET_SNAPSHOT,
+        Domain::ConnectCommand => IPC::CommandName::RECONNECT_OBS,
       }
 
       private def payload_for(command : Domain::Command) : IPC::CommandPayload
@@ -396,7 +397,7 @@ module Obsctl
           sleep @volume_debounce
           next unless @volume_versions[input_name] == version
 
-          response = @sender.call(IPC::CommandPayload.new("set_volume", input_name, percent))
+          response = @sender.call(IPC::CommandPayload.new(IPC::CommandName::SET_VOLUME, input_name, percent))
           unless response.ok
             error = response.error
             @model.set_last_result(error ? "error [#{error.code}]: #{error.message}" : "error: invalid server response")

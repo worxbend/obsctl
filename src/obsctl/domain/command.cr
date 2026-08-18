@@ -1,3 +1,5 @@
+require "../ipc/command_name"
+
 module Obsctl
   module Domain
     # Base type for parsed CLI commands.
@@ -34,56 +36,56 @@ module Obsctl
     # Requests a server-side config dump from OBS state.
     struct DumpConfigCommand < Command
       def ipc_name : String?
-        "dump_config"
+        IPC::CommandName::DUMP_CONFIG
       end
     end
 
     # Requests the server to reload config from disk.
     struct ReloadConfigCommand < Command
       def ipc_name : String?
-        "reload_config"
+        IPC::CommandName::RELOAD_CONFIG
       end
     end
 
     # Requests the combined server and OBS status.
     struct StatusCommand < Command
       def ipc_name : String?
-        "status"
+        IPC::CommandName::STATUS
       end
     end
 
     # Requests local daemon status only.
     struct ServerStatusCommand < Command
       def ipc_name : String?
-        "get_server_status"
+        IPC::CommandName::GET_SERVER_STATUS
       end
     end
 
     # Requests OBS connection/status details through the server.
     struct ObsStatusCommand < Command
       def ipc_name : String?
-        "get_obs_status"
+        IPC::CommandName::GET_OBS_STATUS
       end
     end
 
     # Requests server-side config validation.
     struct ValidateConfigCommand < Command
       def ipc_name : String?
-        "validate_config"
+        IPC::CommandName::VALIDATE_CONFIG
       end
     end
 
     # Requests the server-owned OBS supervisor to reconnect.
     struct ReconnectCommand < Command
       def ipc_name : String?
-        "reconnect_obs"
+        IPC::CommandName::RECONNECT_OBS
       end
     end
 
     # Requests server shutdown; execution remains config-guarded server-side.
     struct ShutdownServerCommand < Command
       def ipc_name : String?
-        "shutdown_server"
+        IPC::CommandName::SHUTDOWN_SERVER
       end
     end
 
@@ -103,7 +105,7 @@ module Obsctl
       end
 
       def ipc_name : String?
-        "set_scene"
+        IPC::CommandName::SET_SCENE
       end
     end
 
@@ -114,7 +116,7 @@ module Obsctl
       end
 
       def ipc_name : String?
-        "set_profile"
+        IPC::CommandName::SET_PROFILE
       end
     end
 
@@ -125,7 +127,7 @@ module Obsctl
       end
 
       def ipc_name : String?
-        "set_scene_collection"
+        IPC::CommandName::SET_SCENE_COLLECTION
       end
     end
 
@@ -137,7 +139,7 @@ module Obsctl
       end
 
       def ipc_name : String?
-        "mute"
+        IPC::CommandName::MUTE
       end
     end
 
@@ -149,7 +151,7 @@ module Obsctl
       end
 
       def ipc_name : String?
-        "unmute"
+        IPC::CommandName::UNMUTE
       end
     end
 
@@ -161,7 +163,7 @@ module Obsctl
       end
 
       def ipc_name : String?
-        "toggle_mute"
+        IPC::CommandName::TOGGLE_MUTE
       end
     end
 
@@ -173,19 +175,19 @@ module Obsctl
       end
 
       def ipc_name : String?
-        "set_volume"
+        IPC::CommandName::SET_VOLUME
       end
     end
 
     struct ToggleStreamCommand < Command
       def ipc_name : String?
-        "toggle_stream"
+        IPC::CommandName::TOGGLE_STREAM
       end
     end
 
     struct ToggleRecordCommand < Command
       def ipc_name : String?
-        "toggle_record"
+        IPC::CommandName::TOGGLE_RECORD
       end
     end
 
@@ -194,33 +196,33 @@ module Obsctl
     # failing.
     struct StartRecordCommand < Command
       def ipc_name : String?
-        "start_record"
+        IPC::CommandName::START_RECORD
       end
     end
 
     # Stops the OBS recording output and reports the written file path.
     struct StopRecordCommand < Command
       def ipc_name : String?
-        "stop_record"
+        IPC::CommandName::STOP_RECORD
       end
     end
 
     struct PauseRecordCommand < Command
       def ipc_name : String?
-        "pause_record"
+        IPC::CommandName::PAUSE_RECORD
       end
     end
 
     struct ResumeRecordCommand < Command
       def ipc_name : String?
-        "resume_record"
+        IPC::CommandName::RESUME_RECORD
       end
     end
 
     # Reports record active/paused state, timecode, duration, and size.
     struct RecordStatusCommand < Command
       def ipc_name : String?
-        "record_status"
+        IPC::CommandName::RECORD_STATUS
       end
     end
   end

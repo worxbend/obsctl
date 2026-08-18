@@ -1,4 +1,5 @@
 require "../config/config"
+require "../ipc/command_name"
 require "../ipc/protocol"
 require "../runtime/logger"
 require "./best_effort_log_broadcast"
@@ -121,7 +122,7 @@ module Obsctl
           elsif request.command?
             response = @executor.execute(request)
             session.write_message(response)
-            schedule_shutdown if response.ok && request.command.try(&.name) == "shutdown_server"
+            schedule_shutdown if response.ok && request.command.try(&.name) == IPC::CommandName::SHUTDOWN_SERVER
           else
             session.write_message(IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, "unsupported request type")))
           end
@@ -134,9 +135,19 @@ module Obsctl
         session.close
       end
 
+      # How long to let the `shutdown_server` response reach the client before
+      # tearing the socket down.
+      #
+      # The client is still waiting on a reply when the handler decides to stop.
+      # Stopping inline would close the listener out from under the write and
+      # the client would see a closed connection instead of the acknowledgement
+      # it asked for. Yielding to the writing fiber first is what gets the
+      # response out; the delay is the margin, not the mechanism.
+      SHUTDOWN_RESPONSE_GRACE = 10.milliseconds
+
       private def schedule_shutdown : Nil
         spawn(name: "obsctl-ipc-shutdown") do
-          sleep 10.milliseconds
+          sleep SHUTDOWN_RESPONSE_GRACE
           stop
         end
       end
