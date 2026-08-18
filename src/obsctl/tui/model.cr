@@ -97,6 +97,12 @@ module Obsctl
     class Model
       MAX_LOG_ENTRIES = 200
 
+      # How many samples each sparkline keeps. The stats widgets plot these at
+      # one column per sample, so this is also the widest a sparkline can be
+      # before it starts repeating; 32 covers the panel at any usable terminal
+      # width without holding history nothing draws.
+      METRIC_HISTORY_SAMPLES = 32
+
       property snapshot : OBS::State::ObsSnapshot?
       property logs : Array(LogEntry)
       property command_palette : CommandPaletteState
@@ -240,17 +246,31 @@ module Obsctl
         @snapshot.try(&.record_duration_ms)
       end
 
+      # Appends this frame's readings to the sparkline histories.
+      #
+      # Each series is sampled only when the snapshot actually carries it: a
+      # snapshot with no stats must not push a zero, because a zero is a real
+      # reading that would draw as a trough in the graph rather than as the
+      # absence of data it really is.
       def record_metric_sample
         if current_stats = stats
-          @cpu_history << current_stats.cpu_usage_percent
-          @fps_history << current_stats.active_fps
+          append_metric(@cpu_history, current_stats.cpu_usage_percent)
+          append_metric(@fps_history, current_stats.active_fps)
         end
         if bitrate = stream_bitrate_kbps
-          @bitrate_history << bitrate
+          append_metric(@bitrate_history, bitrate)
         end
-        [@cpu_history, @bitrate_history, @fps_history].each do |history|
-          history.shift(history.size - 32) if history.size > 32
-        end
+      end
+
+      # Adds one reading and drops whatever has scrolled off the left edge.
+      #
+      # The trim lives here rather than in `record_metric_sample` so the bound
+      # holds for every series by construction; it used to be a separate pass
+      # over all three arrays afterwards, which is a rule that only holds as
+      # long as someone remembers to add the next series to that list.
+      private def append_metric(history : Array(Float64), value : Float64) : Nil
+        history << value
+        history.shift(history.size - METRIC_HISTORY_SAMPLES) if history.size > METRIC_HISTORY_SAMPLES
       end
 
       # Applies an optimistic volume value so rapid keyboard changes render
