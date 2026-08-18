@@ -8,7 +8,7 @@ module Obsctl
       # Resolves a scene target using shortcut, alias, name, then case-insensitive
       # alias/name matching.
       def self.resolve_scene(config : Config::Config, target : String) : Config::SceneConfig
-        resolve(config.scenes, target, "scene") { |entry| {entry.shortcut, entry.alias, entry.name} }
+        resolve(config.scenes, target, TargetKind::Scene) { |entry| {entry.shortcut, entry.alias, entry.name} }
       end
 
       # Resolves configured aliases first while also accepting scene names
@@ -22,12 +22,12 @@ module Obsctl
         live_names.each do |name|
           entries << Config::SceneConfig.new(name) unless entries.any? { |entry| entry.name == name }
         end
-        resolve(entries, target, "scene") { |entry| {entry.shortcut, entry.alias, entry.name} }
+        resolve(entries, target, TargetKind::Scene) { |entry| {entry.shortcut, entry.alias, entry.name} }
       end
 
       # Resolves an audio target using the same priority as scene resolution.
       def self.resolve_audio(config : Config::Config, target : String) : Config::AudioInputConfig
-        resolve(config.audio.inputs, target, "audio input") { |entry| {entry.shortcut, entry.alias, entry.name} }
+        resolve(config.audio.inputs, target, TargetKind::AudioInput) { |entry| {entry.shortcut, entry.alias, entry.name} }
       end
 
       # Resolves configured aliases first while also accepting input names
@@ -41,10 +41,31 @@ module Obsctl
         live_names.each do |name|
           entries << Config::AudioInputConfig.new(name) unless entries.any? { |entry| entry.name == name }
         end
-        resolve(entries, target, "audio input") { |entry| {entry.shortcut, entry.alias, entry.name} }
+        resolve(entries, target, TargetKind::AudioInput) { |entry| {entry.shortcut, entry.alias, entry.name} }
       end
 
-      private def self.resolve(entries : Array(T), target : String, kind : String, &) : T forall T
+      # What kind of thing is being looked up.
+      #
+      # This carries both halves of what resolution needs on failure: the word
+      # to put in an "ambiguous" message, and which not-found error to raise.
+      # It used to be a bare `String` that the resolver compared against
+      # `"scene"` to pick the exception, which meant the human wording of a
+      # message and the type of the error were the same decision — rename the
+      # label and you silently change which error callers see.
+      enum TargetKind
+        Scene
+        AudioInput
+
+        def label : String
+          scene? ? "scene" : "audio input"
+        end
+
+        def not_found(target : String) : ObsctlError
+          scene? ? SceneNotFound.new(target) : AudioInputNotFound.new(target)
+        end
+      end
+
+      private def self.resolve(entries : Array(T), target : String, kind : TargetKind, &) : T forall T
         exact = [] of T
         insensitive = [] of T
 
@@ -62,15 +83,11 @@ module Obsctl
         end
 
         return exact.first if exact.size == 1
-        raise AliasAmbiguous.new(kind, target) if exact.size > 1
+        raise AliasAmbiguous.new(kind.label, target) if exact.size > 1
         return insensitive.first if insensitive.size == 1
-        raise AliasAmbiguous.new(kind, target) if insensitive.size > 1
+        raise AliasAmbiguous.new(kind.label, target) if insensitive.size > 1
 
-        if kind == "scene"
-          raise SceneNotFound.new(target)
-        else
-          raise AudioInputNotFound.new(target)
-        end
+        raise kind.not_found(target)
       end
 
       # Converts user-facing 0-100 volume to obs-websocket multiplier form.
