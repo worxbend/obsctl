@@ -4,10 +4,19 @@ require "../domain/errors"
 require "./client_session"
 require "./socket_path"
 
+lib LibC
+  # Crystal's standard library has no `umask` wrapper, and the socket has to be
+  # created with the right mode rather than corrected afterwards.
+  fun umask(mask : ModeT) : ModeT
+end
+
 module Obsctl
   module IPC
     # Unix domain socket server for the local obsctl daemon IPC endpoint.
     class UnixServer
+      # Masks off every group and other permission bit, so anything created
+      # while it is installed is owner-only.
+      OWNER_ONLY_UMASK = 0o177_u32
       alias Handler = Proc(ClientSession, Nil)
 
       getter socket_path
@@ -44,10 +53,27 @@ module Obsctl
       end
 
       # Creates the socket, removing stale socket files when no server responds.
+      #
+      # The umask is narrowed around the bind rather than the socket being
+      # chmod'ed afterwards. Creating it first and fixing the mode second leaves
+      # a window — short, but real — where the socket exists at whatever the
+      # process umask allows, typically group- and world-readable. The parent
+      # directory is 0700 (see `SocketPath.ensure_parent`), so nothing could
+      # reach through that window in practice; closing it anyway means the
+      # socket's own permissions are correct from the moment it exists, and the
+      # daemon is not relying on two separate defences to get one thing right.
       def bind : Nil
         SocketPath.ensure_parent(@socket_path)
         remove_stale_socket
-        @server = UNIXServer.new(@socket_path)
+        previous_umask = LibC.umask(OWNER_ONLY_UMASK)
+        begin
+          @server = UNIXServer.new(@socket_path)
+        ensure
+          LibC.umask(previous_umask)
+        end
+        # Belt and braces: the umask above is what makes the mode right at
+        # creation time, and this makes it right even on a platform whose
+        # socket creation ignores the umask.
         File.chmod(@socket_path, 0o600)
       rescue Socket::BindError
         raise Domain::IpcConnectionFailed.new("obsctl server socket is already active: #{@socket_path}")
