@@ -3,6 +3,7 @@ require "../config/config"
 require "../domain/errors"
 require "../obs/client"
 require "../obs/protocol/event_subscription"
+require "../obs/protocol/obs_event"
 require "../runtime/logger"
 require "../runtime/reconnect_policy"
 require "./reconnect_signal"
@@ -174,7 +175,7 @@ module Obsctl
             @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
             delay = policy.delay_for(attempt)
             warning = retry_warning(message, delay, attempt)
-            publish_log("warn", disconnect_log_code(message), warning)
+            publish_log("warn", disconnect_log_code(ex), warning)
             next_attempt = settle_after_failure(generation, client, delay, reconnect_signal, handled_request_epoch, attempt)
             break unless next_attempt
             attempt = next_attempt
@@ -341,36 +342,31 @@ module Obsctl
         publish_log("warn", "obs_event_refresh_failed", message)
       end
 
+      # Folds one OBS event into the authoritative state cache.
+      #
+      # The event arrives already translated (see `Protocol::ObsEvent`), so
+      # everything below is about what the daemon does, not about what OBS
+      # sent. Some events carry the new value and are applied directly; others
+      # only say "this list is no longer what you think it is", and the daemon
+      # answers those by re-reading from OBS.
       private def apply_event(event : OBS::Protocol::Event, client : OBS::Client) : Nil
-        data = event.event_data
-        case event.event_type
-        when "CurrentProgramSceneChanged"
-          if scene_name = data.try(&.["sceneName"]?.try(&.as_s?))
-            @state.update_current_scene(scene_name)
-          end
-        when "InputMuteStateChanged"
-          if data && (input_name = data["inputName"]?.try(&.as_s?))
-            muted = data["inputMuted"]?.try(&.as_bool?)
-            @state.update_input_mute(input_name, muted || false) unless muted.nil?
-          end
-        when "InputVolumeChanged"
-          if data && (input_name = data["inputName"]?.try(&.as_s?))
-            vol_mul = data["inputVolumeMul"]?.try { |v| v.as_f? || v.as_i?.try(&.to_f64) }
-            vol_db = data["inputVolumeDb"]?.try { |v| v.as_f? || v.as_i?.try(&.to_f64) }
-            @state.update_input_volume(input_name, vol_mul, vol_db)
-          end
-        when "SceneListChanged", "SceneCreated", "SceneRemoved", "SceneNameChanged"
+        case translated = OBS::Protocol::ObsEvent.from(event)
+        when OBS::Protocol::ObsEvent::ProgramSceneChanged
+          @state.update_current_scene(translated.scene_name)
+        when OBS::Protocol::ObsEvent::InputMuteChanged
+          @state.update_input_mute(translated.input_name, translated.muted)
+        when OBS::Protocol::ObsEvent::InputVolumeChanged
+          @state.update_input_volume(translated.input_name, translated.volume_mul, translated.volume_db)
+        when OBS::Protocol::ObsEvent::SceneListChanged
           refresh = client.scene_snapshot
           @state.update_scenes(refresh[:current_scene], refresh[:scenes])
-        when "InputCreated", "InputRemoved", "InputNameChanged"
+        when OBS::Protocol::ObsEvent::InputListChanged
           @state.update_audio_inputs(client.audio_snapshot)
-        when "StreamStateChanged"
-          active = data.try(&.["outputActive"]?.try(&.as_bool?))
-          @state.update_output(streaming: active) unless active.nil?
-        when "RecordStateChanged"
-          active = data.try(&.["outputActive"]?.try(&.as_bool?))
-          @state.update_output(recording: active) unless active.nil?
-        when "CurrentProfileChanged", "ProfileListChanged", "CurrentSceneCollectionChanged", "SceneCollectionListChanged"
+        when OBS::Protocol::ObsEvent::StreamStateChanged
+          @state.update_output(streaming: translated.active)
+        when OBS::Protocol::ObsEvent::RecordStateChanged
+          @state.update_output(recording: translated.active)
+        when OBS::Protocol::ObsEvent::StudioContextChanged
           @state.update(client.snapshot)
         end
       rescue ex : Domain::ObsctlError
@@ -468,23 +464,21 @@ module Obsctl
         Runtime::Logger.redact_secrets(message || fallback)
       end
 
-      private def disconnect_log_code(message : String) : String
-        case message
-        when /response parser error/
-          "obs_response_parser_error"
-        when /malformed OBS frame/
-          "obs_malformed_frame"
-        when /closed cleanly/
-          "obs_closed_cleanly"
-        when /\AOBS request failed for /
+      # The log code for a failure that took the OBS session down.
+      #
+      # Derived from the exception's type and its own account of what happened,
+      # never from the wording of its message — see `Domain::DisconnectKind`.
+      private def disconnect_log_code(error : Exception) : String
+        case error
+        when Domain::ObsRequestFailed
           # The socket is fine; OBS refused one request. Logging this as a
           # disconnect sends operators looking for a network fault that is not
           # there.
           "obs_request_failed"
-        when /disconnected/
-          "obs_disconnected"
+        when Domain::ConnectionFailed
+          error.kind.log_code
         else
-          "obs_disconnected"
+          Domain::DisconnectKind::Disconnected.log_code
         end
       end
 

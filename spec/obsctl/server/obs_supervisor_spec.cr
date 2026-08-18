@@ -106,19 +106,31 @@ private OBS_EVENT_CATEGORIES = {
   "SceneCollectionListChanged"    => Obsctl::OBS::Protocol::EventSubscription::CONFIG,
 }
 
+# The OBS event-type spellings live in `Protocol::ObsEvent.from`, which is the
+# one place that translates the vendor protocol. This used to read them out of
+# `ObsSupervisor#apply_event`, which is where they were before that translation
+# layer existed; the check is the same, only the address changed.
 private def handled_event_types : Array(String)
-  source = File.read(File.expand_path("../../../src/obsctl/server/obs_supervisor.cr", __DIR__))
-  body = source[/private def apply_event.*?\n      rescue /m]? || raise "could not locate apply_event"
-  # `^` is not line-anchored in Crystal regexes, so match the newline itself.
-  body.scan(/\n\s*when (.+)/).flat_map do |match|
-    match[1].scan(/"([A-Za-z]+)"/).map(&.[1])
-  end.uniq!
+  source = File.read(File.expand_path("../../../src/obsctl/obs/protocol/obs_event.cr", __DIR__))
+  body = source[/def self\.from\(event : Event\).*?\n        end/m]? || raise "could not locate ObsEvent.from"
+  # Every OBS event type is PascalCase and every payload key this method reads
+  # is camelCase, so the leading capital is what separates them. Matching the
+  # strings directly rather than the `when` lines they sit on is deliberate: a
+  # `when` with its alternatives wrapped across two lines used to drop the
+  # names on the continuation line, and the check passed anyway because it only
+  # ever verified that what it *did* find was subscribed.
+  body.scan(/"([A-Z][A-Za-z]+)"/).map(&.[1]).uniq!
 end
 
 describe "OBS event subscription coverage" do
   it "subscribes to every category the supervisor handles an event from" do
     handled = handled_event_types
     handled.should_not be_empty
+
+    # Both directions. Without this the check could quietly stop finding event
+    # types — a refactor moves them, a regex stops matching — and keep passing
+    # on whatever remained.
+    handled.sort.should eq(OBS_EVENT_CATEGORIES.keys.to_a.sort!)
 
     unknown = handled.reject { |event_type| OBS_EVENT_CATEGORIES.has_key?(event_type) }
     unknown.should eq([] of String)
