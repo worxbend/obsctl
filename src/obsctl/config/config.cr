@@ -199,6 +199,20 @@ module Obsctl
       #
       # Every field is listed deliberately: an omission here is silent, and
       # shows up as one part of the daemon disagreeing with another.
+      #
+      # Concurrency: this is shared mutable state with no lock, and readers run
+      # on other fibers — the supervisor reads `reconnect` between attempts, the
+      # command executor reads `scenes` while resolving an alias, the next OBS
+      # connect reads `connection`. What makes that safe is that the assignments
+      # below are plain field writes with no yield point between them, so under
+      # Crystal's default single-threaded scheduler no fiber can be scheduled
+      # partway through and observe a half-replaced config.
+      #
+      # That is a real dependency on the runtime, not a happy accident, so it is
+      # written down here: **under `-Dpreview_mt` this method needs a lock and
+      # readers need to take it too.** Do not add anything to the body that can
+      # yield — an I/O call, a `sleep`, a channel operation — without adding
+      # that lock first.
       def replace_with(other : self) : Nil
         @version = other.version
         @server = other.server
