@@ -119,6 +119,22 @@ module Obsctl
     record Response, id : String, ok : Bool, result : JSON::Any? = nil, error : ErrorPayload? = nil do
       TYPE = "response"
 
+      # The failure this response describes, or nil when the command succeeded.
+      #
+      # The wire shape can express a combination that means nothing — `ok:
+      # false` with no error to explain it — because `ok` and `error` are
+      # separate fields and a peer is free to send either. Every client needs
+      # the same answer to that: there is no message to show and no exit code
+      # to derive, so it is a protocol violation. This is the one place that
+      # decides so; callers used to each repeat the check and the wording, and
+      # three copies of an invariant is three chances to word it differently or
+      # forget it.
+      def failure : ErrorPayload?
+        return if ok
+
+        error || raise Domain::IpcProtocolError.new("server returned an invalid error response")
+      end
+
       # Writes the wire-format JSON object for this response.
       def to_json(json : JSON::Builder) : Nil
         json.object do

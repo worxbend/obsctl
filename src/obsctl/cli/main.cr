@@ -158,14 +158,8 @@ module Obsctl
         end
 
         response = client_commands.request(parsed)
-        response_error = response.error
-        exit_code = if response.ok
-                      Domain::ExitCode::Success.value
-                    elsif response_error
-                      ClientCommands.exit_code_for(response_error).value
-                    else
-                      raise Domain::IpcProtocolError.new("server returned an invalid error response")
-                    end
+        failure = response.failure
+        exit_code = failure ? ClientCommands.exit_code_for(failure).value : Domain::ExitCode::Success.value
         stdout.puts json_envelope(response.ok, response.result, response.error, exit_code)
         exit_code
       end
