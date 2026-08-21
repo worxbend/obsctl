@@ -83,7 +83,7 @@ module Obsctl
       end
 
       # Opens the WebSocket, performs Hello/Identify/Identified, and starts the
-
+      # reader fiber that routes every frame from here on.
       def connect : Nil
         reset_terminal_state
         ws = Connection.new(@config.connection).connect
@@ -212,26 +212,31 @@ module Obsctl
         @ws || raise Domain::ConnectionFailed.new("OBS WebSocket is not open")
       end
 
-      private def number(data : JSON::Any, key : String) : Float64?
-        value = data[key]?
-        return unless value
-        value.as_f? || value.as_i?.try(&.to_f64)
+      # Sends on a channel if it can be done immediately, and drops the value
+      # if it cannot.
+      #
+      # Everything the reader fiber publishes goes out this way: events,
+      # request responses, system frames, and the close notification. The
+      # reader is the single fiber that pumps the WebSocket, so it must never
+      # park on a full or unattended channel — doing so would stop request
+      # responses being routed and stall every caller waiting on one. Each of
+      # these channels either has a live consumer or has nothing that still
+      # needs the value, which is what makes dropping the right answer rather
+      # than a lost message.
+      private def offer(channel : Channel(T), value : T) : Nil forall T
+        select
+        when channel.send(value)
+        else
+        end
       end
 
-      # Hands an event to the supervisor without blocking the reader fiber.
+      # Hands an event to the supervisor.
       #
-      # This runs on the single fiber that reads the WebSocket, so it must
-      # never park: blocking here stops request responses being routed too.
       # A full buffer means the supervisor is behind, and the useful thing to
       # do with a burst of stale volume meters is drop it — daemon state is
       # reconciled by the telemetry poll every two seconds regardless.
       private def queue_event(event : Protocol::Event) : Nil
-        select
-        when @events.send(event)
-          # Queued.
-        else
-          # Buffer full; drop rather than stall the reader.
-        end
+        offer(@events, event)
       end
 
       private def handle_frame(frame : String) : Nil
@@ -299,10 +304,7 @@ module Obsctl
       end
 
       private def send_pending(channel : Channel(Protocol::Response | Exception), value : Protocol::Response | Exception) : Nil
-        select
-        when channel.send(value)
-        else
-        end
+        offer(channel, value)
       end
 
       private def fail_pending(channel : Channel(Protocol::Response | Exception), error : Exception) : Nil
@@ -314,10 +316,7 @@ module Obsctl
       end
 
       private def send_system_error(error : Exception) : Nil
-        select
-        when @system_frames.send(error)
-        else
-        end
+        offer(@system_frames, error)
       end
 
       private def reset_terminal_state : Nil
@@ -387,10 +386,7 @@ module Obsctl
       end
 
       private def notify_close(notifications : Channel(Domain::ConnectionFailed), error : Domain::ConnectionFailed) : Nil
-        select
-        when notifications.send(error)
-        else
-        end
+        offer(notifications, error)
       end
 
       private def close_after_protocol_error : Nil
