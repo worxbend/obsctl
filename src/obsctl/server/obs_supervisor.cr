@@ -168,27 +168,13 @@ module Obsctl
             disconnect_error = wait_for_disconnect(generation, client)
             next if client_detached?(client)
             raise(disconnect_error || Domain::ConnectionFailed.new("OBS WebSocket disconnected")) unless stopped?(generation)
-          rescue ex : Domain::ObsctlError
-            break if stopped?(generation)
-
-            message = public_message(ex.message, "OBS unavailable")
-            @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
-            delay = policy.delay_for(attempt)
-            warning = retry_warning(message, delay, attempt)
-            publish_log("warn", disconnect_log_code(ex), warning)
-            next_attempt = settle_after_failure(generation, client, delay, reconnect_signal, handled_request_epoch, attempt)
-            break unless next_attempt
-            attempt = next_attempt
           rescue ex
             break if stopped?(generation)
 
-            message = public_message(ex.message, "OBS supervisor failed")
+            message = failure_message(ex)
             @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
-            publish_log("error", "obs_supervisor_error", message)
             delay = policy.delay_for(attempt)
-            if @config.reconnect.enabled
-              publish_log("warn", "obs_reconnect_scheduled", retry_warning(message, delay, attempt))
-            end
+            publish_failure(ex, message, delay, attempt)
 
             next_attempt = settle_after_failure(generation, client, delay, reconnect_signal, handled_request_epoch, attempt)
             break unless next_attempt
@@ -197,6 +183,36 @@ module Obsctl
         end
       ensure
         mark_stopped(generation)
+      end
+
+      # What the user is told after a failure took the OBS session down.
+      #
+      # A `Domain::ObsctlError` is a failure the daemon anticipated — OBS
+      # refused a request, the socket went away, the password was wrong — so
+      # its own message is the best account available. Anything else is a fault
+      # in the supervisor itself and says so.
+      private def failure_message(error : Exception) : String
+        fallback = error.is_a?(Domain::ObsctlError) ? "OBS unavailable" : "OBS supervisor failed"
+        public_message(error.message, fallback)
+      end
+
+      # Writes the log line(s) for a failure that ended the OBS session.
+      #
+      # An anticipated failure is one warning that already names the retry.
+      # An unexpected one is logged at error level under its own code first,
+      # and the retry note follows as a separate line so an operator reading
+      # the log does not mistake a supervisor bug for the ordinary reconnect
+      # churn.
+      private def publish_failure(error : Exception, message : String, delay : Time::Span, attempt : Int32) : Nil
+        if error.is_a?(Domain::ObsctlError)
+          publish_log("warn", disconnect_log_code(error), retry_warning(message, delay, attempt))
+          return
+        end
+
+        publish_log("error", "obs_supervisor_error", message)
+        return unless @config.reconnect.enabled
+
+        publish_log("warn", "obs_reconnect_scheduled", retry_warning(message, delay, attempt))
       end
 
       # Releases a failed client and waits out the backoff before the next try.
@@ -219,7 +235,7 @@ module Obsctl
         @client_lock.synchronize { @client = nil if @client == client }
         return if stopped?(generation) || !@config.reconnect.enabled
 
-        case wait_for_reconnect_delay(delay, reconnect_signal, handled_request_epoch)
+        case reconnect_signal.wait(delay, handled_request_epoch)
         when ReconnectSignal::WaitResult::Requested
           # Explicit reconnect request consumed — retry immediately without
           # incrementing backoff.
@@ -318,14 +334,6 @@ module Obsctl
         end
       end
 
-      private def wait_for_reconnect_delay(
-        delay : Time::Span,
-        reconnect_signal : ReconnectSignal,
-        handled_request_epoch : UInt64,
-      ) : ReconnectSignal::WaitResult
-        reconnect_signal.wait(delay, handled_request_epoch)
-      end
-
       private def drain_events(client : OBS::Client) : Nil
         loop do
           select
@@ -337,9 +345,7 @@ module Obsctl
           end
         end
       rescue ex : Domain::ObsctlError
-        message = public_message(ex.message, "failed to refresh OBS state after event")
-        @state.mark_disconnected(message)
-        publish_log("warn", "obs_event_refresh_failed", message)
+        report_event_refresh_failure(ex)
       end
 
       # Folds one OBS event into the authoritative state cache.
@@ -370,9 +376,7 @@ module Obsctl
           @state.update(client.snapshot)
         end
       rescue ex : Domain::ObsctlError
-        message = public_message(ex.message, "failed to refresh OBS state after event")
-        @state.mark_disconnected(message)
-        publish_log("warn", "obs_event_refresh_failed", message)
+        report_event_refresh_failure(ex)
       end
 
       private def client_detached?(client : OBS::Client) : Bool
@@ -487,6 +491,16 @@ module Obsctl
 
         milliseconds = delay.total_milliseconds.to_i64
         "#{message}; reconnect attempt #{attempt + 1} scheduled in #{milliseconds}ms"
+      end
+
+      # Both draining and applying an event can fail the same way: by asking
+      # OBS for the list an event only announced had changed. Either way the
+      # cached state is now behind what OBS holds, which is what subscribers
+      # are told.
+      private def report_event_refresh_failure(error : Domain::ObsctlError) : Nil
+        message = public_message(error.message, "failed to refresh OBS state after event")
+        @state.mark_disconnected(message)
+        publish_log("warn", "obs_event_refresh_failed", message)
       end
     end
   end
