@@ -8,6 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
+## [0.8.3] - 2026-08-21
+
+### Internal
+
+- A maintainability pass over every layer, behaviour-preserving throughout: the
+  command line, the IPC protocol, the config format and the exit codes are
+  exactly as they were in 0.8.2, and no fixture or documented behaviour changed.
+  The theme is duplicated knowledge — the same rule written out in two or three
+  places, held in agreement only by whoever last remembered to update both.
+- `obsctl config migrate` reported the backup file it had made by rebuilding the
+  timestamped filename itself, from a clock read a moment after the one the
+  writer used. A migrate straddling a second boundary therefore named a file
+  that did not exist. `ConfigWriter#write_atomic` now returns the path it
+  actually created and `migrate` reports that.
+- The supervisor's rule for "is this callback still the live lifecycle run" was
+  re-derived from raw fields in three places, in two different polarities; the
+  panel border arithmetic the TUI renders with and the arithmetic it hit-tests
+  mouse clicks with were separate copies that had to agree; the ring spinner's
+  starting bar was built once in its constructor and again in the method that
+  measures its cycle length. Each of those now has one owner and one comment
+  explaining it.
+- Six CLI commands that `CLI::Main` handles itself, and so never reach
+  `CommandRegistry`'s argument-count check, had each hand-rolled that check —
+  three different spellings raising one contract-visible message. They share one
+  now. The `record` action list shown in `--help` and the shell completions is
+  read off the parser's own table rather than repeated as a literal, so an added
+  action cannot go unadvertised.
+- Long methods that mixed several levels of abstraction were split by level:
+  `Config#to_yaml`, CryTUI's constraint-solver driver, and the block-drawing
+  preamble four widgets opened with. Configuration invariants moved onto the
+  sections they constrain, so a new field carries its rules beside it. The
+  credential-scrubbing regexes on the outbound IPC path are named constants
+  compiled once instead of rebuilt per response, and the obs-websocket opcode
+  numbers are written as their names.
+
 ## [0.8.2] - 2026-08-21
 
 ### Internal
