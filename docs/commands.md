@@ -275,6 +275,14 @@ ui.theme                  nord                    (file)
 ui.locale                 null                    (default)
 ```
 
+Secret-valued settings never print their value: a key whose last path segment
+names a credential (`connection.password`, and any future `*.token`/`*.secret`)
+renders as `[redacted]` in both the human and the `--json` output. Its source
+(`file` or `default`) is still reported, so the command remains useful for
+answering "is a password set, and where did it come from?". `connection.password_env`
+holds the *name* of an environment variable rather than a secret, so it prints
+in full.
+
 `obsctl config diff` prints only the settings where the file departs from the
 built-in defaults, as `key: default -> current`. A key present on only one side
 renders the missing side as `-`:

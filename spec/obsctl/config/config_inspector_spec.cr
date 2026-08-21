@@ -58,6 +58,23 @@ describe Obsctl::Config::ConfigInspector do
       end
     end
 
+    it "redacts a plaintext password instead of printing it" do
+      # `config explain` goes to stdout, which ends up in scrollback, CI logs
+      # and screen shares; the credential must not travel with it.
+      with_inspector_config("version: 1\nconnection:\n  password: hunter2\n") do |path|
+        entry = entry_for(Obsctl::Config::ConfigInspector.explain(path), "connection.password")
+        entry.value.should eq(Obsctl::Config::ConfigInspector::REDACTED)
+        entry.source.file?.should be_true
+      end
+    end
+
+    it "still prints password_env, which names a variable rather than holding a secret" do
+      with_inspector_config("version: 1\nconnection:\n  password_env: MY_OBS_PASSWORD\n") do |path|
+        entry_for(Obsctl::Config::ConfigInspector.explain(path), "connection.password_env")
+          .value.should eq("MY_OBS_PASSWORD")
+      end
+    end
+
     it "returns entries sorted by key" do
       with_inspector_config do |path|
         keys = Obsctl::Config::ConfigInspector.explain(path).map(&.key)
@@ -88,6 +105,13 @@ describe Obsctl::Config::ConfigInspector do
         changes[0].key.should eq("ui.theme")
         changes[0].default_value.should eq("default")
         changes[0].current_value.should eq("nord")
+      end
+    end
+
+    it "redacts a plaintext password in the reported change" do
+      with_inspector_config("version: 1\nconnection:\n  password: hunter2\n") do |path|
+        change = Obsctl::Config::ConfigInspector.diff(path).find!(&.key.== "connection.password")
+        change.current_value.should eq(Obsctl::Config::ConfigInspector::REDACTED)
       end
     end
   end

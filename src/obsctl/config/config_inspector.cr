@@ -5,6 +5,7 @@ require "./config_loader"
 require "./config_schema"
 require "./config_writer"
 require "../domain/errors"
+require "../runtime/logger"
 
 module Obsctl
   module Config
@@ -17,6 +18,17 @@ module Obsctl
     # serialization, so they stay correct as the schema grows without needing a
     # hand-maintained key list.
     module ConfigInspector
+      # Stand-in printed instead of a secret's real value.
+      REDACTED = "[redacted]"
+
+      # Leaf key names whose value is a credential rather than a setting.
+      #
+      # Reuses the pattern the log and IPC scrubbers already share so a new
+      # secret-shaped setting is hidden on every output path at once. Anchored
+      # on the whole leaf name so `password_env` — which holds the *name* of an
+      # environment variable, not its value — keeps printing normally.
+      SENSITIVE_LEAF_KEY = Regex.new("\\A#{Runtime::Logger::SENSITIVE_KEY_PATTERN}\\z", Regex::Options::IGNORE_CASE)
+
       # Where an effective value came from.
       enum Source
         Default
@@ -71,7 +83,7 @@ module Obsctl
         from_file = flatten(File.read(path)).keys
 
         effective.map do |key, value|
-          Entry.new(key, value, from_file.includes?(key) ? Source::File : Source::Default)
+          Entry.new(key, redact(key, value), from_file.includes?(key) ? Source::File : Source::Default)
         end.sort_by!(&.key)
       end
 
@@ -88,7 +100,7 @@ module Obsctl
           current_value = current[key]?
           next if default_value == current_value
 
-          Change.new(key, default_value, current_value)
+          Change.new(key, redact(key, default_value), redact(key, current_value))
         end
       end
 
@@ -133,6 +145,16 @@ module Obsctl
         YAML::Any.new(kept).to_yaml
       rescue ex : YAML::ParseException
         raise Domain::ConfigInvalid.new("invalid YAML: #{ex.message}")
+      end
+
+      # Replaces a secret's value with `REDACTED`, leaving other values alone.
+      #
+      # `config explain` and `config diff` print straight to stdout, which ends
+      # up in scrollback, CI logs and screen shares; a plaintext
+      # `connection.password` must not travel with it.
+      private def self.redact(key : String, value : String?) : String?
+        return value if value.nil?
+        SENSITIVE_LEAF_KEY.matches?(key.split('.').last) ? REDACTED : value
       end
 
       # Flattens a YAML document into dotted key paths.
