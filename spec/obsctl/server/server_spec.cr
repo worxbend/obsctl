@@ -66,6 +66,48 @@ describe Obsctl::Server::Server do
     File.delete(path) if path && File.exists?(path)
   end
 
+  it "drops an accepted connection that never sends a first command" do
+    # Without the bound, a peer that connects and then stalls keeps its fiber
+    # and its file descriptor for the life of the daemon.
+    path = temp_socket_path
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(
+        host: "127.0.0.1",
+        port: 1,
+        password_env: "",
+        connect_timeout_ms: 100,
+        request_timeout_ms: 100,
+        reconnect: Obsctl::Config::ReconnectConfig.new(enabled: false)
+      )
+    )
+    server = Obsctl::Server::Server.new(
+      config,
+      "/tmp/obsctl-server-spec.yml",
+      socket_path: path,
+      first_message_timeout: 200.milliseconds
+    )
+    ready = Channel(Nil).new
+
+    spawn do
+      ready.send(nil)
+      server.run
+    end
+
+    ready.receive
+    until File.exists?(path)
+      Fiber.yield
+    end
+
+    socket = UNIXSocket.new(path)
+    socket.read_timeout = 3.seconds
+    # The daemon closes the silent connection, which surfaces here as EOF.
+    socket.gets.should be_nil
+  ensure
+    socket.try(&.close)
+    server.try(&.stop)
+    File.delete(path) if path && File.exists?(path)
+  end
+
   it "rejects explicit reconnect when reconnect is disabled and the startup supervisor exited" do
     obs = nil.as(Obsctl::SpecSupport::FakeObsServer?)
     gate = nil.as(Obsctl::SpecSupport::TcpGate?)

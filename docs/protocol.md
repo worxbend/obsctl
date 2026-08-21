@@ -30,6 +30,10 @@ Supported command names:
 | Config | `dump_config`, `reload_config`, `validate_config` |
 | Lifecycle | `reconnect_obs`, `shutdown_server` |
 
+`set_volume` carries a `percent` field the server validates against the same
+0-100 range the CLI accepts; an out-of-range value is rejected with
+`COMMAND_PARSE_ERROR` rather than forwarded to OBS.
+
 `status` returns the combined daemon and OBS payload, `get_obs_status` returns
 only the OBS snapshot, and `get_server_status` returns only daemon status.
 `shutdown_server` returns `SHUTDOWN_DISABLED` unless
@@ -47,6 +51,12 @@ Each field is nullable. Older obs-websocket builds may omit `paused`,
 recording is active. Clients render a missing value as unknown rather than
 substituting a default. `stop_record` reports the written file in its message
 when OBS returns an `outputPath`.
+
+A connected client must send its first request within 30 seconds; the server
+closes a connection that stays silent past that, so a stalled peer cannot hold
+a daemon file descriptor open indefinitely. The bound applies to the first
+message only — once subscribed, a `watch` client may sit idle for as long as it
+likes.
 
 Subscribe request:
 

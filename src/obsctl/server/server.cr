@@ -14,6 +14,11 @@ module Obsctl
   module Server
     # Foreground local daemon that owns the OBS WebSocket connection and IPC socket.
     class Server
+      # How long a freshly accepted connection may stay silent before the
+      # daemon drops it. Generous compared to any real client's first write,
+      # while still bounding a stalled peer's hold on a file descriptor.
+      FIRST_MESSAGE_TIMEOUT = 30.seconds
+
       # Builds a server runtime around a loaded config and resolved socket path.
       def initialize(
         @config : Config::Config,
@@ -21,6 +26,9 @@ module Obsctl
         @options : ServerOptions = ServerOptions.new,
         @socket_path : String = IPC::SocketPath.resolve,
         @logger : Runtime::Logger? = nil,
+        # Injectable so a spec can prove the drop happens without waiting the
+        # production span out.
+        @first_message_timeout : Time::Span = FIRST_MESSAGE_TIMEOUT,
       )
         @registry = ClientRegistry.new
         @diagnostic_log_broadcast = BestEffortLogBroadcast.new(->(entry : JSON::Any) { @registry.broadcast("logs", entry) })
@@ -101,7 +109,19 @@ module Obsctl
       end
 
       private def handle_session(session : IPC::ClientSession) : Nil
+        # A connection that never sends anything would otherwise keep its fiber
+        # and its file descriptor for the life of the daemon. The bound covers
+        # the first line only: once a client has identified itself, a `watch`
+        # subscriber is expected to sit idle for hours.
+        session.read_timeout = @first_message_timeout
+        first = true
+
         while message = session.read_message
+          if first
+            session.read_timeout = nil
+            first = false
+          end
+
           request = message.as?(IPC::Request)
           unless request
             session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, "expected IPC request")))
@@ -125,6 +145,8 @@ module Obsctl
         end
       rescue ex : Domain::IpcProtocolError
         session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, ex.message || "invalid IPC request")))
+      rescue IO::TimeoutError
+        # Nothing to report to a peer that never spoke; just let it go.
       rescue IO::Error
       ensure
         @registry.remove(session)
