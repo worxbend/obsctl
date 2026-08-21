@@ -355,17 +355,23 @@ module Obsctl
       end
 
       private def command(payload : IPC::CommandPayload) : ActionOutcome
-        response = @sender.call(payload)
-        message = if response.ok
-                    response.result.try(&.["message"]?).try(&.as_s?) || "ok"
-                  elsif error = response.error
-                    "error [#{error.code}]: #{error.message}"
-                  else
-                    "error: invalid server response"
-                  end
-        ActionOutcome.new(message: message)
+        ActionOutcome.new(message: result_message(@sender.call(payload)))
       rescue ex : Domain::ObsctlError | IO::Error
         ActionOutcome.new(message: "error: #{ex.message}")
+      end
+
+      # The one line the status bar shows for a daemon response.
+      #
+      # Both the immediate command path and the debounced volume path report
+      # what came back, and they have to word it identically — the user cannot
+      # tell which of the two sent the request that produced the line.
+      private def result_message(response : IPC::Response) : String
+        return response.result.try(&.["message"]?).try(&.as_s?) || "ok" if response.ok
+
+        error = response.error
+        return "error: invalid server response" unless error
+
+        "error [#{error.code}]: #{error.message}"
       end
 
       private def target_command(name : String, target : String?) : ActionOutcome
@@ -390,10 +396,9 @@ module Obsctl
           next unless @volume_versions[input_name] == version
 
           response = @sender.call(IPC::CommandPayload.new(IPC::CommandName::SET_VOLUME, input_name, percent))
-          unless response.ok
-            error = response.error
-            @model.set_last_result(error ? "error [#{error.code}]: #{error.message}" : "error: invalid server response")
-          end
+          # Only failures are announced: the level the user just set is
+          # already on screen, so "ok" would say nothing they cannot see.
+          @model.set_last_result(result_message(response)) unless response.ok
         rescue ex : Domain::ObsctlError | IO::Error
           @model.set_last_result("error: #{ex.message}")
         end
