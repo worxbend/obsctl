@@ -1,4 +1,5 @@
 require "json"
+require "./opcode"
 
 module Obsctl
   module OBS
@@ -15,7 +16,7 @@ module Obsctl
         # Parses a raw JSON frame and returns nil when it is not a response.
         def self.from_frame(frame : String) : self?
           root = JSON.parse(frame)
-          return unless root["op"].as_i == 7
+          return unless root["op"].as_i == Opcode::RequestResponse.value
           data = root["d"]
           status = data["requestStatus"]
           new(

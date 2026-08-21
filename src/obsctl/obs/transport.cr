@@ -3,6 +3,7 @@ require "json"
 require "./auth"
 require "./connection"
 require "./protocol/request_id"
+require "./protocol/opcode"
 require "./protocol/request"
 require "./protocol/response"
 require "./protocol/event"
@@ -156,7 +157,7 @@ module Obsctl
 
       private def identify(hello_frame : String) : Nil
         hello = JSON.parse(hello_frame)
-        raise Domain::ConnectionFailed.new("expected OBS Hello frame") unless hello["op"].as_i == 0
+        raise Domain::ConnectionFailed.new("expected OBS Hello frame") unless hello["op"].as_i == Protocol::Opcode::Hello.value
         data = hello["d"]
         identify_data = {} of String => JSON::Any
         identify_data["rpcVersion"] = JSON::Any.new(data["rpcVersion"].as_i64)
@@ -173,14 +174,14 @@ module Obsctl
 
         frame = JSON.build do |json|
           json.object do
-            json.field "op", 1
+            json.field "op", Protocol::Opcode::Identify.value
             json.field "d", identify_data
           end
         end
         connected_socket.send(frame)
         identified = read_system_frame
         parsed = JSON.parse(identified)
-        raise Domain::AuthenticationFailed.new unless parsed["op"].as_i == 2
+        raise Domain::AuthenticationFailed.new unless parsed["op"].as_i == Protocol::Opcode::Identified.value
       end
 
       private def password_from_config : String
@@ -243,9 +244,9 @@ module Obsctl
         opcode = Protocol::Message.opcode(frame)
         begin
           case opcode
-          when 7
+          when Protocol::Opcode::RequestResponse.value
             route_response(frame)
-          when 5
+          when Protocol::Opcode::Event.value
             if event = Protocol::Event.from_frame(frame)
               queue_event(event)
             end
@@ -253,7 +254,7 @@ module Obsctl
             @system_frames.send(frame)
           end
         rescue
-          if opcode == 7
+          if opcode == Protocol::Opcode::RequestResponse.value
             fail_response_parser_error
           else
             fail_malformed_frame

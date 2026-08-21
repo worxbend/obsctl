@@ -82,6 +82,22 @@ module Obsctl
       SENSITIVE_KEY_PATTERN   = "(?:password|authentication(?:[ _-]?string)?|auth(?:[ _-]?string)?|token|secret)"
       SENSITIVE_VALUE_PATTERN = "(?:\"[^\"]*\"|'[^']*'|\\S+)"
 
+      # The shapes a credential can take in a human-readable message, one rule
+      # per shape: `password=hunter2`, `password: hunter2`, `password "hunter2"`,
+      # and the copula form `password is hunter2`.
+      #
+      # These are compiled once at load rather than per call because
+      # `sanitize_message` runs on every failed IPC command, on both the daemon
+      # and the client side. Keeping them as a named table also makes the
+      # security-relevant ruleset readable as a list.
+      private ASSIGNMENT_RULE = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*=\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1=[redacted]"}
+      private COLON_RULE      = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*:\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1: [redacted]"}
+      private QUOTED_RULE     = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(\"[^\"]*\"|'[^']*')"), "\\1 [redacted]"}
+      private COPULA_RULE     = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(is|was|equals|set to|configured as|provided as)\\s+#{SENSITIVE_VALUE_PATTERN}"), "\\1 \\2 [redacted]"}
+
+      # Order matters: each rule is applied to the output of the previous one.
+      private REDACTION_RULES = [ASSIGNMENT_RULE, COLON_RULE, QUOTED_RULE, COPULA_RULE]
+
       getter code : String
       getter message : String
 
@@ -99,11 +115,9 @@ module Obsctl
       end
 
       def self.sanitize_message(message : String) : String
-        message
-          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*=\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1=[redacted]")
-          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*:\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1: [redacted]")
-          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(\"[^\"]*\"|'[^']*')"), "\\1 [redacted]")
-          .gsub(Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(is|was|equals|set to|configured as|provided as)\\s+#{SENSITIVE_VALUE_PATTERN}"), "\\1 \\2 [redacted]")
+        REDACTION_RULES.reduce(message) do |text, (pattern, replacement)|
+          text.gsub(pattern, replacement)
+        end
       end
 
       # Writes the wire-format JSON object for this error.

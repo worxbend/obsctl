@@ -1,4 +1,5 @@
 require "json"
+require "./opcode"
 
 module Obsctl
   module OBS
@@ -9,7 +10,7 @@ module Obsctl
         def to_frame : String
           JSON.build do |json|
             json.object do
-              json.field "op", 6
+              json.field "op", Opcode::Request.value
               json.field "d" do
                 json.object do
                   json.field "requestType", request_type
