@@ -155,11 +155,7 @@ module Obsctl
             false
           end
         when CryTUI::PasteEvent
-          if @model.command_palette.active
-            @model.command_palette.input += message.text.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
-            @model.command_palette.completions = Completion.compute(@model.command_palette.input, @model)
-            @model.command_palette.completion_index = nil
-          end
+          dispatcher.paste(message.text)
           false
         when SubscriptionMessage
           return false unless message.generation == @subscription_generation

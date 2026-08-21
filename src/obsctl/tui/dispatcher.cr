@@ -404,6 +404,21 @@ module Obsctl
         end
       end
 
+      # Bracketed paste is not a keystroke, so `Input` has no `Action` to map it
+      # to and it arrives here directly rather than through `handle`. It still
+      # has to land in the palette the way typing does — appending to the line
+      # and recomputing completions — which is why the append lives next to the
+      # `palette_character?` branch instead of being spelled out again by the
+      # caller. Control characters are stripped: a pasted newline would submit
+      # a command the user never chose to run.
+      def paste(text : String) : Nil
+        palette = @model.command_palette
+        return unless palette.active
+
+        palette.input += text.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
+        refresh_completions
+      end
+
       private def refresh_completions
         palette = @model.command_palette
         palette.completions = Completion.compute(palette.input, @model)
