@@ -171,12 +171,6 @@ module Obsctl
         end
       end
 
-      # Records a public operator reconnect request without treating it as an
-      # OBS connection failure.
-      def mark_reconnect_requested(at : Time = Time.utc) : Nil
-        publish_snapshot_payload(mark_reconnect_requested_and_build_payload(at))
-      end
-
       # Mutates authoritative reconnect state for a public operator reconnect
       # request and returns the precomputed state-event payload so callers can
       # defer subscriber fanout until their own locks are released.

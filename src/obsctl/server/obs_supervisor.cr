@@ -297,16 +297,23 @@ module Obsctl
         previous
       end
 
+      # True while `generation` is still the supervisor's live lifecycle run: not
+      # stopped, and not superseded by a later start. Callers must already hold
+      # @lifecycle_lock — it does not take the lock itself.
+      private def current_unlocked?(generation : UInt64) : Bool
+        @lifecycle_state != LifecycleState::Stopped && @lifecycle_generation == generation
+      end
+
       private def stopped?(generation : UInt64) : Bool
         @lifecycle_lock.synchronize do
-          @lifecycle_state == LifecycleState::Stopped || @lifecycle_generation != generation
+          !current_unlocked?(generation)
         end
       end
 
       private def claim_client(generation : UInt64, client : OBS::Client) : Bool
         claimed = false
         @lifecycle_lock.synchronize do
-          return false if @lifecycle_state == LifecycleState::Stopped || @lifecycle_generation != generation
+          return false unless current_unlocked?(generation)
 
           @client_lock.synchronize { @client = client }
           claimed = true
@@ -318,8 +325,7 @@ module Obsctl
 
       private def mark_running(generation : UInt64) : Bool
         @lifecycle_lock.synchronize do
-          return false unless @lifecycle_generation == generation
-          return false if @lifecycle_state == LifecycleState::Stopped
+          return false unless current_unlocked?(generation)
 
           @lifecycle_state = LifecycleState::Running
           true
