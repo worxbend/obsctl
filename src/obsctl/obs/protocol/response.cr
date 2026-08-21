@@ -13,10 +13,9 @@ module Obsctl
         request_id : String,
         request_status : RequestStatus,
         response_data : JSON::Any? do
-        # Parses a raw JSON frame and returns nil when it is not a response.
-        def self.from_frame(frame : String) : self?
-          root = JSON.parse(frame)
-          return unless root["op"].as_i == Opcode::RequestResponse.value
+        # Reads a response out of an already-parsed frame whose `op` the
+        # caller has established is `RequestResponse`.
+        def self.from_data(root : JSON::Any) : self
           data = root["d"]
           status = data["requestStatus"]
           new(

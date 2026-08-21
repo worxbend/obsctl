@@ -6,10 +6,9 @@ module Obsctl
     module Protocol
       # Parsed obs-websocket Event message with opcode 5.
       record Event, event_type : String, event_data : JSON::Any? do
-        # Parses a raw JSON frame and returns nil when it is not an event.
-        def self.from_frame(frame : String) : self?
-          root = JSON.parse(frame)
-          return unless root["op"].as_i == Opcode::Event.value
+        # Reads an event out of an already-parsed frame whose `op` the caller
+        # has established is `Event`.
+        def self.from_data(root : JSON::Any) : self
           data = root["d"]
           new(data["eventType"].as_s, data["eventData"]?)
         end

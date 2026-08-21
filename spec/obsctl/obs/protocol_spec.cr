@@ -74,7 +74,7 @@ end
 describe Obsctl::OBS::Protocol::Response do
   it "matches request responses by request id" do
     frame = %({"op":7,"d":{"requestType":"GetVersion","requestId":"abc","requestStatus":{"result":true,"code":100},"responseData":{"obsVersion":"1"}}})
-    response = Obsctl::OBS::Protocol::Response.from_frame(frame).not_nil!
+    response = Obsctl::OBS::Protocol::Response.from_data(JSON.parse(frame))
     response.request_id.should eq("abc")
     response.response_data.not_nil!["obsVersion"].as_s.should eq("1")
   end

@@ -270,6 +270,54 @@ describe Obsctl::OBS::Client do
       server.stop
     end
   end
+
+  # `DisconnectKind` exists so operators can alert on a stable log code rather
+  # than on the wording of a diagnostic, which makes the frame -> kind mapping
+  # the contract worth pinning. A frame that is not JSON at all and a response
+  # frame whose body cannot be read are different faults and must not collapse
+  # into the same code.
+  it "reports a frame that is not JSON as a malformed frame" do
+    disconnect_kind_for_frame("this is not json").should(
+      eq(Obsctl::Domain::DisconnectKind::MalformedFrame)
+    )
+  end
+
+  it "reports an unreadable response body as a response parser error" do
+    disconnect_kind_for_frame(%({"op":7,"d":{"requestType":"GetVersion"}})).should(
+      eq(Obsctl::Domain::DisconnectKind::ResponseParserError)
+    )
+  end
+end
+
+# Connects, parks a request so there is a pending caller to fail, pushes
+# `frame` at the client, and returns the kind the resulting disconnect carried.
+private def disconnect_kind_for_frame(frame : String) : Obsctl::Domain::DisconnectKind
+  server = Obsctl::SpecSupport::FakeObsServer.new(
+    request_delays: {"GetVersion" => 2.seconds},
+    request_timeout_ms: 2_000
+  ).start
+  client = Obsctl::OBS::Client.new(server.config)
+  result = Channel(Exception?).new(1)
+
+  begin
+    client.connect
+    spawn do
+      client.version
+      result.send(nil)
+    rescue ex
+      result.send(ex)
+    end
+
+    server.next_request.should eq("GetVersion")
+    server.emit_raw_frame(frame)
+
+    error = result.receive
+    error.should be_a(Obsctl::Domain::ConnectionFailed)
+    error.as(Obsctl::Domain::ConnectionFailed).kind
+  ensure
+    client.try(&.close)
+    server.stop
+  end
 end
 
 private def wait_for_identify_data(server : Obsctl::SpecSupport::FakeObsServer) : JSON::Any

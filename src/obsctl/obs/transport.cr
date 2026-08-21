@@ -241,32 +241,25 @@ module Obsctl
       end
 
       private def handle_frame(frame : String) : Nil
-        opcode = Protocol::Message.opcode(frame)
-        begin
-          case opcode
-          when Protocol::Opcode::RequestResponse.value
-            route_response(frame)
-          when Protocol::Opcode::Event.value
-            if event = Protocol::Event.from_frame(frame)
-              queue_event(event)
-            end
-          else
-            @system_frames.send(frame)
-          end
-        rescue
-          if opcode == Protocol::Opcode::RequestResponse.value
-            fail_response_parser_error
-          else
-            fail_malformed_frame
-          end
+        root = Protocol::Message.parse(frame)
+        case root["op"].as_i
+        when Protocol::Opcode::RequestResponse.value
+          route_response(root)
+        when Protocol::Opcode::Event.value
+          queue_event(Protocol::Event.from_data(root))
+        else
+          # The handshake frames are consumed as raw text by `connect`, which
+          # is why the unparsed frame rather than the root goes on the channel.
+          @system_frames.send(frame)
         end
       rescue
         fail_malformed_frame
       end
 
-      private def route_response(frame : String) : Nil
-        response = Protocol::Response.from_frame(frame)
-        return unless response
+      # A response that arrives for no pending request is dropped: it is a
+      # reply to a request whose caller already gave up.
+      private def route_response(root : JSON::Any) : Nil
+        response = Protocol::Response.from_data(root)
 
         channel = @pending_lock.synchronize { @pending[response.request_id]? }
         send_pending(channel, response) if channel
