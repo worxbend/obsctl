@@ -39,7 +39,9 @@ module Obsctl
 
         checks.concat(credential_checks(config)) if config
         checks << socket_check
-        daemon = daemon_checks(checks)
+
+        daemon_check, daemon = daemon_check_and_status
+        checks << daemon_check
         checks << obs_check(daemon)
         checks << service_check
         checks
@@ -155,22 +157,30 @@ module Obsctl
         Check.ok("socket", @socket_path)
       end
 
-      # Appends the daemon check and returns its status payload when running.
-      private def daemon_checks(checks : Array(Check)) : JSON::Any?
+      # Reports whether the daemon answered, and hands back what it said.
+      #
+      # The status payload is returned as well as checked because `obs_check`
+      # reads OBS connectivity out of the same answer, and the daemon should
+      # be asked once. Returned as a pair, the way `config_checks` returns its
+      # checks with the config it loaded, rather than appended to the caller's
+      # array — a method that both fills in a list it was handed and returns a
+      # value has to be read twice to see what it did.
+      private def daemon_check_and_status : Tuple(Check, JSON::Any?)
         daemon = @daemon_probe.call(@socket_path)
 
         unless daemon
-          checks << Check.fail(
-            "daemon",
-            "no obsctl daemon is responding at #{@socket_path}",
-            "run: obsctl server --headless (or: obsctl service install)"
-          )
-          return
+          return {
+            Check.fail(
+              "daemon",
+              "no obsctl daemon is responding at #{@socket_path}",
+              "run: obsctl server --headless (or: obsctl service install)"
+            ),
+            nil,
+          }
         end
 
         pid = daemon["pid"]?.try(&.as_i64?)
-        checks << Check.ok("daemon", pid ? "running (pid #{pid})" : "running")
-        daemon
+        {Check.ok("daemon", pid ? "running (pid #{pid})" : "running"), daemon}
       end
 
       private def obs_check(daemon : JSON::Any?) : Check
