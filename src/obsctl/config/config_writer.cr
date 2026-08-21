@@ -47,10 +47,11 @@ module Obsctl
           created_backup = backup_path
         end
         temp = "#{path}.tmp.#{Process.pid}"
-        File.write(temp, contents)
-        # Before the rename, so the file is never briefly readable at the
-        # umask default under its final name.
-        File.chmod(temp, permissions)
+        # Created with its final mode rather than chmod'd afterwards: a
+        # `File.write` without `perm` creates at 0644-minus-umask, so between
+        # that call and the chmod the temp file already holds the plaintext
+        # password while any local user can read it.
+        File.write(temp, contents, perm: permissions)
         File.rename(temp, path)
         created_backup
       ensure
