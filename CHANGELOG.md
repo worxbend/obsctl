@@ -8,6 +8,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
+## [0.8.1] - 2026-08-21
+
+### Fixed
+
+- Credentials that leak into a log message are now masked before the entry
+  reaches the `logs` IPC topic, not only before it reaches the daemon's own
+  log file. `Runtime::Logger.redact_secrets` turns credential-shaped text such
+  as `password=hunter2` or `token: abc123` into `password=[redacted]`, and it
+  was applied in `Runtime::Logger#write` — which writes the local file and
+  stderr — and in the OBS supervisor. The two other producers of log entries
+  did not apply it: the daemon's own lifecycle logging passed its message
+  through untouched, and the command executor relied on
+  `IPC::ErrorPayload.sanitize_message`, which bounds and trims the text but
+  does not mask anything. An exception message quoting a password — a
+  connection error naming the URL it tried, say — was therefore masked in the
+  local file and sent verbatim to every `obsctl watch` and TUI client
+  subscribed to `logs`, which is the wrong way round: the file is local, the
+  topic is not. Redaction now happens where the entry is built, so every
+  producer gets it and a new one cannot forget it. Messages with no
+  credential-shaped text are unchanged.
+
+### Changed
+
+- The two surfaces that send commands to the daemon used to raise different
+  wording when asked to send a command that has no daemon equivalent — one
+  said `unsupported CLI command`, the other `unsupported TUI command`. Both
+  meant the same thing and neither is reachable by typing a valid command;
+  they now share one message, `command has no daemon equivalent`.
+
+### Internal
+
+- A round of restructuring that leaves every public contract — the command
+  line, the IPC protocol, the config format, the exit codes — exactly as it
+  was. The `logs` topic entry has one construction point instead of three;
+  the OBS supervisor's two near-identical failure paths are one; a parsed
+  command builds its own IPC payload rather than each surface assembling it;
+  and the dashboard's four panel cursors are keyed by panel, so operations
+  over "the focused panel's cursor" are a lookup rather than a four-armed
+  `case` repeated in five places.
+
 ## [0.8.0] - 2026-08-18
 
 ### Added
@@ -459,7 +499,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/worxbend/obsctl/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/worxbend/obsctl/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/worxbend/obsctl/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/worxbend/obsctl/compare/v0.5.0...v0.6.0
