@@ -70,7 +70,7 @@ module Obsctl
 
         if options.version || command == "version"
           write_version(stdout, json_output)
-          return 0
+          return Domain::ExitCode::Success.value
         end
 
         if json_output && !json_command?(command)
@@ -81,7 +81,7 @@ module Obsctl
         when "init"            then run_init(options, stdout)
         when "validate-config" then run_validate_config(options, stdout, stderr, json_output)
         when "doctor"
-          raise Domain::CommandParseError.new("wrong argument count for doctor") unless command_args.empty?
+          expect_arity!("doctor", command_args, 0)
           run_doctor(options.config_path, stdout, json_output)
         when "config"      then run_config(command_args, options, stdout, json_output)
         when "watch"       then run_watch(command_args, options, stdout)
@@ -96,13 +96,21 @@ module Obsctl
         end
       end
 
+      # `run` handles these commands itself instead of sending them to the
+      # daemon, so they miss the arity check `CommandRegistry` runs for the
+      # rest. The wording of the refusal is public contract, which is why the
+      # six local call sites share one place to raise it from.
+      private def self.expect_arity!(name : String, args : Array(String), max : Int32) : Nil
+        raise Domain::CommandParseError.new("wrong argument count for #{name}") if args.size > max
+      end
+
       private def self.run_init(options : Options, stdout : IO) : Int32
         if File.exists?(options.config_path) && !options.force
           raise Domain::ConfigInvalid.new("config already exists: #{options.config_path}; pass --force to overwrite")
         end
         Config::ConfigWriter.new.write_default(options.config_path)
         stdout.puts "created config: #{options.config_path}"
-        0
+        Domain::ExitCode::Success.value
       end
 
       private def self.run_validate_config(options : Options, stdout : IO, stderr : IO, json_output : Bool) : Int32
@@ -114,7 +122,7 @@ module Obsctl
         else
           stdout.puts message
         end
-        0
+        Domain::ExitCode::Success.value
       end
 
       private def self.run_server(options : Options, command_args : Array(String), log_level : Runtime::LogLevel, stderr : IO) : Int32
@@ -127,14 +135,14 @@ module Obsctl
 
       private def self.run_service(command_args : Array(String), service_installer : Service::ServiceInstaller?, stdout : IO) : Int32
         action = command_args[0]? || raise Domain::CommandParseError.new("missing service action")
-        raise Domain::CommandParseError.new("wrong argument count for service") if command_args.size > 1
+        expect_arity!("service", command_args, 1)
 
         stdout.puts (service_installer || Service::ServiceInstaller.new).run(action)
-        0
+        Domain::ExitCode::Success.value
       end
 
       private def self.run_tui(options : Options, command_args : Array(String), stdout : IO, tui_runner : Proc(String, Int32)?) : Int32
-        raise Domain::CommandParseError.new("wrong argument count for tui") unless command_args.empty?
+        expect_arity!("tui", command_args, 0)
         socket_path = client_socket_path(options.config_path)
         return tui_runner.call(socket_path) if tui_runner
 
@@ -196,6 +204,16 @@ module Obsctl
       # `watch` always writes newline-delimited JSON, so `--json` is accepted
       # for consistency with the other scriptable commands but changes nothing.
       private def self.run_watch(args : Array(String), options : Options, stdout : IO) : Int32
+        Watcher.new(
+          client_socket_path(options.config_path),
+          Watcher.validate_topics!(parse_watch_topics(args)),
+          stdout
+        ).run
+      end
+
+      # Reads the one flag `watch` accepts. The names are not validated here:
+      # `Watcher.validate_topics!` owns that, so an empty list still reaches it.
+      private def self.parse_watch_topics(args : Array(String)) : Array(String)
         topics = Watcher::DEFAULT_TOPICS
         index = 0
 
@@ -211,11 +229,7 @@ module Obsctl
           index += 1
         end
 
-        Watcher.new(
-          client_socket_path(options.config_path),
-          Watcher.validate_topics!(topics),
-          stdout
-        ).run
+        topics
       end
 
       private def self.run_completions(args : Array(String), options : Options, stdout : IO) : Int32
@@ -226,7 +240,7 @@ module Obsctl
 
         return run_completion_candidates(args[1..], options, stdout) if action == "candidates"
 
-        raise Domain::CommandParseError.new("wrong argument count for completions") if args.size > 1
+        expect_arity!("completions", args, 1)
         stdout.puts Completions.render(action)
         Domain::ExitCode::Success.value
       end
@@ -241,7 +255,7 @@ module Obsctl
         unless kind
           raise Domain::CommandParseError.new("missing kind; expected #{Completions::CANDIDATE_KINDS.join(", ")}")
         end
-        raise Domain::CommandParseError.new("wrong argument count for completions candidates") if args.size > 1
+        expect_arity!("completions candidates", args, 1)
 
         Completions.candidates(kind, completion_snapshot(options)).each { |name| stdout.puts name }
         Domain::ExitCode::Success.value
@@ -271,7 +285,7 @@ module Obsctl
         flags = args[1..]
         dry_run = flags.includes?("--dry-run")
         surplus = flags.reject { |flag| flag == "--dry-run" }
-        raise Domain::CommandParseError.new("wrong argument count for config #{action}") unless surplus.empty?
+        expect_arity!("config #{action}", surplus, 0)
         if dry_run && action != "migrate"
           raise Domain::CommandParseError.new("--dry-run is only supported for config migrate")
         end
