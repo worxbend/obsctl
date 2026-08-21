@@ -8,6 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
+## [0.8.2] - 2026-08-21
+
+### Internal
+
+- A second round of restructuring, behaviour-preserving throughout: no
+  change to the command line, the IPC protocol, the config format or the
+  exit codes. It removes a dead helper and finishes a doc comment that was
+  cut off mid-sentence in the OBS transport; gives the transport's
+  non-blocking channel send one name and one explanation instead of five
+  copies; gives the rule that obs-websocket sends whole numbers as JSON
+  integers and everything else as floats a single owner, rather than three
+  files having worked it out separately; names the empty-response fallback
+  that seventeen `OBS::Client` methods opened with; and stops
+  `obsctl doctor` handing its check list into a check that also returned a
+  value.
+- `Client#snapshot` now calls `scene_snapshot` and `audio_snapshot` instead
+  of repeating them. The block that decorates each live OBS scene with its
+  configured alias, shortcut, group and hidden flag existed twice, so a new
+  per-scene setting added to only one copy would have appeared or vanished
+  depending on whether the last update was a targeted refresh or a full one.
+- The conversion from an obs-websocket volume multiplier to the user-facing
+  0-100 scale moved to `Domain::Aliases.volume_mul_to_percent`, next to the
+  inverse that already lived there. It had been written out in both the OBS
+  client and the daemon's state store, with the reason for its clamp — OBS
+  permits gain above unity — recorded in neither.
+
 ## [0.8.1] - 2026-08-21
 
 ### Fixed
@@ -499,7 +525,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/worxbend/obsctl/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/worxbend/obsctl/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/worxbend/obsctl/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/worxbend/obsctl/compare/v0.6.0...v0.7.0
