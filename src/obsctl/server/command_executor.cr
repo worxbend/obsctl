@@ -146,9 +146,15 @@ module Obsctl
       end
 
       protected def set_volume(command : IPC::CommandPayload) : JSON::Any
-        input = resolve_audio(required_target(command))
         percent = command.percent
         raise Domain::CommandParseError.new("missing volume percent") unless percent
+        # The CLI and the TUI both bound this already, but the daemon is the
+        # authoritative state holder and anything at all can speak the IPC
+        # protocol directly, so the documented 0-100 range is enforced here too
+        # — before resolving the input, so a bad request costs no OBS lookup.
+        raise Domain::CommandParseError.new("volume must be from 0 to 100") unless 0 <= percent <= 100
+
+        input = resolve_audio(required_target(command))
 
         @supervisor.with_client(&.set_volume(input.name, percent))
         @state.update_input_volume(input.name, Domain::Aliases.volume_percent_to_mul(percent), nil)

@@ -200,6 +200,18 @@ describe Obsctl::Server::CommandExecutor do
     expect_error(response, Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR)
   end
 
+  it "rejects out-of-range volume percents that never passed CLI parsing" do
+    # The 0-100 bound is documented CLI grammar, but any process can speak the
+    # IPC protocol directly, so the daemon enforces its own contract.
+    [-1, 101, 100_000].each do |percent|
+      response = default_executor.execute(
+        command_request(Obsctl::IPC::CommandPayload.new("set_volume", "Desktop Audio", percent))
+      )
+
+      expect_error(response, Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR)
+    end
+  end
+
   it "returns CONFIG_INVALID for server-side config load failures" do
     path = File.join(Dir.tempdir, "obsctl-command-executor-missing-#{Random.rand(1_000_000)}.yml")
 
