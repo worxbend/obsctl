@@ -23,7 +23,13 @@ module Obsctl
       end
 
       # Writes raw config contents through a temporary file and final rename.
-      def write_atomic(path : String, contents : String, backup : Bool = true) : Nil
+      #
+      # Returns the path of the backup copy it made, or nil when it made none,
+      # so a caller that needs to tell the user where the old file went does not
+      # have to reconstruct the timestamped name — and cannot get it wrong when
+      # its own clock reading lands on the other side of a second boundary.
+      def write_atomic(path : String, contents : String, backup : Bool = true) : String?
+        created_backup = nil
         directory = File.dirname(path)
         FileUtils.mkdir_p(directory)
         # A rename replaces the file wholesale, so the destination's own
@@ -38,6 +44,7 @@ module Obsctl
           FileUtils.cp(path, backup_path)
           # The backup holds the same secrets as the original.
           File.chmod(backup_path, permissions)
+          created_backup = backup_path
         end
         temp = "#{path}.tmp.#{Process.pid}"
         File.write(temp, contents)
@@ -45,6 +52,7 @@ module Obsctl
         # umask default under its final name.
         File.chmod(temp, permissions)
         File.rename(temp, path)
+        created_backup
       ensure
         File.delete(temp) if temp && File.exists?(temp)
       end

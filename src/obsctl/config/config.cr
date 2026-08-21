@@ -14,6 +14,30 @@ module Obsctl
         multiplier : Float64 = 1.8,
         jitter_ms : Int32 = 250,
       )
+
+      # Raises `Domain::ConfigInvalid` when the backoff numbers cannot describe
+      # a usable retry schedule.
+      #
+      # Lives here rather than in `ConfigSchema` so that adding a field to this
+      # struct puts its rule in view; `ConfigSchema` is still the entry point
+      # that decides when validation runs.
+      def validate! : Nil
+        if initial_delay_ms < 0
+          raise Domain::ConfigInvalid.new("reconnect.initial_delay_ms cannot be negative")
+        end
+        if max_delay_ms < 0
+          raise Domain::ConfigInvalid.new("reconnect.max_delay_ms cannot be negative")
+        end
+        if max_delay_ms < initial_delay_ms
+          raise Domain::ConfigInvalid.new("reconnect.max_delay_ms must be greater than or equal to initial_delay_ms")
+        end
+        if multiplier < 1.0
+          raise Domain::ConfigInvalid.new("reconnect.multiplier must be at least 1.0")
+        end
+        if jitter_ms < 0
+          raise Domain::ConfigInvalid.new("reconnect.jitter_ms cannot be negative")
+        end
+      end
     end
 
     # Local daemon options that affect server IPC and lifecycle behavior.
@@ -47,6 +71,14 @@ module Obsctl
         # `password_env:` with no value parses as nil; the config model spells
         # that "no environment password" as the empty string.
         @password_env = "" if @password_env.nil?
+      end
+
+      # Raises `Domain::ConfigInvalid` when the endpoint could not be dialed.
+      def validate! : Nil
+        raise Domain::ConfigInvalid.new("host cannot be empty") if host.blank?
+        unless 1 <= port <= 65_535
+          raise Domain::ConfigInvalid.new("port must be from 1 to 65535")
+        end
       end
     end
 
@@ -108,6 +140,14 @@ module Obsctl
         custom_theme : CustomThemeConfig? = nil,
         locale : String? = nil,
       )
+
+      # Raises `Domain::ConfigInvalid` when a dashboard setting would leave the
+      # UI unable to run: a non-positive refresh interval, or an empty palette
+      # prefix that no keystroke could ever match.
+      def validate! : Nil
+        raise Domain::ConfigInvalid.new("ui.refresh_interval_ms must be positive") unless refresh_interval_ms > 0
+        raise Domain::ConfigInvalid.new("ui.command_palette_prefix cannot be empty") if command_palette_prefix.empty?
+      end
     end
 
     # Dashboard key bindings.
@@ -282,104 +322,136 @@ module Obsctl
         YAML.build(io) do |yaml|
           yaml.mapping do
             yaml.scalar "version"; yaml.scalar @version
-            yaml.scalar "server"
+            write_server(yaml)
+            write_connection(yaml)
+            write_reconnect(yaml)
+            write_scenes(yaml)
+            write_audio(yaml)
+            write_ui(yaml)
+            write_keymap(yaml)
+          end
+        end
+      end
+
+      private def write_server(yaml : YAML::Builder) : Nil
+        yaml.scalar "server"
+        yaml.mapping do
+          yaml.scalar "socket_path"; write_nullable_string(yaml, @server.socket_path)
+          yaml.scalar "pid_file"; write_nullable_string(yaml, @server.pid_file)
+          yaml.scalar "allow_remote_shutdown"; yaml.scalar @server.allow_remote_shutdown
+          yaml.scalar "start_embedded_if_missing"; yaml.scalar @server.start_embedded_if_missing
+        end
+      end
+
+      private def write_connection(yaml : YAML::Builder) : Nil
+        yaml.scalar "connection"
+        yaml.mapping do
+          yaml.scalar "host"; yaml.scalar @connection.host
+          yaml.scalar "port"; yaml.scalar @connection.port
+          if password_env = @connection.password_env
+            yaml.scalar "password_env"; yaml.scalar password_env
+          end
+          if password = @connection.password
+            yaml.scalar "password"; yaml.scalar password
+          end
+          yaml.scalar "connect_timeout_ms"; yaml.scalar @connection.connect_timeout_ms
+          yaml.scalar "request_timeout_ms"; yaml.scalar @connection.request_timeout_ms
+        end
+      end
+
+      private def write_reconnect(yaml : YAML::Builder) : Nil
+        yaml.scalar "reconnect"
+        yaml.mapping do
+          yaml.scalar "enabled"; yaml.scalar @reconnect.enabled
+          yaml.scalar "endless"; yaml.scalar @reconnect.endless
+          yaml.scalar "initial_delay_ms"; yaml.scalar @reconnect.initial_delay_ms
+          yaml.scalar "max_delay_ms"; yaml.scalar @reconnect.max_delay_ms
+          yaml.scalar "multiplier"; yaml.scalar @reconnect.multiplier
+          yaml.scalar "jitter_ms"; yaml.scalar @reconnect.jitter_ms
+        end
+      end
+
+      private def write_scenes(yaml : YAML::Builder) : Nil
+        yaml.scalar "scenes"
+        yaml.sequence do
+          @scenes.each do |scene|
             yaml.mapping do
-              yaml.scalar "socket_path"; write_nullable_string(yaml, @server.socket_path)
-              yaml.scalar "pid_file"; write_nullable_string(yaml, @server.pid_file)
-              yaml.scalar "allow_remote_shutdown"; yaml.scalar @server.allow_remote_shutdown
-              yaml.scalar "start_embedded_if_missing"; yaml.scalar @server.start_embedded_if_missing
-            end
-            yaml.scalar "connection"
-            yaml.mapping do
-              yaml.scalar "host"; yaml.scalar @connection.host
-              yaml.scalar "port"; yaml.scalar @connection.port
-              if password_env = @connection.password_env
-                yaml.scalar "password_env"; yaml.scalar password_env
+              yaml.scalar "name"; yaml.scalar scene.name
+              write_optional(yaml, "alias", scene.alias)
+              write_optional(yaml, "shortcut", scene.shortcut)
+              write_optional(yaml, "group", scene.group)
+              if scene.stale
+                yaml.scalar "stale"; yaml.scalar true
               end
-              if password = @connection.password
-                yaml.scalar "password"; yaml.scalar password
+              if scene.hidden
+                yaml.scalar "hidden"; yaml.scalar true
               end
-              yaml.scalar "connect_timeout_ms"; yaml.scalar @connection.connect_timeout_ms
-              yaml.scalar "request_timeout_ms"; yaml.scalar @connection.request_timeout_ms
-            end
-            yaml.scalar "reconnect"
-            yaml.mapping do
-              yaml.scalar "enabled"; yaml.scalar @reconnect.enabled
-              yaml.scalar "endless"; yaml.scalar @reconnect.endless
-              yaml.scalar "initial_delay_ms"; yaml.scalar @reconnect.initial_delay_ms
-              yaml.scalar "max_delay_ms"; yaml.scalar @reconnect.max_delay_ms
-              yaml.scalar "multiplier"; yaml.scalar @reconnect.multiplier
-              yaml.scalar "jitter_ms"; yaml.scalar @reconnect.jitter_ms
-            end
-            yaml.scalar "scenes"
-            yaml.sequence do
-              @scenes.each do |scene|
-                yaml.mapping do
-                  yaml.scalar "name"; yaml.scalar scene.name
-                  write_optional(yaml, "alias", scene.alias)
-                  write_optional(yaml, "shortcut", scene.shortcut)
-                  write_optional(yaml, "group", scene.group)
-                  if scene.stale
-                    yaml.scalar "stale"; yaml.scalar true
-                  end
-                  if scene.hidden
-                    yaml.scalar "hidden"; yaml.scalar true
-                  end
-                end
-              end
-            end
-            yaml.scalar "audio"
-            yaml.mapping do
-              yaml.scalar "inputs"
-              yaml.sequence do
-                @audio.inputs.each do |input|
-                  yaml.mapping do
-                    yaml.scalar "name"; yaml.scalar input.name
-                    write_optional(yaml, "alias", input.alias)
-                    write_optional(yaml, "shortcut", input.shortcut)
-                    yaml.scalar "kind"; yaml.scalar input.kind
-                    if input.stale
-                      yaml.scalar "stale"; yaml.scalar true
-                    end
-                  end
-                end
-              end
-            end
-            yaml.scalar "ui"
-            yaml.mapping do
-              yaml.scalar "refresh_interval_ms"; yaml.scalar @ui.refresh_interval_ms
-              yaml.scalar "command_palette_prefix"; yaml.scalar @ui.command_palette_prefix
-              yaml.scalar "advanced_ui"; yaml.scalar @ui.advanced_ui
-              yaml.scalar "show_icons"; yaml.scalar @ui.show_icons
-              yaml.scalar "theme"; yaml.scalar @ui.theme
-              if custom = @ui.custom_theme
-                yaml.scalar "custom_theme"
-                yaml.mapping do
-                  write_optional(yaml, "bg", custom.bg)
-                  write_optional(yaml, "accent", custom.accent)
-                  write_optional(yaml, "accent_alt", custom.accent_alt)
-                  write_optional(yaml, "fg", custom.fg)
-                  write_optional(yaml, "muted", custom.muted)
-                  write_optional(yaml, "border", custom.border)
-                  write_optional(yaml, "border_focus", custom.border_focus)
-                  write_optional(yaml, "success", custom.success)
-                  write_optional(yaml, "warning", custom.warning)
-                  write_optional(yaml, "danger", custom.danger)
-                  write_optional(yaml, "info", custom.info)
-                  write_optional(yaml, "highlight_bg", custom.highlight_bg)
-                  write_optional(yaml, "highlight_fg", custom.highlight_fg)
-                end
-              end
-              write_optional(yaml, "locale", @ui.locale)
-            end
-            yaml.scalar "keymap"
-            yaml.mapping do
-              write_keys(yaml, "quit", @keymap.quit)
-              write_keys(yaml, "command_palette", @keymap.command_palette)
-              write_keys(yaml, "reload_config", @keymap.reload_config)
-              write_keys(yaml, "dump_config", @keymap.dump_config)
             end
           end
+        end
+      end
+
+      private def write_audio(yaml : YAML::Builder) : Nil
+        yaml.scalar "audio"
+        yaml.mapping do
+          yaml.scalar "inputs"
+          yaml.sequence do
+            @audio.inputs.each do |input|
+              yaml.mapping do
+                yaml.scalar "name"; yaml.scalar input.name
+                write_optional(yaml, "alias", input.alias)
+                write_optional(yaml, "shortcut", input.shortcut)
+                yaml.scalar "kind"; yaml.scalar input.kind
+                if input.stale
+                  yaml.scalar "stale"; yaml.scalar true
+                end
+              end
+            end
+          end
+        end
+      end
+
+      private def write_ui(yaml : YAML::Builder) : Nil
+        yaml.scalar "ui"
+        yaml.mapping do
+          yaml.scalar "refresh_interval_ms"; yaml.scalar @ui.refresh_interval_ms
+          yaml.scalar "command_palette_prefix"; yaml.scalar @ui.command_palette_prefix
+          yaml.scalar "advanced_ui"; yaml.scalar @ui.advanced_ui
+          yaml.scalar "show_icons"; yaml.scalar @ui.show_icons
+          yaml.scalar "theme"; yaml.scalar @ui.theme
+          if custom = @ui.custom_theme
+            write_custom_theme(yaml, custom)
+          end
+          write_optional(yaml, "locale", @ui.locale)
+        end
+      end
+
+      private def write_custom_theme(yaml : YAML::Builder, custom : CustomThemeConfig) : Nil
+        yaml.scalar "custom_theme"
+        yaml.mapping do
+          write_optional(yaml, "bg", custom.bg)
+          write_optional(yaml, "accent", custom.accent)
+          write_optional(yaml, "accent_alt", custom.accent_alt)
+          write_optional(yaml, "fg", custom.fg)
+          write_optional(yaml, "muted", custom.muted)
+          write_optional(yaml, "border", custom.border)
+          write_optional(yaml, "border_focus", custom.border_focus)
+          write_optional(yaml, "success", custom.success)
+          write_optional(yaml, "warning", custom.warning)
+          write_optional(yaml, "danger", custom.danger)
+          write_optional(yaml, "info", custom.info)
+          write_optional(yaml, "highlight_bg", custom.highlight_bg)
+          write_optional(yaml, "highlight_fg", custom.highlight_fg)
+        end
+      end
+
+      private def write_keymap(yaml : YAML::Builder) : Nil
+        yaml.scalar "keymap"
+        yaml.mapping do
+          write_keys(yaml, "quit", @keymap.quit)
+          write_keys(yaml, "command_palette", @keymap.command_palette)
+          write_keys(yaml, "reload_config", @keymap.reload_config)
+          write_keys(yaml, "dump_config", @keymap.dump_config)
         end
       end
 

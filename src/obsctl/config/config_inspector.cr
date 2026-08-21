@@ -117,8 +117,7 @@ module Obsctl
 
         return Migration.new(changed, dropped, added) if dry_run || !changed
 
-        backup_path = backup_path_for(path)
-        writer.write_atomic(path, canonical, backup: true)
+        backup_path = writer.write_atomic(path, canonical, backup: true)
         Migration.new(true, dropped, added, backup_path)
       end
 
@@ -171,11 +170,6 @@ module Obsctl
         raw = node.raw
         return "null" if raw.nil?
         raw.to_s
-      end
-
-      # Mirrors the timestamped name ConfigWriter#write_atomic produces.
-      private def self.backup_path_for(path : String) : String
-        "#{path}.bak.#{Time.utc.to_s("%Y%m%d%H%M%S")}"
       end
     end
   end

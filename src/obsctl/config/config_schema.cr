@@ -9,33 +9,15 @@ module Obsctl
       # behavior ambiguous, unsafe, or impossible.
       def self.validate!(config : Config) : Nil
         raise Domain::ConfigInvalid.new("unsupported config version: #{config.version}") unless config.version == 1
-        raise Domain::ConfigInvalid.new("host cannot be empty") if config.connection.host.blank?
-        unless 1 <= config.connection.port <= 65_535
-          raise Domain::ConfigInvalid.new("port must be from 1 to 65535")
-        end
+        config.connection.validate!
         if socket_path = config.server.socket_path
           raise Domain::ConfigInvalid.new("server.socket_path cannot be blank") if socket_path.blank?
         end
         if pid_file = config.server.pid_file
           raise Domain::ConfigInvalid.new("server.pid_file cannot be blank") if pid_file.blank?
         end
-        if config.reconnect.initial_delay_ms < 0
-          raise Domain::ConfigInvalid.new("reconnect.initial_delay_ms cannot be negative")
-        end
-        if config.reconnect.max_delay_ms < 0
-          raise Domain::ConfigInvalid.new("reconnect.max_delay_ms cannot be negative")
-        end
-        if config.reconnect.max_delay_ms < config.reconnect.initial_delay_ms
-          raise Domain::ConfigInvalid.new("reconnect.max_delay_ms must be greater than or equal to initial_delay_ms")
-        end
-        if config.reconnect.multiplier < 1.0
-          raise Domain::ConfigInvalid.new("reconnect.multiplier must be at least 1.0")
-        end
-        if config.reconnect.jitter_ms < 0
-          raise Domain::ConfigInvalid.new("reconnect.jitter_ms cannot be negative")
-        end
-        raise Domain::ConfigInvalid.new("ui.refresh_interval_ms must be positive") unless config.ui.refresh_interval_ms > 0
-        raise Domain::ConfigInvalid.new("ui.command_palette_prefix cannot be empty") if config.ui.command_palette_prefix.empty?
+        config.reconnect.validate!
+        config.ui.validate!
 
         duplicates(config.scenes.compact_map(&.alias), "duplicate scene alias")
         duplicates(config.scenes.compact_map(&.shortcut), "duplicate scene shortcut")

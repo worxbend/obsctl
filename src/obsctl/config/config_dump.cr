@@ -48,78 +48,28 @@ module Obsctl
       end
 
       private def self.validate_conflicts!(config : Config) : Nil
-        validate_scene_conflicts!(config.scenes)
-        validate_audio_conflicts!(config.audio.inputs)
+        validate_entry_conflicts!(config.scenes, "scene")
+        validate_entry_conflicts!(config.audio.inputs, "audio input")
       end
 
-      private def self.validate_scene_conflicts!(scenes : Array(SceneConfig)) : Nil
-        validate_duplicate_controls!(
-          scenes,
-          "scene",
-          "alias",
-          ->(scene : SceneConfig) { scene.alias },
-          ->(scene : SceneConfig) { scene.name }
-        )
-        validate_duplicate_controls!(
-          scenes,
-          "scene",
-          "shortcut",
-          ->(scene : SceneConfig) { scene.shortcut },
-          ->(scene : SceneConfig) { scene.name }
-        )
-        validate_control_name_collisions!(
-          scenes,
-          "scene",
-          "alias",
-          ->(scene : SceneConfig) { scene.alias },
-          ->(scene : SceneConfig) { scene.name }
-        )
-        validate_control_name_collisions!(
-          scenes,
-          "scene",
-          "shortcut",
-          ->(scene : SceneConfig) { scene.shortcut },
-          ->(scene : SceneConfig) { scene.name }
-        )
+      # Runs both conflict checks over both control kinds for one list.
+      #
+      # `T` is `SceneConfig` or `AudioInputConfig`; the two are unrelated types
+      # that happen to expose the same `name`, `alias` and `shortcut`, which is
+      # all these checks read, so a free type variable is enough to serve both.
+      private def self.validate_entry_conflicts!(entries : Array(T), kind : String) : Nil forall T
+        validate_duplicate_controls!(entries, kind, "alias", &.alias)
+        validate_duplicate_controls!(entries, kind, "shortcut", &.shortcut)
+        validate_control_name_collisions!(entries, kind, "alias", &.alias)
+        validate_control_name_collisions!(entries, kind, "shortcut", &.shortcut)
       end
 
-      private def self.validate_audio_conflicts!(inputs : Array(AudioInputConfig)) : Nil
-        validate_duplicate_controls!(
-          inputs,
-          "audio input",
-          "alias",
-          ->(input : AudioInputConfig) { input.alias },
-          ->(input : AudioInputConfig) { input.name }
-        )
-        validate_duplicate_controls!(
-          inputs,
-          "audio input",
-          "shortcut",
-          ->(input : AudioInputConfig) { input.shortcut },
-          ->(input : AudioInputConfig) { input.name }
-        )
-        validate_control_name_collisions!(
-          inputs,
-          "audio input",
-          "alias",
-          ->(input : AudioInputConfig) { input.alias },
-          ->(input : AudioInputConfig) { input.name }
-        )
-        validate_control_name_collisions!(
-          inputs,
-          "audio input",
-          "shortcut",
-          ->(input : AudioInputConfig) { input.shortcut },
-          ->(input : AudioInputConfig) { input.name }
-        )
-      end
-
-      private def self.validate_duplicate_controls!(entries : Array(T), kind : String, control_kind : String, control_value : Proc(T, String?), entry_name : Proc(T, String)) : Nil forall T
+      private def self.validate_duplicate_controls!(entries : Array(T), kind : String, control_kind : String, & : T -> String?) : Nil forall T
         by_value = Hash(String, Array(String)).new { |hash, key| hash[key] = [] of String }
         entries.each do |entry|
-          value = normalized(control_value.call(entry))
+          value = normalized(yield entry)
           next unless value
-          by_value[value] << entry_name.call(entry)
+          by_value[value] << entry.name
         end
 
         by_value.each do |value, names|
@@ -128,17 +78,17 @@ module Obsctl
         end
       end
 
-      private def self.validate_control_name_collisions!(entries : Array(T), kind : String, control_kind : String, control_value : Proc(T, String?), entry_name : Proc(T, String)) : Nil forall T
+      private def self.validate_control_name_collisions!(entries : Array(T), kind : String, control_kind : String, & : T -> String?) : Nil forall T
         names_by_value = Hash(String, String).new
         entries.each do |entry|
-          names_by_value[entry_name.call(entry).downcase] = entry_name.call(entry)
+          names_by_value[entry.name.downcase] = entry.name
         end
 
         entries.each do |entry|
-          value = normalized(control_value.call(entry))
+          value = normalized(yield entry)
           next unless value
 
-          owner = entry_name.call(entry)
+          owner = entry.name
           conflicting_name = names_by_value[value]?
           next unless conflicting_name
           next if conflicting_name.downcase == owner.downcase
