@@ -1,4 +1,5 @@
 require "json"
+require "../protocol/json_value"
 
 module Obsctl
   module OBS
@@ -27,13 +28,15 @@ module Obsctl
           )
         end
 
-        private def self.number(data, key)
-          value = data[key]?
-          value.try(&.as_f?) || value.try(&.as_i?).try(&.to_f64) || 0.0
+        # A stat OBS did not report reads as zero rather than as an absence:
+        # these are counters and gauges on a dashboard, and every field of
+        # `ObsStats` is a plain number so the widgets never have to ask.
+        private def self.number(data : JSON::Any, key : String) : Float64
+          Protocol::JsonValue.number(data, key) || 0.0
         end
 
-        private def self.integer(data, key)
-          data[key]?.try(&.as_i64?) || 0_i64
+        private def self.integer(data : JSON::Any, key : String) : Int64
+          Protocol::JsonValue.integer(data, key) || 0_i64
         end
       end
     end

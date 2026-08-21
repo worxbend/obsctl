@@ -1,5 +1,6 @@
 require "json"
 require "./transport"
+require "./protocol/json_value"
 require "./protocol/response"
 require "./protocol/event"
 require "./protocol/event_subscription"
@@ -337,9 +338,7 @@ module Obsctl
       end
 
       private def number(data : JSON::Any, key : String) : Float64?
-        value = data[key]?
-        return unless value
-        value.as_f? || value.as_i?.try(&.to_f64)
+        Protocol::JsonValue.number(data, key)
       end
     end
   end

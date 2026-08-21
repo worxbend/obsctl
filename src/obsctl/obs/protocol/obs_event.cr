@@ -1,5 +1,6 @@
 require "json"
 require "./event"
+require "./json_value"
 
 module Obsctl
   module OBS
@@ -112,21 +113,15 @@ module Obsctl
         end
 
         private def self.string(data : JSON::Any?, key : String) : String?
-          data.try(&.[key]?).try(&.as_s?)
+          JsonValue.string(data, key)
         end
 
         private def self.boolean(data : JSON::Any?, key : String) : Bool?
-          data.try(&.[key]?).try(&.as_bool?)
+          JsonValue.boolean(data, key)
         end
 
-        # OBS sends whole-number volumes as JSON integers and everything else as
-        # floats, so a reading of exactly 1 arrives with a different JSON type
-        # than a reading of 0.5. Both are the same quantity here.
         private def self.number(data : JSON::Any?, key : String) : Float64?
-          value = data.try(&.[key]?)
-          return unless value
-
-          value.as_f? || value.as_i?.try(&.to_f64)
+          JsonValue.number(data, key)
         end
       end
     end
