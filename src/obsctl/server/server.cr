@@ -4,6 +4,7 @@ require "../ipc/protocol"
 require "../runtime/logger"
 require "./best_effort_log_broadcast"
 require "./client_registry"
+require "./log_payload"
 require "./command_executor"
 require "./obs_supervisor"
 require "./server_options"
@@ -96,12 +97,7 @@ module Obsctl
       end
 
       private def log(level : String, code : String, message : String) : Nil
-        broadcast_log(JSON.parse({
-          level:      level,
-          code:       code,
-          message:    message,
-          created_at: Time.utc.to_rfc3339,
-        }.to_json))
+        broadcast_log(LogPayload.build(level, code, message))
       end
 
       private def handle_session(session : IPC::ClientSession) : Nil

@@ -8,6 +8,7 @@ require "../domain/errors"
 require "../ipc/command_name"
 require "../ipc/request"
 require "../ipc/response"
+require "./log_payload"
 require "./obs_supervisor"
 require "./state_store"
 
@@ -324,12 +325,7 @@ module Obsctl
       end
 
       private def publish_log(level : String, code : String, message : String) : Nil
-        @log_broadcast.try(&.call(JSON.parse({
-          level:      level,
-          code:       code,
-          message:    message,
-          created_at: Time.utc.to_rfc3339,
-        }.to_json)))
+        @log_broadcast.try(&.call(LogPayload.build(level, code, message)))
       end
     end
   end

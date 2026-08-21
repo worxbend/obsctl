@@ -6,6 +6,7 @@ require "../obs/protocol/event_subscription"
 require "../obs/protocol/obs_event"
 require "../runtime/logger"
 require "../runtime/reconnect_policy"
+require "./log_payload"
 require "./reconnect_signal"
 require "./state_store"
 
@@ -395,12 +396,7 @@ module Obsctl
       end
 
       private def log_payload(level : String, code : String, message : String, at : Time = Time.utc) : JSON::Any
-        JSON.parse({
-          level:      level,
-          code:       code,
-          message:    Runtime::Logger.redact_secrets(message),
-          created_at: at.to_rfc3339,
-        }.to_json)
+        LogPayload.build(level, code, Runtime::Logger.redact_secrets(message), at)
       end
 
       private def publish_reconnect(publication : ReconnectPublication) : Nil
