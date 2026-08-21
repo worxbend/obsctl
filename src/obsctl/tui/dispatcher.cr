@@ -356,10 +356,7 @@ module Obsctl
           return IPC::CommandPayload.new({{ name }}) if command.is_a?({{ type }})
         {% end %}
 
-        name = command.ipc_name
-        raise Domain::CommandParseError.new("unsupported TUI command") unless name
-
-        IPC::CommandPayload.new(name, command.target, command.percent)
+        command.to_payload
       end
 
       private def command(payload : IPC::CommandPayload) : ActionOutcome

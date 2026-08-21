@@ -1,4 +1,6 @@
 require "../ipc/command_name"
+require "../ipc/request"
+require "./errors"
 
 module Obsctl
   module Domain
@@ -22,6 +24,24 @@ module Obsctl
       # Payload percentage, for commands that carry a level.
       def percent : Int32?
         nil
+      end
+
+      # Builds the IPC payload that asks the daemon to run this command.
+      #
+      # Both surfaces that talk to the daemon — the thin CLI client and the
+      # TUI dispatcher — used to assemble this themselves from `ipc_name`,
+      # `target`, and `percent`. Doing it here is what makes the claim in the
+      # comment above true: there is one description of how a parsed command
+      # becomes a request, so the two surfaces cannot send different things
+      # for the same command.
+      #
+      # Raises when the command has no IPC name, which means it is resolved
+      # entirely client-side (`help`, `quit`) and was never meant to be sent.
+      def to_payload : IPC::CommandPayload
+        name = ipc_name
+        raise CommandParseError.new("command has no daemon equivalent") unless name
+
+        IPC::CommandPayload.new(name, target, percent)
       end
     end
 

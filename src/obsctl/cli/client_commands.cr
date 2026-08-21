@@ -53,17 +53,10 @@ module Obsctl
         Domain::CommandResult.ok(format_response(command, response.result))
       end
 
+      # Commands build their own payload, so there is no table here to keep in
+      # step with `Domain::CommandRegistry`.
       private def request_for(command : Domain::Command) : IPC::Request
-        IPC::Request.new(next_id, IPC::Request::TYPE_COMMAND, payload_for(command))
-      end
-
-      # Commands carry their own IPC name and payload arguments, so there is no
-      # table to keep in step with `Domain::CommandRegistry`.
-      private def payload_for(command : Domain::Command) : IPC::CommandPayload
-        name = command.ipc_name
-        raise Domain::CommandParseError.new("unsupported CLI command") unless name
-
-        IPC::CommandPayload.new(name, command.target, command.percent)
+        IPC::Request.new(next_id, IPC::Request::TYPE_COMMAND, command.to_payload)
       end
 
       # Turns a successful response into the line(s) the user sees.
