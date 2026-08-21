@@ -260,12 +260,7 @@ module Obsctl
 
         @model.focus = panel
         if index = action.index
-          case panel
-          when .scenes?      then @model.scene_cursor = index
-          when .audio?       then @model.audio_cursor = index
-          when .profiles?    then @model.profile_cursor = index
-          when .collections? then @model.collection_cursor = index
-          end
+          @model.set_cursor(panel, index)
           @model.clamp_cursors
         end
 

@@ -110,10 +110,20 @@ module Obsctl
       property last_result_frame : UInt64
       property connected_to_daemon : Bool
       property focus : FocusPanel
-      property scene_cursor : Int32
-      property audio_cursor : Int32
-      property profile_cursor : Int32
-      property collection_cursor : Int32
+      # One cursor per panel, keyed by the panel it belongs to.
+      #
+      # These were four separate fields, which made every operation over "the
+      # cursor of whichever panel is focused" a four-armed `case` on
+      # `FocusPanel` — one to read it, one to move it, one to clamp them all,
+      # and one more in the dispatcher to place it after a click. Adding a
+      # fifth panel meant finding every one of them, and missing one failed
+      # quietly, as a cursor that simply stopped responding in that panel.
+      # Keyed by the enum, each of those becomes a lookup.
+      #
+      # The `scene_cursor`, `audio_cursor`, `profile_cursor` and
+      # `collection_cursor` accessors below are unchanged for callers; they
+      # now read and write this map.
+      @cursors : Hash(FocusPanel, Int32)
       property meter_levels : Hash(String, Float64)
       # The highest point each meter has reached and the frame it reached it
       # on. Storing the frame rather than decaying the value every tick keeps
@@ -153,10 +163,7 @@ module Obsctl
         @last_result_frame = 0_u64
         @connected_to_daemon = false
         @focus = FocusPanel::Scenes
-        @scene_cursor = 0
-        @audio_cursor = 0
-        @profile_cursor = 0
-        @collection_cursor = 0
+        @cursors = FocusPanel.values.to_h { |panel| {panel, 0} }
         @meter_levels = {} of String => Float64
         @meter_peaks = {} of String => Tuple(Float64, UInt64)
         @cpu_history = [] of Float64
@@ -348,23 +355,29 @@ module Obsctl
       # Cursor moves are clamped rather than wrapped: `G` on the last item and
       # a half page past the end both stop at the end, the way they do in vim.
       def move_to(index : Int32)
-        bounded = index.clamp(0, {item_count - 1, 0}.max)
-        case @focus
-        when .scenes?      then @scene_cursor = bounded
-        when .audio?       then @audio_cursor = bounded
-        when .profiles?    then @profile_cursor = bounded
-        when .collections? then @collection_cursor = bounded
-        end
+        set_cursor(@focus, index.clamp(0, {item_count - 1, 0}.max))
       end
 
       def cursor(panel : FocusPanel = @focus) : Int32
-        case panel
-        when .scenes?   then @scene_cursor
-        when .audio?    then @audio_cursor
-        when .profiles? then @profile_cursor
-        else                 @collection_cursor
-        end
+        @cursors[panel]
       end
+
+      # Places a panel's cursor without moving focus, which is what a click
+      # needs: the pointer says both which panel and which row.
+      def set_cursor(panel : FocusPanel, index : Int32) : Nil
+        @cursors[panel] = index
+      end
+
+      # The per-panel names the widgets and the hit test read.
+      {% for panel, name in {Scenes: "scene", Audio: "audio", Profiles: "profile", Collections: "collection"} %}
+        def {{ name.id }}_cursor : Int32
+          cursor(FocusPanel::{{ panel.id }})
+        end
+
+        def {{ name.id }}_cursor=(index : Int32) : Nil
+          set_cursor(FocusPanel::{{ panel.id }}, index)
+        end
+      {% end %}
 
       def item_count(panel : FocusPanel = @focus) : Int32
         case panel
@@ -375,20 +388,21 @@ module Obsctl
         end
       end
 
+      # Pulls every cursor back inside its panel after the lists change, so a
+      # scene deleted in OBS cannot leave a cursor pointing past the end.
       def clamp_cursors
-        @scene_cursor = @scene_cursor.clamp(0, {scenes.size - 1, 0}.max)
-        @audio_cursor = @audio_cursor.clamp(0, {audio_inputs.size - 1, 0}.max)
-        @profile_cursor = @profile_cursor.clamp(0, {profiles.size - 1, 0}.max)
-        @collection_cursor = @collection_cursor.clamp(0, {scene_collections.size - 1, 0}.max)
+        @cursors.each_key do |panel|
+          @cursors[panel] = @cursors[panel].clamp(0, {item_count(panel) - 1, 0}.max)
+        end
         @scene_picker_cursor = @scene_picker_cursor.clamp(0, {scenes.size - 1, 0}.max)
       end
 
       def focused_scene : OBS::State::SceneState?
-        scenes[@scene_cursor]?
+        scenes[scene_cursor]?
       end
 
       def focused_audio : OBS::State::AudioState?
-        audio_inputs[@audio_cursor]?
+        audio_inputs[audio_cursor]?
       end
     end
   end
