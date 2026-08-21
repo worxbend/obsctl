@@ -396,7 +396,7 @@ module Obsctl
       end
 
       private def log_payload(level : String, code : String, message : String, at : Time = Time.utc) : JSON::Any
-        LogPayload.build(level, code, Runtime::Logger.redact_secrets(message), at)
+        LogPayload.build(level, code, message, at)
       end
 
       private def publish_reconnect(publication : ReconnectPublication) : Nil

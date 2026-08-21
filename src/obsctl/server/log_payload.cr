@@ -1,4 +1,5 @@
 require "json"
+require "../runtime/logger"
 
 module Obsctl
   module Server
@@ -13,11 +14,16 @@ module Obsctl
     module LogPayload
       # Builds one log entry: severity, stable machine-readable code, human
       # message, and the moment it happened.
+      #
+      # The message is redacted here rather than by each caller. A `logs`
+      # entry is pushed to every subscriber over IPC, so this — not the logger
+      # that writes the daemon's own file — is the last point at which a
+      # credential that leaked into an exception message can still be caught.
       def self.build(level : String, code : String, message : String, at : Time = Time.utc) : JSON::Any
         JSON.parse({
           level:      level,
           code:       code,
-          message:    message,
+          message:    Runtime::Logger.redact_secrets(message),
           created_at: at.to_rfc3339,
         }.to_json)
       end
