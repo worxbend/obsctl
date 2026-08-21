@@ -52,6 +52,21 @@ end
 macro config_value(*fields)
   include YAML::Serializable
 
+  # Every field this type declares, in declaration order.
+  #
+  # `Config#to_yaml` is written by hand rather than derived from these
+  # declarations, because the on-disk format has key-order and omit-when-unset
+  # rules that a generated serializer would not follow. That leaves a gap: a
+  # field added here is loaded correctly but can be silently dropped on write,
+  # which loses the setting the next time `obsctl config migrate` rewrites the
+  # file. Exposing the names gives `config_to_yaml_coverage_spec.cr` something
+  # mechanical to check the writers against.
+  FIELD_NAMES = [
+    {% for field in fields %}
+      {{ field.var.stringify }},
+    {% end %}
+  ] of String
+
   {% for field in fields %}
     {% if field.type.stringify == "String" %}
       @[YAML::Field(key: {{ field.var.stringify }}, converter: Obsctl::Config::ScalarStringConverter)]
