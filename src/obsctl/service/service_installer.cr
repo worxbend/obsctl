@@ -7,8 +7,6 @@ module Obsctl
   module Service
     # Installs and controls the obsctl systemd user service.
     class ServiceInstaller
-      VALID_ACTIONS = %w[install uninstall status start stop restart]
-
       # Creates a service installer with injectable paths and command runner for tests.
       def initialize(
         @service_path : String = SystemdUserService.default_path,
@@ -19,10 +17,6 @@ module Obsctl
 
       # Runs a service action such as install, start, status, or uninstall.
       def run(action : String) : String
-        unless VALID_ACTIONS.includes?(action)
-          raise Domain::CommandParseError.new("unknown service action: #{action}")
-        end
-
         case action
         when "install"
           install
