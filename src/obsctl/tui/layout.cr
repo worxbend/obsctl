@@ -27,6 +27,22 @@ module Obsctl
       end
     end
 
+    # Geometry every bordered panel shares, so the widgets and the hit test
+    # agree on which cells a panel's content occupies.
+    module PanelGeometry
+      extend self
+
+      # Panels are drawn inside a one-cell border on every side.
+      #
+      # Not `CryTUI::Rect#inner(1)`: that clamps the margin to half the extent,
+      # so on a rect one or two cells wide it keeps content the border would
+      # have covered here. Clicks have to land on the row that was drawn, so
+      # the subtraction stays literal.
+      def inner(area : CryTUI::Rect) : CryTUI::Rect
+        CryTUI::Rect.new(area.x + 1, area.y + 1, {area.width - 2, 0}.max, {area.height - 2, 0}.max)
+      end
+    end
+
     module DashboardLayout
       extend self
 
@@ -120,9 +136,8 @@ module Obsctl
         STRIP_WIDTH + GAP
       end
 
-      # Panels are drawn inside a one-cell border on every side.
       def inner(area : CryTUI::Rect) : CryTUI::Rect
-        CryTUI::Rect.new(area.x + 1, area.y + 1, {area.width - 2, 0}.max, {area.height - 2, 0}.max)
+        PanelGeometry.inner(area)
       end
 
       # Strips that fit side by side. Always at least one, so a panel too

@@ -85,10 +85,6 @@ module Obsctl
         end
       end
 
-      private def string_array(data : JSON::Any?) : Array(String)
-        data.try(&.as_a?).try(&.compact_map(&.as_s?)) || [] of String
-      end
-
       private def number(data : JSON::Any?) : Float64?
         data.try { |value| value.as_f? || value.as_i?.try(&.to_f64) }
       end

@@ -95,7 +95,7 @@ module Obsctl
           return Action.new(ActionKind::PointerToggleMute, panel: target.panel, index: index)
         end
 
-        already_selected = target.panel == model.focus && index == selected_index(model, target.panel)
+        already_selected = target.panel == model.focus && index == model.cursor(target.panel)
         kind = already_selected ? ActionKind::PointerActivate : ActionKind::PointerFocus
         Action.new(kind, panel: target.panel, index: index)
       end
@@ -180,16 +180,6 @@ module Obsctl
         inside = event.column >= palette.x && event.column < palette.right &&
                  event.row >= palette.y && event.row < palette.bottom
         inside ? nil : action(ActionKind::ClosePalette)
-      end
-
-      private def selected_index(model : Model, panel : FocusPanel) : Int32
-        case panel
-        when .scenes?      then model.scene_cursor
-        when .audio?       then model.audio_cursor
-        when .profiles?    then model.profile_cursor
-        when .collections? then model.collection_cursor
-        else                    -1
-        end
       end
 
       # A key pressed with nothing pending: it either is a sequence binding on

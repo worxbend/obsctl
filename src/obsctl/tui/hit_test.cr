@@ -96,13 +96,7 @@ module Obsctl
 
       private def list_target(panel : FocusPanel, area : CryTUI::Rect, model : Model, column : Int32, row : Int32) : PointerTarget?
         return unless contains?(area, column, row)
-        count = case panel
-                when .scenes?      then model.scenes.size
-                when .profiles?    then model.profiles.size
-                when .collections? then model.scene_collections.size
-                else                    0
-                end
-        index = item_at(area, Array.new(count, 1), cursor_for(model, panel), row)
+        index = item_at(area, Array.new(model.item_count(panel), 1), model.cursor(panel), row)
         PointerTarget.new(panel, index)
       end
 
@@ -136,19 +130,8 @@ module Obsctl
         nil
       end
 
-      # Panels are drawn inside a one-cell border on every side.
       private def inner_area(area : CryTUI::Rect) : CryTUI::Rect
-        CryTUI::Rect.new(area.x + 1, area.y + 1, {area.width - 2, 0}.max, {area.height - 2, 0}.max)
-      end
-
-      private def cursor_for(model : Model, panel : FocusPanel) : Int32
-        case panel
-        when .scenes?      then model.scene_cursor
-        when .audio?       then model.audio_cursor
-        when .profiles?    then model.profile_cursor
-        when .collections? then model.collection_cursor
-        else                    0
-        end
+        PanelGeometry.inner(area)
       end
 
       private def contains?(area : CryTUI::Rect, column : Int32, row : Int32) : Bool
