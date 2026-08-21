@@ -103,7 +103,7 @@ module CryTUI
       area = @backend.size
       current = Buffer.new(area)
       yield Frame.new(area, current)
-      changes = @force_full_redraw ? all_cells(current) : @previous.diff(current)
+      changes = @force_full_redraw ? current.all_cells : @previous.diff(current)
       @backend.draw(changes)
       @previous = current
       @force_full_redraw = false
@@ -116,14 +116,6 @@ module CryTUI
       @backend.clear
       @previous = Buffer.new(area)
       @force_full_redraw = true
-    end
-
-    private def all_cells(buffer : Buffer) : Array(Tuple(Int32, Int32, Cell))
-      buffer.cells.map_with_index do |cell, index|
-        x = buffer.area.x + index % buffer.area.width
-        y = buffer.area.y + index // buffer.area.width
-        {x, y, cell}
-      end
     end
   end
 end

@@ -49,33 +49,23 @@ module CryTUI
         )
       end
 
+      # Every block-owning widget draws its block first and then works inside
+      # what the borders leave over; without a block the whole area is content.
+      def self.frame(block : Block?, area : Rect, buffer : Buffer) : Rect
+        return area unless block
+        block.render(area, buffer)
+        block.inner(area)
+      end
+
       def render(area : Rect, buffer : Buffer)
         return if area.empty?
         buffer.set_style(area, @style)
         left, right, top, bottom = area.left, area.right - 1, area.top, area.bottom - 1
         if @borders.top?
-          (left..right).each do |x|
-            symbol = if x == left && @borders.left?
-                       @border_set.top_left
-                     elsif x == right && @borders.right?
-                       @border_set.top_right
-                     else
-                       @border_set.horizontal
-                     end
-            set_border(buffer, x, top, symbol)
-          end
+          render_horizontal_edge(buffer, top, left, right, @border_set.top_left, @border_set.top_right)
         end
         if @borders.bottom? && bottom != top
-          (left..right).each do |x|
-            symbol = if x == left && @borders.left?
-                       @border_set.bottom_left
-                     elsif x == right && @borders.right?
-                       @border_set.bottom_right
-                     else
-                       @border_set.horizontal
-                     end
-            set_border(buffer, x, bottom, symbol)
-          end
+          render_horizontal_edge(buffer, bottom, left, right, @border_set.bottom_left, @border_set.bottom_right)
         end
         vertical_top = top + (@borders.top? ? 1 : 0)
         vertical_bottom = bottom - (@borders.bottom? ? 1 : 0)
@@ -98,6 +88,21 @@ module CryTUI
                        end
           title_right = area.right - (@borders.right? ? 1 : 0)
           title_line.render(buffer, Rect.new(title_x, top, {title_right - title_x, 0}.max, 1), @border_style)
+        end
+      end
+
+      # One horizontal run of border: the corner glyphs only appear where the
+      # matching vertical border is drawn too, otherwise the run continues.
+      private def render_horizontal_edge(buffer : Buffer, y : Int32, left : Int32, right : Int32, left_corner : String, right_corner : String) : Nil
+        (left..right).each do |x|
+          symbol = if x == left && @borders.left?
+                     left_corner
+                   elsif x == right && @borders.right?
+                     right_corner
+                   else
+                     @border_set.horizontal
+                   end
+          set_border(buffer, x, y, symbol)
         end
       end
 
@@ -158,11 +163,7 @@ module CryTUI
       end
 
       def render(area : Rect, buffer : Buffer)
-        content = area
-        if block = @block
-          block.render(area, buffer)
-          content = block.inner(area)
-        end
+        content = Block.frame(@block, area, buffer)
         @text.lines.first(content.height).each_with_index do |line, index|
           buffer.set_string(content.x, content.y + index, line, @style, content.width)
         end
@@ -179,11 +180,7 @@ module CryTUI
       end
 
       def render(area : Rect, buffer : Buffer)
-        content = area
-        if block = @block
-          block.render(area, buffer)
-          content = block.inner(area)
-        end
+        content = Block.frame(@block, area, buffer)
         return if content.empty?
         @lines.skip(@scroll.clamp(0, Int32::MAX)).first(content.height).each_with_index do |line, index|
           line.render(buffer, Rect.new(content.x, content.y + index, content.width, 1), @style)
@@ -232,11 +229,7 @@ module CryTUI
       end
 
       def render(area : Rect, buffer : Buffer, state : ListState)
-        content = area
-        if block = @block
-          block.render(area, buffer)
-          content = block.inner(area)
-        end
+        content = Block.frame(@block, area, buffer)
         return if content.empty? || @items.empty?
         clamp_state(state, content.height)
         y = content.y
@@ -313,11 +306,7 @@ module CryTUI
       end
 
       def render(area : Rect, buffer : Buffer)
-        content = area
-        if block = @block
-          block.render(area, buffer)
-          content = block.inner(area)
-        end
+        content = Block.frame(@block, area, buffer)
         return if content.empty?
         filled = (content.width * @ratio).round.to_i
         (0...content.width).each do |x|

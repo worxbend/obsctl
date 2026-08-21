@@ -113,18 +113,8 @@ module CryTUI
     private WEAK     = Kiwi::Strength::WEAK
 
     private def solve(total : Int32) : Array(Tuple(Int32, Int32))
-      if @spacing == 0 && @constraints.all?(&.kind.percentage?)
-        return cumulative_ranges(total, @constraints.map { |constraint| constraint.value.to_f64 / 100.0 })
-      end
-      if @spacing == 0 && @constraints.all?(&.kind.ratio?)
-        return cumulative_ranges(total, @constraints.map { |constraint| constraint.value.to_f64 / {constraint.denominator, 1}.max })
-      end
-      if @spacing >= 0 && @constraints.all?(&.kind.fill?)
-        weights = @constraints.map { |constraint| {constraint.value, 1}.max.to_f64 }
-        sum = weights.sum
-        available = {total - @spacing * (@constraints.size - 1), 0}.max
-        ranges = cumulative_ranges(available, weights.map { |weight| weight / sum })
-        return ranges.map_with_index { |(start, size), index| {start + index * @spacing, size} }
+      if shortcut = closed_form(total)
+        return shortcut
       end
 
       precision = 100.0
@@ -156,26 +146,60 @@ module CryTUI
       segments = @constraints.map_with_index { |_, index| {variables[index * 2 + 1], variables[index * 2 + 2]} }
       @constraints.each_with_index do |constraint, index|
         start, finish = segments[index]
-        size = finish - start
-        case constraint.kind
-        when .min?
-          constrain(solver, size >= constraint.value * precision, STRONG * 100.0)
-          constrain(solver, size == area_size, MEDIUM)
-        when .max?
-          constrain(solver, size <= constraint.value * precision, STRONG * 100.0)
-          constrain(solver, size == constraint.value * precision, MEDIUM * 10.0)
-        when .length?
-          constrain(solver, size == constraint.value * precision, STRONG * 10.0)
-        when .percentage?
-          constrain(solver, size == area_size * constraint.value / 100.0, STRONG)
-        when .ratio?
-          denominator = {constraint.denominator, 1}.max
-          constrain(solver, size == area_size * constraint.value / denominator, STRONG / 10.0)
-        when .fill?
-          constrain(solver, size == area_size, MEDIUM)
-        end
+        apply_constraint(solver, constraint, finish - start, area_size, precision)
       end
 
+      apply_proportionality(solver, segments)
+
+      solver.update_variables
+      to_ranges(segments, precision)
+    end
+
+    # The three layouts whose sizes follow from arithmetic alone, so the
+    # constraint solver never has to run. Returns nil when none applies.
+    private def closed_form(total : Int32) : Array(Tuple(Int32, Int32))?
+      if @spacing == 0 && @constraints.all?(&.kind.percentage?)
+        return cumulative_ranges(total, @constraints.map { |constraint| constraint.value.to_f64 / 100.0 })
+      end
+      if @spacing == 0 && @constraints.all?(&.kind.ratio?)
+        return cumulative_ranges(total, @constraints.map { |constraint| constraint.value.to_f64 / {constraint.denominator, 1}.max })
+      end
+      if @spacing >= 0 && @constraints.all?(&.kind.fill?)
+        weights = @constraints.map { |constraint| {constraint.value, 1}.max.to_f64 }
+        sum = weights.sum
+        available = {total - @spacing * (@constraints.size - 1), 0}.max
+        ranges = cumulative_ranges(available, weights.map { |weight| weight / sum })
+        ranges.map_with_index { |(start, size), index| {start + index * @spacing, size} }
+      end
+    end
+
+    # What one constraint asks of its own segment. The strengths are Ratatui's:
+    # a length outranks a percentage, which outranks a ratio, and every kind
+    # yields to the required structural constraints.
+    private def apply_constraint(solver : Kiwi::Solver, constraint : Constraint, size : Kiwi::Expression, area_size : Kiwi::Expression, precision : Float64) : Nil
+      case constraint.kind
+      when .min?
+        constrain(solver, size >= constraint.value * precision, STRONG * 100.0)
+        constrain(solver, size == area_size, MEDIUM)
+      when .max?
+        constrain(solver, size <= constraint.value * precision, STRONG * 100.0)
+        constrain(solver, size == constraint.value * precision, MEDIUM * 10.0)
+      when .length?
+        constrain(solver, size == constraint.value * precision, STRONG * 10.0)
+      when .percentage?
+        constrain(solver, size == area_size * constraint.value / 100.0, STRONG)
+      when .ratio?
+        denominator = {constraint.denominator, 1}.max
+        constrain(solver, size == area_size * constraint.value / denominator, STRONG / 10.0)
+      when .fill?
+        constrain(solver, size == area_size, MEDIUM)
+      end
+    end
+
+    # How the segments relate to each other: every pair of flexible segments
+    # keeps its weight ratio, and, failing everything else, neighbours prefer
+    # to come out the same size.
+    private def apply_proportionality(solver : Kiwi::Solver, segments : Array(Tuple(Kiwi::Variable, Kiwi::Variable))) : Nil
       flexible = @constraints.each_with_index.select { |constraint, _| constraint.kind.fill? || constraint.kind.min? }.to_a
       flexible.each_combination(2) do |pair|
         left_constraint, left_index = pair[0]
@@ -191,8 +215,10 @@ module CryTUI
         right_start, right_finish = pair[1]
         constrain(solver, left_finish - left_start == right_finish - right_start, WEAK)
       end
+    end
 
-      solver.update_variables
+    # Back from the solver's fixed-point values to whole cells.
+    private def to_ranges(segments : Array(Tuple(Kiwi::Variable, Kiwi::Variable)), precision : Float64) : Array(Tuple(Int32, Int32))
       segments.map do |start, finish|
         rounded_start = (start.value.round / precision).round.to_i
         rounded_finish = (finish.value.round / precision).round.to_i

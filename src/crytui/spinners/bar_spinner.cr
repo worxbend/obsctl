@@ -263,17 +263,8 @@ module CryTUI
       end
 
       def render(area : Rect, buffer : Buffer) : Nil
-        return if area.empty?
-        buffer.set_style(area, @style)
-        content = area
-        if block = @block
-          block.render(area, buffer)
-          content = block.inner(area)
-        end
-        return if content.empty?
-        rows = lines(@width == 0 ? content.width : @width, content.height)
-        rows.first(content.height).each_with_index do |line, index|
-          line.render(buffer, Rect.new(content.x, content.y + index, content.width, 1), @style)
+        SpinnerBody.render(area, buffer, @style, @block) do |content|
+          lines(@width == 0 ? content.width : @width, content.height)
         end
       end
 

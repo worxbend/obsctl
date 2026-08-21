@@ -42,15 +42,18 @@ module CryTUI
     # the optional block, then one line per row of the current frame.
     module SpinnerBody
       def self.render(area : Rect, buffer : Buffer, style : Style, block : Block?, lines : Array(Line)) : Nil
+        render(area, buffer, style, block) { lines }
+      end
+
+      # Spinners whose frame depends on how much room is left inside the block
+      # -- a bar as wide as the content, a column as tall as it -- receive the
+      # content rect and build their lines from it.
+      def self.render(area : Rect, buffer : Buffer, style : Style, block : Block?, &lines : Rect -> Array(Line)) : Nil
         return if area.empty?
         buffer.set_style(area, style)
-        content = area
-        if block
-          block.render(area, buffer)
-          content = block.inner(area)
-        end
+        content = Block.frame(block, area, buffer)
         return if content.empty?
-        lines.first(content.height).each_with_index do |line, index|
+        lines.call(content).first(content.height).each_with_index do |line, index|
           line.render(buffer, Rect.new(content.x, content.y + index, content.width, 1), style)
         end
       end

@@ -77,6 +77,19 @@ module CryTUI
         size == 2 ? 2 : 0
       end
 
+      # The bar every ring starts from: `size` dots stacked in the middle column
+      # of the top edge. The offset past the halfway point keeps a thick ring
+      # centred -- a ring `size` dots wide starts half its thickness to the
+      # right of the exact middle -- and the `dimension % 2` term lands an
+      # odd-width grid on a column rather than between two.
+      #
+      # `self.period` walks a throwaway copy of this bar around the ring, so it
+      # is only correct while both start from the same place.
+      def self.head_start(size : Int32, dimension : Int32) : Array(RingCoord)
+        middle = (dimension // 2) + (dimension % 2) + ((size - 2) // 2)
+        Array.new(size) { |dot| RingCoord.new(dot, middle) }
+      end
+
       def initialize(size : Int32, centre : Centre)
         size = size.clamp(2, 8)
         dimension = RingEngine.dimension(size)
@@ -92,10 +105,10 @@ module CryTUI
           {(centre_end.row + offset) // 4, centre_end.col // 2},
         }
 
-        remainder = (dimension % 2) + ((size - 2) // 2)
-        middle = (dimension // 2) + remainder
-        @head = Array.new(size) { |dot| RingCoord.new(dot, middle) }
-        @tail = Array.new(size) { |dot| RingCoord.new(middle, dot) }
+        @head = RingEngine.head_start(size, dimension)
+        # The tail starts as the head transposed: the same bar laid along the
+        # left edge, which is one quarter-turn behind the head.
+        @tail = @head.map_with_index { |coord, dot| RingCoord.new(coord.col, dot) }
         size.times { |index| @grid.fill(@tail[index], @head[index]) }
 
         @has_centre = centre.filled?
@@ -170,8 +183,7 @@ module CryTUI
       # tables ever change.
       def self.period(size : Int32, head_map : Hash(RingCoord, RingCoord)) : Int32
         dimension = RingEngine.dimension(size)
-        middle = (dimension // 2) + (dimension % 2) + ((size - 2) // 2)
-        start = Array.new(size) { |dot| RingCoord.new(dot, middle) }
+        start = RingEngine.head_start(size, dimension)
         nodes = start
         limit = 8 * dimension
         (1..limit).each do |step|
