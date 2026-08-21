@@ -18,10 +18,7 @@ module Obsctl
         target : String,
         live_names : Array(String),
       ) : Config::SceneConfig
-        entries = config.scenes.dup
-        live_names.each do |name|
-          entries << Config::SceneConfig.new(name) unless entries.any? { |entry| entry.name == name }
-        end
+        entries = with_live_names(config.scenes, live_names) { |name| Config::SceneConfig.new(name) }
         resolve(entries, target, TargetKind::Scene) { |entry| {entry.shortcut, entry.alias, entry.name} }
       end
 
@@ -37,11 +34,24 @@ module Obsctl
         target : String,
         live_names : Array(String),
       ) : Config::AudioInputConfig
-        entries = config.audio.inputs.dup
-        live_names.each do |name|
-          entries << Config::AudioInputConfig.new(name) unless entries.any? { |entry| entry.name == name }
-        end
+        entries = with_live_names(config.audio.inputs, live_names) { |name| Config::AudioInputConfig.new(name) }
         resolve(entries, target, TargetKind::AudioInput) { |entry| {entry.shortcut, entry.alias, entry.name} }
+      end
+
+      # Returns the configured entries plus a bare entry for every live name
+      # OBS reported that no configured entry already claims.
+      #
+      # This is the one rule both `resolve_scene` and `resolve_audio` follow:
+      # configuration wins, and anything else OBS currently has is still a
+      # legal target under its own name. Matching is exact — a configured
+      # entry differing only in case does not suppress the live name, because
+      # `resolve` is what decides how case-insensitive matches are ranked.
+      private def self.with_live_names(entries : Array(T), live_names : Array(String), & : String -> T) : Array(T) forall T
+        result = entries.dup
+        live_names.each do |name|
+          result << yield name unless result.any? { |entry| entry.name == name }
+        end
+        result
       end
 
       # What kind of thing is being looked up.

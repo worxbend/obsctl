@@ -14,6 +14,10 @@ module Obsctl
       RecordAction
 
       # Human placeholder shown in help and usage errors.
+      #
+      # The record actions are read off the parser's own action table, so an
+      # action added there cannot go unadvertised in `--help` and the generated
+      # shell completions.
       def placeholder : String
         case self
         in None            then ""
@@ -22,7 +26,7 @@ module Obsctl
         in SceneCollection then "<collection>"
         in AudioInput      then "<audio-input>"
         in Percent         then "<0-100>"
-        in RecordAction    then "[start|stop|toggle|pause|resume|status]"
+        in RecordAction    then "[#{CommandRegistry::RECORD_ACTIONS.keys.join('|')}]"
         end
       end
     end
