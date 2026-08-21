@@ -170,7 +170,14 @@ module Obsctl
             next if client_detached?(client)
             raise(disconnect_error || Domain::ConnectionFailed.new("OBS WebSocket disconnected")) unless stopped?(generation)
           rescue ex
-            break if stopped?(generation)
+            if stopped?(generation)
+              # This attempt's client was never claimed, so `stop` cannot see
+              # it. A socket that opened before `connect` raised still holds an
+              # fd and a live reader fiber, and nothing else will release them.
+              # `Client#close` is a no-op when the socket never opened.
+              client.close
+              break
+            end
 
             message = failure_message(ex)
             @state.mark_disconnected(message, reconnecting: @config.reconnect.enabled)
@@ -406,18 +413,12 @@ module Obsctl
       end
 
       private def publish_reconnect(publication : ReconnectPublication) : Nil
-        detached_client = publication.detached_client
-        detached_client_closed = false
-        begin
-          detached_client.try do |client|
-            client.close
-            detached_client_closed = true
-          end
-          publish_reconnect_state(publication.state_payload)
-          publish_reconnect_log(publication.log_payload)
-        ensure
-          detached_client.try(&.close) unless detached_client_closed
-        end
+        # `Client#close` forwards to `Transport#close`, which swallows its own
+        # errors and is safe to repeat, so closing first needs no once-only
+        # flag to keep the publishes below from double-closing on the way out.
+        publication.detached_client.try(&.close)
+        publish_reconnect_state(publication.state_payload)
+        publish_reconnect_log(publication.log_payload)
       end
 
       private def publish_reconnect_state(payload : JSON::Any) : Nil
