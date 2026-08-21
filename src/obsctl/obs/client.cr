@@ -87,18 +87,18 @@ module Obsctl
 
       # Fetches OBS and obs-websocket version metadata.
       def version : JSON::Any
-        request(Requests::Version::GET_VERSION).response_data || JSON.parse("{}")
+        response_data(Requests::Version::GET_VERSION)
       end
 
       # Returns the current OBS scene names in OBS order.
       def scene_names : Array(String)
-        data = request(Requests::Scenes::GET_SCENE_LIST).response_data || JSON.parse("{}")
+        data = response_data(Requests::Scenes::GET_SCENE_LIST)
         data["scenes"].as_a.map(&.["sceneName"].as_s)
       end
 
       # Returns the current OBS program scene name when available.
       def current_scene : String?
-        data = request(Requests::Scenes::GET_CURRENT_PROGRAM_SCENE).response_data || JSON.parse("{}")
+        data = response_data(Requests::Scenes::GET_CURRENT_PROGRAM_SCENE)
         data["currentProgramSceneName"]?.try(&.as_s)
       end
 
@@ -109,19 +109,19 @@ module Obsctl
 
       # Returns current OBS input names.
       def input_names : Array(String)
-        data = request(Requests::Audio::GET_INPUT_LIST).response_data || JSON.parse("{}")
+        data = response_data(Requests::Audio::GET_INPUT_LIST)
         data["inputs"].as_a.map(&.["inputName"].as_s)
       end
 
       # Returns mute state for an OBS input by exact OBS input name.
       def input_muted(name : String) : Bool?
-        data = request(Requests::Audio::GET_INPUT_MUTE, Requests::Audio.input_name(name)).response_data || JSON.parse("{}")
+        data = response_data(Requests::Audio::GET_INPUT_MUTE, Requests::Audio.input_name(name))
         data["inputMuted"]?.try(&.as_bool)
       end
 
       # Returns OBS input volume in multiplier, dB, and user-facing percent.
       def input_volume(name : String) : NamedTuple(mul: Float64?, db: Float64?, percent: Int32?)
-        data = request(Requests::Audio::GET_INPUT_VOLUME, Requests::Audio.input_name(name)).response_data || JSON.parse("{}")
+        data = response_data(Requests::Audio::GET_INPUT_VOLUME, Requests::Audio.input_name(name))
         mul = number(data, "inputVolumeMul")
         db = number(data, "inputVolumeDb")
         percent = mul.try { |value| (value * 100).round.to_i32.clamp(0, 100) }
@@ -148,12 +148,12 @@ module Obsctl
       end
 
       def toggle_stream : Bool?
-        data = request(Requests::Outputs::TOGGLE_STREAM).response_data || JSON.parse("{}")
+        data = response_data(Requests::Outputs::TOGGLE_STREAM)
         data["outputActive"]?.try(&.as_bool?)
       end
 
       def toggle_record : Bool?
-        data = request(Requests::Outputs::TOGGLE_RECORD).response_data || JSON.parse("{}")
+        data = response_data(Requests::Outputs::TOGGLE_RECORD)
         data["outputActive"]?.try(&.as_bool?)
       end
 
@@ -164,7 +164,7 @@ module Obsctl
 
       # Stops recording and returns the written file path when OBS reports one.
       def stop_record : String?
-        data = request(Requests::Outputs::STOP_RECORD).response_data || JSON.parse("{}")
+        data = response_data(Requests::Outputs::STOP_RECORD)
         data["outputPath"]?.try(&.as_s?)
       end
 
@@ -178,7 +178,7 @@ module Obsctl
 
       # Returns the full record status, including pause state and timecode.
       def record_status : State::RecordStatus
-        data = request(Requests::Outputs::GET_RECORD_STATUS).response_data || JSON.parse("{}")
+        data = response_data(Requests::Outputs::GET_RECORD_STATUS)
         active = data["outputActive"]?.try(&.as_bool?)
         State::RecordStatus.new(
           active: active,
@@ -190,7 +190,7 @@ module Obsctl
       end
 
       def profiles : NamedTuple(current: String?, names: Array(String))
-        data = request(Requests::Studio::GET_PROFILE_LIST).response_data || JSON.parse("{}")
+        data = response_data(Requests::Studio::GET_PROFILE_LIST)
         entries = data["profiles"]?.try(&.as_a?) || [] of JSON::Any
         names = entries.compact_map do |profile|
           profile.as_s? || profile.as_h?.try { profile["profileName"]?.try(&.as_s?) }
@@ -203,7 +203,7 @@ module Obsctl
       end
 
       def scene_collections : NamedTuple(current: String?, names: Array(String))
-        data = request(Requests::Studio::GET_SCENE_COLLECTION_LIST).response_data || JSON.parse("{}")
+        data = response_data(Requests::Studio::GET_SCENE_COLLECTION_LIST)
         names = data["sceneCollections"]?.try(&.as_a?).try(&.compact_map(&.as_s?)) || [] of String
         {current: data["currentSceneCollectionName"]?.try(&.as_s?), names: names}
       end
@@ -213,7 +213,7 @@ module Obsctl
       end
 
       def stats : State::ObsStats
-        data = request(Requests::Studio::GET_STATS).response_data || JSON.parse("{}")
+        data = response_data(Requests::Studio::GET_STATS)
         State::ObsStats.from_response(data)
       end
 
@@ -221,8 +221,8 @@ module Obsctl
       # periodic telemetry poller. OBS exposes bytes rather than bitrate, so
       # the supervisor derives kbit/s from consecutive samples.
       def telemetry_sample : TelemetrySample
-        stream = request(Requests::Outputs::GET_STREAM_STATUS).response_data || JSON.parse("{}")
-        record = request(Requests::Outputs::GET_RECORD_STATUS).response_data || JSON.parse("{}")
+        stream = response_data(Requests::Outputs::GET_STREAM_STATUS)
+        record = response_data(Requests::Outputs::GET_RECORD_STATUS)
         stream_active = stream["outputActive"]?.try(&.as_bool?) || false
         record_active = record["outputActive"]?.try(&.as_bool?) || false
         TelemetrySample.new(
@@ -325,8 +325,8 @@ module Obsctl
       end
 
       private def output_details
-        stream = request(Requests::Outputs::GET_STREAM_STATUS).response_data || JSON.parse("{}")
-        record = request(Requests::Outputs::GET_RECORD_STATUS).response_data || JSON.parse("{}")
+        stream = response_data(Requests::Outputs::GET_STREAM_STATUS)
+        record = response_data(Requests::Outputs::GET_RECORD_STATUS)
         {
           state: State::OutputState.new(
             streaming: stream["outputActive"]?.try(&.as_bool?),
@@ -335,6 +335,19 @@ module Obsctl
           stream_duration_ms: stream["outputActive"]?.try(&.as_bool?) == true ? stream["outputDuration"]?.try(&.as_i64?) : nil,
           record_duration_ms: record["outputActive"]?.try(&.as_bool?) == true ? record["outputDuration"]?.try(&.as_i64?) : nil,
         }
+      end
+
+      # Sends a request and returns its response body, or an empty object when
+      # OBS answered without one.
+      #
+      # OBS omits `responseData` entirely for requests that have nothing to
+      # say — `StartRecord` is one — and it is allowed to leave out an
+      # individual field of a body it does send. Falling back to an empty
+      # object means every reader below can ask for its fields the same way
+      # and get nil for what is not there, instead of each one guarding
+      # against a missing body first.
+      private def response_data(request_type : String, data : JSON::Any? = nil) : JSON::Any
+        request(request_type, data).response_data || JSON.parse("{}")
       end
 
       private def number(data : JSON::Any, key : String) : Float64?
