@@ -290,19 +290,8 @@ module Obsctl
       # Fetches a full state snapshot for publication to local IPC clients.
       def snapshot : State::ObsSnapshot
         version_data = version
-        current = current_scene
-        scenes = scene_names.map do |name|
-          configured = @config.scenes.find { |scene| scene.name == name }
-          State::SceneState.new(
-            name: name,
-            alias: configured.try(&.alias),
-            shortcut: configured.try(&.shortcut),
-            group: configured.try(&.group),
-            active: current == name,
-            hidden: configured.try(&.hidden) || false
-          )
-        end
-        audio = input_names.compact_map { |name| audio_state_for(name) }
+        scene_data = scene_snapshot
+        audio = audio_snapshot
         profile_data = profiles
         collection_data = scene_collections
         output = output_details
@@ -310,8 +299,8 @@ module Obsctl
           connected: true,
           obs_studio_version: version_data["obsVersion"]?.try(&.as_s),
           obs_websocket_version: version_data["obsWebSocketVersion"]?.try(&.as_s),
-          current_scene: current,
-          scenes: scenes,
+          current_scene: scene_data[:current_scene],
+          scenes: scene_data[:scenes],
           audio_inputs: audio,
           output: output[:state],
           profiles: profile_data[:names],
