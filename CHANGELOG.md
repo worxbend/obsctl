@@ -8,6 +8,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
+## [0.8.4] - 2026-08-22
+
+### Fixed
+
+- The OBS supervisor leaked a file descriptor and a live reader fiber whenever a
+  stop landed while a connection attempt was still in flight. Each pass of the
+  connect loop builds a fresh client, and that client is normally closed either
+  when its claim is rejected or when the failure path backs off — but the rescue
+  arm returned before reaching either, and `stop` could not clean up after it
+  because the client had never been claimed and so was not the one `stop` knows
+  about. A socket that had opened before `Identify` failed therefore stayed open
+  for the life of the process. Since the daemon supports stop-then-start, this
+  was not a once-per-shutdown cost.
+
+### Internal
+
+- Behaviour-preserving throughout: the command line, the IPC protocol, the
+  config format and the exit codes are exactly as they were in 0.8.3, and no
+  fixture or documented behaviour changed. As in the previous release the theme
+  is duplicated knowledge, this time in the places where one rule was being
+  restated by a caller that should have been asking for it.
+- Every frame arriving from OBS was turned into JSON twice: once to read its
+  opcode and once again, inside the response or event constructor, which then
+  re-checked the same opcode before reading the body. That duplicated check left
+  dead code behind it — two unreachable nil branches and a nested rescue that
+  re-derived the classification the branch above it had just made. Frames are
+  parsed once now, and the disconnect reason each failure reports is pinned by
+  tests for the first time.
+- `Aliases` stated its one rule — match by shortcut, then alias, then name —
+  four times, through four identical blocks handed to the shared resolver; two
+  of the four public methods it exposed had no caller outside a spec. The rule
+  is written once, on the resolver.
+- Pasting into the command palette went around the dashboard's one-way data
+  flow, with the app reimplementing the palette edit the dispatcher already
+  performs for typed characters, so completion handling had two owners that only
+  agreed by hand. Paste goes through the dispatcher now. `ServiceInstaller`
+  likewise kept a second copy of its action list that could never accept or
+  reject anything differently from the `case` below it.
+- Adding a config setting is one line, because the `config_value` macro
+  generates the getter, the YAML mapping and the initializer from it — with one
+  gap: the writer is hand-written, so a new field was read back correctly and
+  then silently dropped the next time the file was written, losing the setting
+  to `obsctl config migrate` with no error anywhere. A test now checks the
+  writer against the declared field list of every config type.
+
 ## [0.8.3] - 2026-08-21
 
 ### Internal
@@ -560,7 +605,9 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.8.4...HEAD
+[0.8.4]: https://github.com/worxbend/obsctl/compare/v0.8.3...v0.8.4
+[0.8.3]: https://github.com/worxbend/obsctl/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/worxbend/obsctl/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/worxbend/obsctl/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/worxbend/obsctl/compare/v0.7.0...v0.8.0
