@@ -124,7 +124,7 @@ module Obsctl
         data = response_data(Requests::Audio::GET_INPUT_VOLUME, Requests::Audio.input_name(name))
         mul = number(data, "inputVolumeMul")
         db = number(data, "inputVolumeDb")
-        percent = mul.try { |value| (value * 100).round.to_i32.clamp(0, 100) }
+        percent = mul.try { |value| Domain::Aliases.volume_mul_to_percent(value) }
         {mul: mul, db: db, percent: percent}
       end
 

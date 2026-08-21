@@ -94,6 +94,16 @@ module Obsctl
       def self.volume_percent_to_mul(percent : Int32) : Float64
         percent.to_f64 / 100.0
       end
+
+      # Converts an obs-websocket multiplier back to the user-facing 0-100
+      # scale, which is the only volume obsctl ever shows or accepts.
+      #
+      # Clamped because the multiplier is not bounded at 1.0: OBS allows gain
+      # above unity, and a slider pushed past it would otherwise render as a
+      # percentage over 100 that no obsctl command could ask for.
+      def self.volume_mul_to_percent(mul : Float64) : Int32
+        (mul * 100).round.to_i32.clamp(0, 100)
+      end
     end
   end
 end

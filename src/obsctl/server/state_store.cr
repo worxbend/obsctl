@@ -2,6 +2,7 @@ require "json"
 require "../obs/state/obs_snapshot"
 require "../obs/state/scene_state"
 require "../obs/state/audio_state"
+require "../domain/aliases"
 require "../ipc/state_snapshot_codec"
 
 module Obsctl
@@ -61,7 +62,7 @@ module Obsctl
 
       # Updates one audio input's volume without a full snapshot refetch.
       def update_input_volume(input_name : String, volume_mul : Float64?, volume_db : Float64?) : Nil
-        percent = volume_mul.try { |v| (v * 100).round.to_i32.clamp(0, 100) }
+        percent = volume_mul.try { |mul| Domain::Aliases.volume_mul_to_percent(mul) }
         mutate_connected do |current|
           inputs = map_input(current, input_name, &.copy_with(
             volume_mul: volume_mul, volume_db: volume_db, volume_percent: percent
