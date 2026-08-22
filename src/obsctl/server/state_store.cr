@@ -3,7 +3,6 @@ require "../obs/state/obs_snapshot"
 require "../obs/state/scene_state"
 require "../obs/state/audio_state"
 require "../domain/volume"
-require "../ipc/state_snapshot_codec"
 
 module Obsctl
   module Server
@@ -20,7 +19,7 @@ module Obsctl
     # Authoritative OBS snapshot cache owned by the local daemon.
     class StateStore
       # Creates a disconnected state store with an optional update callback.
-      def initialize(@on_update : Proc(JSON::Any, Nil)? = nil)
+      def initialize(@on_update : Proc(OBS::State::ObsSnapshot, Nil)? = nil)
         @snapshot = disconnected_snapshot
         @telemetry = ServerTelemetry.new
         @lock = Mutex.new
@@ -172,10 +171,10 @@ module Obsctl
       end
 
       # Mutates authoritative reconnect state for a public operator reconnect
-      # request and returns the precomputed state-event payload so callers can
-      # defer subscriber fanout until their own locks are released.
-      def mark_reconnect_requested_and_build_payload(at : Time = Time.utc) : JSON::Any
-        mark_disconnected_payload(
+      # request and returns the resulting snapshot so callers can defer
+      # subscriber fanout until their own locks are released.
+      def mark_reconnect_requested(at : Time = Time.utc) : OBS::State::ObsSnapshot
+        disconnect_transition(
           "OBS reconnect requested",
           reconnecting: true,
           at: at,
@@ -199,21 +198,25 @@ module Obsctl
         at : Time = Time.utc,
         connection_failed : Bool = true,
       ) : Nil
-        publish_snapshot_payload(mark_disconnected_payload(error, reconnecting, at, connection_failed))
+        publish_snapshot_state(disconnect_transition(error, reconnecting, at, connection_failed))
       end
 
-      # Publishes a precomputed state-event payload to subscribers.
-      def publish_snapshot_payload(payload : JSON::Any) : Nil
-        @on_update.try(&.call(payload))
+      # Publishes an already-computed snapshot to subscribers.
+      #
+      # Kept separate from the transition that produced it so a caller holding
+      # its own lock can mutate state now and fan out later, once that lock is
+      # released.
+      def publish_snapshot_state(snapshot : OBS::State::ObsSnapshot) : Nil
+        @on_update.try(&.call(snapshot))
       end
 
-      private def mark_disconnected_payload(
+      private def disconnect_transition(
         error : String? = nil,
         reconnecting : Bool = false,
         at : Time = Time.utc,
         connection_failed : Bool = true,
-      ) : JSON::Any
-        next_snapshot = @lock.synchronize do
+      ) : OBS::State::ObsSnapshot
+        @lock.synchronize do
           current = @snapshot
           updated = current.copy_with(connected: false, last_error: error, updated_at: at)
           was_connected = current.connected
@@ -225,24 +228,6 @@ module Obsctl
           @snapshot = updated
           updated
         end
-        snapshot_to_json(next_snapshot)
-      end
-
-      # Returns the latest snapshot as the IPC state-event JSON payload.
-      def snapshot_json : JSON::Any
-        snapshot_to_json(snapshot)
-      end
-
-      # Converts a snapshot into the stable IPC state-event JSON shape.
-      #
-      # The shape itself belongs to `IPC::StateSnapshotCodec`, which owns both
-      # this direction and the dashboard's decode of it.
-      def self.snapshot_to_json(snapshot : OBS::State::ObsSnapshot) : JSON::Any
-        IPC::StateSnapshotCodec.encode(snapshot)
-      end
-
-      private def snapshot_to_json(snapshot : OBS::State::ObsSnapshot) : JSON::Any
-        self.class.snapshot_to_json(snapshot)
       end
 
       private def telemetry_for_snapshot_transition(
@@ -261,7 +246,7 @@ module Obsctl
       end
 
       private def publish_snapshot(snapshot : OBS::State::ObsSnapshot) : Nil
-        @on_update.try(&.call(snapshot_to_json(snapshot)))
+        @on_update.try(&.call(snapshot))
       end
 
       private def disconnected_snapshot : OBS::State::ObsSnapshot

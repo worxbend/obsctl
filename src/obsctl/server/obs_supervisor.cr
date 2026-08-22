@@ -25,7 +25,7 @@ module Obsctl
 
       private record ReconnectPublication,
         detached_client : OBS::Client?,
-        state_payload : JSON::Any,
+        state_snapshot : OBS::State::ObsSnapshot,
         log_payload : JSON::Any
 
       # Creates a supervisor that updates server state and optional event/log broadcasts.
@@ -136,7 +136,7 @@ module Obsctl
             end
             ReconnectPublication.new(
               detached_client,
-              @state.mark_reconnect_requested_and_build_payload(accepted_at),
+              @state.mark_reconnect_requested(accepted_at),
               log_payload("info", "obs_reconnect_requested", "OBS reconnect requested", accepted_at)
             )
           end
@@ -417,12 +417,12 @@ module Obsctl
         # errors and is safe to repeat, so closing first needs no once-only
         # flag to keep the publishes below from double-closing on the way out.
         publication.detached_client.try(&.close)
-        publish_reconnect_state(publication.state_payload)
+        publish_reconnect_state(publication.state_snapshot)
         publish_reconnect_log(publication.log_payload)
       end
 
-      private def publish_reconnect_state(payload : JSON::Any) : Nil
-        @state.publish_snapshot_payload(payload)
+      private def publish_reconnect_state(snapshot : OBS::State::ObsSnapshot) : Nil
+        @state.publish_snapshot_state(snapshot)
       rescue ex
         publish_reconnect_diagnostic(
           "obs_reconnect_state_publication_failed",

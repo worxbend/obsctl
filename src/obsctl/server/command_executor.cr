@@ -7,6 +7,7 @@ require "../domain/aliases"
 require "../domain/volume"
 require "../domain/errors"
 require "../ipc/command_name"
+require "../ipc/state_snapshot_codec"
 require "../ipc/request"
 require "../ipc/response"
 require "./log_payload"
@@ -113,7 +114,7 @@ module Obsctl
       end
 
       protected def snapshot_json : JSON::Any
-        @state.snapshot_json
+        IPC::StateSnapshotCodec.encode(@state.snapshot)
       end
 
       protected def set_scene(command : IPC::CommandPayload) : JSON::Any
@@ -290,7 +291,7 @@ module Obsctl
         snapshot = @state.snapshot
         object({
           "server" => server_status_for(snapshot),
-          "obs"    => StateStore.snapshot_to_json(snapshot),
+          "obs"    => IPC::StateSnapshotCodec.encode(snapshot),
         })
       end
 

@@ -377,8 +377,8 @@ describe Obsctl::Server::CommandExecutor do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     logs = [] of JSON::Any
     logs_lock = Mutex.new
-    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
-      if payload["last_error"]?.try(&.as_s?) == "OBS reconnect requested"
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+      if snapshot.last_error == "OBS reconnect requested"
         raise "state publication failed password=supersecret token: abc123"
       end
     })
@@ -486,8 +486,8 @@ describe Obsctl::Server::CommandExecutor do
     log_path = File.join(Dir.tempdir, "obsctl-command-reconnect-secondary-success-#{Random.rand(1_000_000)}.log")
     logs = [] of JSON::Any
     logs_lock = Mutex.new
-    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
-      if payload["last_error"]?.try(&.as_s?) == "OBS reconnect requested"
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+      if snapshot.last_error == "OBS reconnect requested"
         raise "state publication failed password=supersecret token: abc123"
       end
     })
@@ -625,8 +625,8 @@ describe Obsctl::Server::CommandExecutor do
     diagnostic_blocked = Channel(Nil).new(1)
     release_diagnostic = Channel(Nil).new(1)
     diagnostic_reached = false
-    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) {
-      if payload["last_error"]?.try(&.as_s?) == "OBS reconnect requested"
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+      if snapshot.last_error == "OBS reconnect requested"
         raise "state publication failed secret=sesame token: abc123"
       end
     })

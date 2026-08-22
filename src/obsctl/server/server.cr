@@ -1,6 +1,7 @@
 require "../config/config"
 require "../ipc/command_name"
 require "../ipc/protocol"
+require "../ipc/state_snapshot_codec"
 require "../runtime/logger"
 require "./best_effort_log_broadcast"
 require "./client_registry"
@@ -32,7 +33,7 @@ module Obsctl
       )
         @registry = ClientRegistry.new
         @diagnostic_log_broadcast = BestEffortLogBroadcast.new(->(entry : JSON::Any) { @registry.broadcast("logs", entry) })
-        @state = StateStore.new(->(snapshot : JSON::Any) { @registry.broadcast("state", snapshot) })
+        @state = StateStore.new(->(snapshot : OBS::State::ObsSnapshot) { @registry.broadcast("state", IPC::StateSnapshotCodec.encode(snapshot)) })
         event_broadcast = ->(event : JSON::Any) { @registry.broadcast("events", event) }
         log_broadcast = ->(entry : JSON::Any) { broadcast_log(entry) }
         diagnostic_log_broadcast = ->(entry : JSON::Any) { @diagnostic_log_broadcast.broadcast(entry) }
@@ -133,7 +134,7 @@ module Obsctl
             # the registration so no pushed update can slip in front of them.
             @registry.add(session, request.topics) do
               session.write_message(IPC::Response.new(request.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
-              session.write_message(IPC::Event.new("state", @state.snapshot_json)) if request.topics.includes?("state")
+              session.write_message(IPC::Event.new("state", IPC::StateSnapshotCodec.encode(@state.snapshot))) if request.topics.includes?("state")
             end
           elsif request.command?
             response = @executor.execute(request)

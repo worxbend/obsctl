@@ -27,7 +27,7 @@ end
 describe Obsctl::Server::StateStore do
   it "updates polled telemetry without losing other authoritative state" do
     updates = [] of JSON::Any
-    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
     state.update(obs_snapshot)
     updates.clear
     stats = Obsctl::OBS::State::ObsStats.new(cpu_usage_percent: 17.5, active_fps: 60.0)
@@ -48,7 +48,7 @@ describe Obsctl::Server::StateStore do
 
   it "updates stream and record flags independently and publishes snapshots" do
     updates = [] of JSON::Any
-    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
     state.update(obs_snapshot)
     updates.clear
     state.update_output(streaming: true)
@@ -202,19 +202,19 @@ describe Obsctl::Server::StateStore do
     state.snapshot.last_error.should be_nil
   end
 
-  it "returns the reconnect-requested snapshot payload without publishing it" do
+  it "returns the reconnect-requested snapshot without publishing it" do
     updates = [] of JSON::Any
-    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
     connected_at = Time.utc(2026, 6, 20, 12, 0, 0)
     requested_at = Time.utc(2026, 6, 20, 12, 1, 0)
 
     state.mark_connected(obs_snapshot(updated_at: connected_at), at: connected_at)
     updates.clear
 
-    payload = state.mark_reconnect_requested_and_build_payload(requested_at)
+    requested = state.mark_reconnect_requested(requested_at)
 
     updates.should be_empty
-    payload.should eq(state.snapshot_json)
+    requested.should eq(state.snapshot)
 
     snapshot = state.snapshot
     snapshot.connected.should be_false
@@ -229,9 +229,9 @@ describe Obsctl::Server::StateStore do
     telemetry.last_connection_failed_at.should be_nil
   end
 
-  it "publishes a deferred reconnect-requested payload without mutating telemetry again" do
+  it "publishes a deferred reconnect-requested snapshot without mutating telemetry again" do
     updates = [] of JSON::Any
-    state = Obsctl::Server::StateStore.new(->(payload : JSON::Any) { updates << payload })
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
     connected_at = Time.utc(2026, 6, 20, 12, 0, 0)
     attempt_at = Time.utc(2026, 6, 20, 12, 0, 30)
     requested_at = Time.utc(2026, 6, 20, 12, 1, 0)
@@ -240,13 +240,13 @@ describe Obsctl::Server::StateStore do
     state.mark_reconnect_attempt(attempt_at)
     updates.clear
 
-    payload = state.mark_reconnect_requested_and_build_payload(requested_at)
+    requested = state.mark_reconnect_requested(requested_at)
     telemetry_after_mutation = state.telemetry
     snapshot_after_mutation = state.snapshot
 
-    state.publish_snapshot_payload(payload)
+    state.publish_snapshot_state(requested)
 
-    updates.should eq([payload])
+    updates.should eq([Obsctl::IPC::StateSnapshotCodec.encode(requested)])
     state.telemetry.should eq(telemetry_after_mutation)
     state.snapshot.should eq(snapshot_after_mutation)
     state.snapshot.last_error.should eq("OBS reconnect requested")
