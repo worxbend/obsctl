@@ -10,7 +10,14 @@ module Obsctl
     record ActionOutcome,
       quit : Bool = false,
       retry_subscription : Bool = false,
-      message : String? = nil
+      message : String? = nil do
+      # "I handled this action and have nothing to say about it."
+      #
+      # The dispatch chain uses nil to mean "not mine, try the next handler",
+      # so an empty outcome is not the absence of an answer -- it is an answer
+      # that ends the chain and leaves the status line alone.
+      HANDLED = new
+    end
 
     class Dispatcher
       VOLUME_DEBOUNCE = 120.milliseconds
@@ -57,11 +64,11 @@ module Obsctl
       end
 
       private def dispatch(action : Action) : ActionOutcome
-        return ActionOutcome.new if action.kind.pending_sequence? || action.kind.clear_sequence?
+        return ActionOutcome::HANDLED if action.kind.pending_sequence? || action.kind.clear_sequence?
 
         if move = FOCUS_ACTIONS[action.kind]?
           move.call(@model)
-          return ActionOutcome.new
+          return ActionOutcome::HANDLED
         end
 
         pointer_action(action) ||
@@ -70,7 +77,7 @@ module Obsctl
           navigation_action(action) ||
           settings_action(action) ||
           command_action(action) ||
-          ActionOutcome.new
+          ActionOutcome::HANDLED
       end
 
       private def scene_picker_action(action : Action) : ActionOutcome?
@@ -85,21 +92,21 @@ module Obsctl
           # already is instead of at the top of the list.
           @model.scene_picker_cursor = @model.scenes.index(&.active) || 0
           @model.scene_picker_active = true
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .close_scene_picker?
           @model.scene_picker_active = false
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .scene_picker_navigate_up?
           @model.scene_picker_cursor = {@model.scene_picker_cursor - 1, 0}.max
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .scene_picker_navigate_down?
           @model.scene_picker_cursor = {@model.scene_picker_cursor + 1, {@model.scenes.size - 1, 0}.max}.min
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .scene_picker_activate?
           switch_scene(@model.scene_picker_cursor)
         when .pick_scene?
           index = action.index
-          index ? switch_scene(index) : ActionOutcome.new
+          index ? switch_scene(index) : ActionOutcome::HANDLED
         end
       end
 
@@ -111,7 +118,7 @@ module Obsctl
       private def switch_scene(index : Int32) : ActionOutcome
         @model.scene_picker_active = false
         scene = @model.scenes[index]?
-        return ActionOutcome.new unless scene
+        return ActionOutcome::HANDLED unless scene
 
         @model.scene_cursor = index
         target_command(IPC::CommandName::SET_SCENE, scene.name)
@@ -124,20 +131,20 @@ module Obsctl
           palette.active = true
           palette.input = (action.character || @model.command_palette_prefix[0]? || '/').to_s
           refresh_completions
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .close_palette?
           close_palette
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .palette_character?
           @model.command_palette.input += action.character.to_s
           refresh_completions
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .palette_backspace?
           unless @model.command_palette.input.empty?
             @model.command_palette.input = @model.command_palette.input.each_grapheme.to_a[0...-1].join
           end
           refresh_completions
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .palette_submit?
           input = @model.command_palette.input
           close_palette
@@ -148,18 +155,18 @@ module Obsctl
           palette = @model.command_palette
           palette.input = palette.input.each_grapheme.first(1).join
           refresh_completions
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .palette_delete_word?
           palette = @model.command_palette
           palette.input = palette.input.rstrip.sub(/[^\s]*$/, "")
           refresh_completions
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .complete_next?
           @model.command_palette.cycle_next
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .complete_previous?
           @model.command_palette.cycle_previous
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .pointer_completion?
           index = action.index
           completion = index ? @model.command_palette.completions[index]? : nil
@@ -167,7 +174,7 @@ module Obsctl
             @model.command_palette.input = completion
             @model.command_palette.completion_index = index
           end
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         end
       end
 
@@ -175,22 +182,22 @@ module Obsctl
         case action.kind
         when .navigate_up?
           @model.move_up
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .navigate_down?
           @model.move_down
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .navigate_top?
           @model.move_top
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .navigate_bottom?
           @model.move_bottom
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .navigate_half_page_up?
           @model.move_by(-page_step)
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .navigate_half_page_down?
           @model.move_by(page_step)
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .volume_down? then volume(-5)
         when .volume_up?   then volume(5)
         end
@@ -213,27 +220,27 @@ module Obsctl
           @model.theme_preview_origin = @model.theme
           @model.settings_cursor = Theme::ALL.index(@model.theme) || 0
           @model.view = View::Settings
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .close_settings?
           @model.theme = @model.theme_preview_origin || @model.theme
           @model.theme_preview_origin = nil
           @model.view = View::Main
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .settings_navigate_up?
           @model.settings_cursor = {@model.settings_cursor - 1, 0}.max
           @model.theme = Theme::ALL[@model.settings_cursor]
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .settings_navigate_down?
           @model.settings_cursor = {@model.settings_cursor + 1, Theme::ALL.size - 1}.min
           @model.theme = Theme::ALL[@model.settings_cursor]
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .pointer_settings_select?
           index = action.index
           if index && (theme = Theme::ALL[index]?)
             @model.settings_cursor = index
             @model.theme = theme
           end
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         when .apply_settings_theme?, .pointer_settings_apply?
           @model.theme_preview_origin = nil
           @model.view = View::Main
@@ -271,7 +278,7 @@ module Obsctl
           when .profiles?    then command_action(Action.new(ActionKind::ActivateProfile))
           when .collections? then command_action(Action.new(ActionKind::ActivateCollection))
           when .audio?       then command_action(Action.new(ActionKind::ToggleMute))
-          else                    ActionOutcome.new
+          else                    ActionOutcome::HANDLED
           end
         when .pointer_toggle_mute?
           command_action(Action.new(ActionKind::ToggleMute))
@@ -282,7 +289,7 @@ module Obsctl
         when .pointer_volume_down?
           navigation_action(Action.new(ActionKind::VolumeDown))
         else
-          ActionOutcome.new
+          ActionOutcome::HANDLED
         end
       end
 
@@ -375,17 +382,17 @@ module Obsctl
       end
 
       private def target_command(name : String, target : String?) : ActionOutcome
-        return ActionOutcome.new unless target
+        return ActionOutcome::HANDLED unless target
         command(IPC::CommandPayload.new(name, target))
       end
 
       private def volume(delta : Int32) : ActionOutcome
         input = @model.focused_audio
-        return ActionOutcome.new unless input
+        return ActionOutcome::HANDLED unless input
         percent = ((input.volume_percent || 50) + delta).clamp(0, 100)
         @model.preview_audio_volume(input.name, percent)
         debounce_volume(input.name, percent)
-        ActionOutcome.new
+        ActionOutcome::HANDLED
       end
 
       private def debounce_volume(input_name : String, percent : Int32) : Nil
