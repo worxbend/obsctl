@@ -415,12 +415,14 @@ module Obsctl
         end
       {% end %}
 
+      # Exhaustive `in` rather than `when`/`else`: a fifth panel then becomes a
+      # compile error here instead of silently counting scene collections.
       def item_count(panel : FocusPanel = @focus) : Int32
         case panel
-        when .scenes?   then scenes.size
-        when .audio?    then audio_inputs.size
-        when .profiles? then profiles.size
-        else                 scene_collections.size
+        in .scenes?      then scenes.size
+        in .audio?       then audio_inputs.size
+        in .profiles?    then profiles.size
+        in .collections? then scene_collections.size
         end
       end
 

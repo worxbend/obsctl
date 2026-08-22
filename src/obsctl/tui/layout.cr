@@ -17,12 +17,16 @@ module Obsctl
       stats : CryTUI::Rect? = nil do
       # The rectangle a focus panel is drawn in, so callers that reason about a
       # panel -- half-page steps, hit tests -- do not repeat the mapping.
+      #
+      # Exhaustive `in` rather than `when`/`else`: a fifth panel then becomes a
+      # compile error here instead of silently drawing in the collections
+      # rectangle.
       def panel(focus : FocusPanel) : CryTUI::Rect
         case focus
-        when .scenes?   then scenes
-        when .audio?    then audio
-        when .profiles? then profiles
-        else                 collections
+        in .scenes?      then scenes
+        in .audio?       then audio
+        in .profiles?    then profiles
+        in .collections? then collections
         end
       end
     end
