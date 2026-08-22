@@ -4,6 +4,7 @@ require "../config/config_dump"
 require "../config/config_loader"
 require "../config/config_writer"
 require "../domain/aliases"
+require "../domain/volume"
 require "../domain/errors"
 require "../ipc/command_name"
 require "../ipc/request"
@@ -157,7 +158,7 @@ module Obsctl
         input = resolve_audio(required_target(command))
 
         @supervisor.with_client(&.set_volume(input.name, percent))
-        @state.update_input_volume(input.name, Domain::Aliases.volume_percent_to_mul(percent), nil)
+        @state.update_input_volume(input.name, Domain::Volume.percent_to_mul(percent), nil)
         object({"message" => "volume set: #{input.name} #{percent}%"})
       end
 

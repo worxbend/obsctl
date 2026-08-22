@@ -13,7 +13,7 @@ require "./state/obs_snapshot"
 require "./state/record_status"
 require "../config/config"
 require "../domain/errors"
-require "../domain/aliases"
+require "../domain/volume"
 
 module Obsctl
   module OBS
@@ -124,7 +124,7 @@ module Obsctl
         data = response_data(Requests::Audio::GET_INPUT_VOLUME, Requests::Audio.input_name(name))
         mul = number(data, "inputVolumeMul")
         db = number(data, "inputVolumeDb")
-        percent = mul.try { |value| Domain::Aliases.volume_mul_to_percent(value) }
+        percent = mul.try { |value| Domain::Volume.mul_to_percent(value) }
         {mul: mul, db: db, percent: percent}
       end
 
@@ -140,7 +140,7 @@ module Obsctl
 
       # Sets OBS input volume using a user-facing 0-100 percentage.
       def set_volume(name : String, percent : Int32) : Nil
-        request(Requests::Audio::SET_INPUT_VOLUME, Requests::Audio.set_volume(name, Domain::Aliases.volume_percent_to_mul(percent)))
+        request(Requests::Audio::SET_INPUT_VOLUME, Requests::Audio.set_volume(name, Domain::Volume.percent_to_mul(percent)))
       end
 
       def output_state : State::OutputState
