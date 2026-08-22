@@ -4,6 +4,7 @@ require "./auth"
 require "./connection"
 require "./protocol/request_id"
 require "./protocol/opcode"
+require "./protocol/json_value"
 require "./protocol/request"
 require "./protocol/response"
 require "./protocol/event"
@@ -155,20 +156,29 @@ module Obsctl
         @pending_lock.synchronize { @pending.delete(id) } if id
       end
 
+      # The handshake is the one path that has to translate its own faults.
+      # Every later frame arrives through `handle_frame`, which already turns
+      # any malformed body into a `ConnectionFailed(MalformedFrame)`; these two
+      # frames are read as raw text by `connect` and so bypass it. Without the
+      # translation below, a peer that is not obs-websocket 5.x -- or an older
+      # build that omits a handshake field -- surfaces as a raw `KeyError`
+      # escaping into the supervisor's catch-all, which logs an ordinary
+      # protocol mismatch as an internal daemon error.
       private def identify(hello_frame : String) : Nil
         hello = JSON.parse(hello_frame)
         raise Domain::ConnectionFailed.new("expected OBS Hello frame") unless hello["op"].as_i == Protocol::Opcode::Hello.value
-        data = hello["d"]
+        data = hello["d"]? || raise malformed_handshake("d")
         identify_data = {} of String => JSON::Any
-        identify_data["rpcVersion"] = JSON::Any.new(data["rpcVersion"].as_i64)
+        rpc_version = Protocol::JsonValue.integer(data, "rpcVersion") || raise malformed_handshake("rpcVersion")
+        identify_data["rpcVersion"] = JSON::Any.new(rpc_version)
         if event_subscriptions = @event_subscriptions
           identify_data["eventSubscriptions"] = JSON::Any.new(event_subscriptions.to_i64)
         end
 
         if auth = data["authentication"]?
           password = password_from_config
-          salt = auth["salt"].as_s
-          challenge = auth["challenge"].as_s
+          salt = Protocol::JsonValue.string(auth, "salt") || raise malformed_handshake("authentication.salt")
+          challenge = Protocol::JsonValue.string(auth, "challenge") || raise malformed_handshake("authentication.challenge")
           identify_data["authentication"] = JSON::Any.new(Auth.authentication(password, salt, challenge))
         end
 
@@ -182,6 +192,13 @@ module Obsctl
         identified = read_system_frame
         parsed = JSON.parse(identified)
         raise Domain::AuthenticationFailed.new unless parsed["op"].as_i == Protocol::Opcode::Identified.value
+      end
+
+      private def malformed_handshake(field : String) : Exception
+        Domain::ConnectionFailed.new(
+          "OBS WebSocket protocol error: malformed OBS handshake frame (#{field})",
+          Domain::DisconnectKind::MalformedFrame
+        )
       end
 
       private def password_from_config : String

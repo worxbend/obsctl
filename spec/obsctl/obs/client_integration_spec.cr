@@ -287,6 +287,23 @@ describe Obsctl::OBS::Client do
       eq(Obsctl::Domain::DisconnectKind::ResponseParserError)
     )
   end
+  # A peer that is not obs-websocket 5.x still completes the WebSocket
+  # handshake, so the mismatch only shows up in the Hello frame. It has to
+  # arrive as a typed connection failure: an untyped one reaches the
+  # supervisor's catch-all and is logged as an internal daemon error.
+  it "reports a Hello frame missing rpcVersion as a protocol mismatch" do
+    server = Obsctl::SpecSupport::FakeObsServer.new(omit_hello_rpc_version: true).start
+    client = Obsctl::OBS::Client.new(server.config)
+
+    begin
+      error = expect_raises(Obsctl::Domain::ConnectionFailed) { client.connect }
+      error.message.to_s.should contain("malformed OBS handshake frame (rpcVersion)")
+      error.kind.should eq(Obsctl::Domain::DisconnectKind::MalformedFrame)
+    ensure
+      client.close
+      server.stop
+    end
+  end
 end
 
 # Connects, parks a request so there is a pending caller to fail, pushes

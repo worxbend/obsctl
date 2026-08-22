@@ -78,6 +78,10 @@ module Obsctl
         # "connected enough to hold an fd, not connected enough to be
         # identified" state that a leak can hide in.
         @reject_identify : Bool = false,
+        # Sends a Hello whose `d` object omits `rpcVersion`, the way a peer
+        # that is not obs-websocket 5.x would. Lets a spec prove the handshake
+        # reports a protocol mismatch instead of leaking a raw `KeyError`.
+        @omit_hello_rpc_version : Bool = false,
       )
         @host = "127.0.0.1"
         @server = HTTP::Server.new([websocket_handler])
@@ -419,7 +423,7 @@ module Obsctl
             json.field "d" do
               json.object do
                 json.field "obsWebSocketVersion", "5.4.0"
-                json.field "rpcVersion", 1
+                json.field "rpcVersion", 1 unless @omit_hello_rpc_version
                 if @authentication
                   json.field "authentication" do
                     json.object do
