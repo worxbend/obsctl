@@ -1,4 +1,5 @@
 require "../obs/state/obs_snapshot"
+require "../domain/volume"
 require "../runtime/logger"
 require "./theme"
 require "./anim"
@@ -103,7 +104,7 @@ module Obsctl
       # width without holding history nothing draws.
       METRIC_HISTORY_SAMPLES = 32
 
-      property snapshot : OBS::State::ObsSnapshot?
+      getter snapshot : OBS::State::ObsSnapshot?
       property logs : Array(LogEntry)
       property command_palette : CommandPaletteState
       property last_result : String?
@@ -124,6 +125,17 @@ module Obsctl
       # `collection_cursor` accessors below are unchanged for callers; they
       # now read and write this map.
       @cursors : Hash(FocusPanel, Int32)
+      # Volume edits the user has made but the daemon has not acknowledged yet.
+      #
+      # A volume keypress paints the new level immediately and only sends the
+      # OBS command once the keys stop coming, so for up to that debounce
+      # window the screen holds a level the daemon has never heard of. The
+      # daemon pushes a fresh snapshot every couple of seconds and after any
+      # other client's command, and such a push carries the *old* level. This
+      # map is what lets `snapshot=` tell "the daemon disagrees" apart from
+      # "the daemon has not been told yet", instead of relying on the push
+      # happening to miss the debounce window.
+      @pending_volumes : Hash(String, Int32)
       property meter_levels : Hash(String, Float64)
       # The highest point each meter has reached and the frame it reached it
       # on. Storing the frame rather than decaying the value every tick keeps
@@ -164,6 +176,7 @@ module Obsctl
         @connected_to_daemon = false
         @focus = FocusPanel::Scenes
         @cursors = FocusPanel.values.to_h { |panel| {panel, 0} }
+        @pending_volumes = {} of String => Int32
         @meter_levels = {} of String => Float64
         @meter_peaks = {} of String => Tuple(Float64, UInt64)
         @cpu_history = [] of Float64
@@ -287,14 +300,37 @@ module Obsctl
         return unless snapshot
 
         bounded = percent.clamp(0, 100)
+        @pending_volumes[input_name] = bounded
+        @snapshot = with_pending_volumes(snapshot)
+      end
+
+      # Forgets the optimistic value for one input, because the command that
+      # carried it has finished and the daemon's own snapshots are now the
+      # better answer.
+      def settle_volume(input_name : String) : Nil
+        @pending_volumes.delete(input_name)
+      end
+
+      # The single place a snapshot is stored, so the pending-edit rule cannot
+      # be skipped by a caller that assigns the field directly: an edit the
+      # user is still making is newer than any snapshot the daemon computed
+      # before that edit reached it, and therefore wins.
+      def snapshot=(snapshot : OBS::State::ObsSnapshot?) : OBS::State::ObsSnapshot?
+        @snapshot = snapshot.try { |value| with_pending_volumes(value) }
+      end
+
+      private def with_pending_volumes(snapshot : OBS::State::ObsSnapshot) : OBS::State::ObsSnapshot
+        return snapshot if @pending_volumes.empty?
+
         inputs = snapshot.audio_inputs.map do |input|
-          next input unless input.name == input_name
+          percent = @pending_volumes[input.name]?
+          next input unless percent
           input.copy_with(
-            volume_mul: bounded.to_f64 / 100.0,
-            volume_percent: bounded
+            volume_mul: Domain::Volume.percent_to_mul(percent),
+            volume_percent: percent
           )
         end
-        @snapshot = snapshot.copy_with(audio_inputs: inputs)
+        snapshot.copy_with(audio_inputs: inputs)
       end
 
       # Records a meter reading and raises the peak hold when the reading beats

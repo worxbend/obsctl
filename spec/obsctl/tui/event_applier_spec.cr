@@ -99,4 +99,24 @@ describe Obsctl::TUI::EventApplier do
     Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("state", JSON.parse(%({"broken":true}))))
     model.current_scene.should eq("Main")
   end
+
+  # The daemon pushes snapshots on its own schedule, and one can land while a
+  # volume keypress is still waiting out its debounce window. The level on
+  # screen is newer than that snapshot, so it has to survive the push.
+  it "keeps an in-flight volume edit when a stale snapshot arrives" do
+    model = Obsctl::TUI::Model.new
+    Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("state", state_payload))
+
+    model.preview_audio_volume("Mic", 30)
+    Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("state", state_payload))
+
+    mic = model.audio_inputs.find! { |input| input.name == "Mic" }
+    mic.volume_percent.should eq(30)
+    mic.volume_mul.should eq(0.3)
+
+    # Once the command has finished the daemon is authoritative again.
+    model.settle_volume("Mic")
+    Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("state", state_payload))
+    model.audio_inputs.find! { |input| input.name == "Mic" }.volume_percent.should eq(80)
+  end
 end

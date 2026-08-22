@@ -395,12 +395,20 @@ module Obsctl
           sleep @volume_debounce
           next unless @volume_versions[input_name] == version
 
-          response = @sender.call(IPC::CommandPayload.new(IPC::CommandName::SET_VOLUME, input_name, percent))
-          # Only failures are announced: the level the user just set is
-          # already on screen, so "ok" would say nothing they cannot see.
-          @model.set_last_result(result_message(response)) unless response.ok
-        rescue ex : Domain::ObsctlError | IO::Error
-          @model.set_last_result("error: #{ex.message}")
+          begin
+            response = @sender.call(IPC::CommandPayload.new(IPC::CommandName::SET_VOLUME, input_name, percent))
+            # Only failures are announced: the level the user just set is
+            # already on screen, so "ok" would say nothing they cannot see.
+            @model.set_last_result(result_message(response)) unless response.ok
+          rescue ex : Domain::ObsctlError | IO::Error
+            @model.set_last_result("error: #{ex.message}")
+          ensure
+            # The edit is no longer in flight however it ended, so daemon
+            # snapshots take over again. Only the fiber that survived the
+            # version check gets here, so it is always the newest edit that
+            # is being settled.
+            @model.settle_volume(input_name)
+          end
         end
       end
 
