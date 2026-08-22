@@ -11,18 +11,7 @@ module Obsctl
         paused : Bool? = nil,
         timecode : String? = nil,
         duration_ms : Int64? = nil,
-        bytes : Int64? = nil do
-        # Writes the status as the JSON object used by the IPC result payload.
-        def to_json(json : JSON::Builder) : Nil
-          json.object do
-            json.field "active", active
-            json.field "paused", paused
-            json.field "timecode", timecode
-            json.field "duration_ms", duration_ms
-            json.field "bytes", bytes
-          end
-        end
-      end
+        bytes : Int64? = nil
     end
   end
 end
