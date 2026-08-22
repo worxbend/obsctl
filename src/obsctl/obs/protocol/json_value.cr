@@ -28,10 +28,13 @@ module Obsctl
 
         # Accepts either JSON form of a number. See the note above.
         def self.number(data : JSON::Any?, key : String) : Float64?
-          value = data.try(&.[key]?)
-          return unless value
+          number(data.try(&.[key]?))
+        end
 
-          value.as_f? || value.as_i?.try(&.to_f64)
+        # The same rule for a value that has already been pulled out of its
+        # object — an element of an array, or a field a caller chose between.
+        def self.number(value : JSON::Any?) : Float64?
+          value.try { |json| json.as_f? || json.as_i?.try(&.to_f64) }
         end
 
         def self.integer(data : JSON::Any?, key : String) : Int64?

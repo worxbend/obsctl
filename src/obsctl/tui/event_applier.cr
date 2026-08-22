@@ -1,5 +1,6 @@
 require "json"
 require "../ipc/event"
+require "../obs/protocol/json_value"
 require "../ipc/state_snapshot_codec"
 require "./model"
 
@@ -67,7 +68,7 @@ module Obsctl
         inputs = payload["inputs"]?.try(&.as_a?) || [] of JSON::Any
         inputs.each do |input|
           name = input["name"]?.try(&.as_s?) || input["inputName"]?.try(&.as_s?)
-          level = number(input["level"]?) || meter_level(input["inputLevelsMul"]?)
+          level = OBS::Protocol::JsonValue.number(input["level"]?) || meter_level(input["inputLevelsMul"]?)
           model.record_meter_level(name, level) if name && level
         end
         false
@@ -79,14 +80,10 @@ module Obsctl
         channels = data.try(&.as_a?)
         return unless channels
         channels.reduce(0.0) do |maximum, channel|
-          magnitude = channel.as_a?.try(&.first?).try { |value| number(value) }
+          magnitude = channel.as_a?.try(&.first?).try { |value| OBS::Protocol::JsonValue.number(value) }
           return unless magnitude && magnitude.finite? && magnitude >= 0.0
           Math.max(maximum, magnitude)
         end
-      end
-
-      private def number(data : JSON::Any?) : Float64?
-        data.try { |value| value.as_f? || value.as_i?.try(&.to_f64) }
       end
     end
   end

@@ -1,4 +1,5 @@
 require "json"
+require "../obs/protocol/json_value"
 require "../obs/state/obs_snapshot"
 require "../obs/state/scene_state"
 require "../obs/state/audio_state"
@@ -100,19 +101,19 @@ module Obsctl
             alias: input["alias"]?.try(&.as_s?),
             shortcut: input["shortcut"]?.try(&.as_s?),
             muted: input["muted"]?.try(&.as_bool?),
-            volume_mul: number(input["volume_mul"]?),
-            volume_db: number(input["volume_db"]?),
+            volume_mul: OBS::Protocol::JsonValue.number(input["volume_mul"]?),
+            volume_db: OBS::Protocol::JsonValue.number(input["volume_db"]?),
             volume_percent: input["volume_percent"]?.try(&.as_i?).try(&.to_i32)
           )
         end
         output = data["output"]?
         stats = data["stats"]?.try do |value|
           value.raw.nil? ? nil : OBS::State::ObsStats.new(
-            cpu_usage_percent: number(value["cpu_usage_percent"]?) || 0.0,
-            memory_usage_mb: number(value["memory_usage_mb"]?) || 0.0,
-            available_disk_space_mb: number(value["available_disk_space_mb"]?) || 0.0,
-            active_fps: number(value["active_fps"]?) || 0.0,
-            average_frame_render_time_ms: number(value["average_frame_render_time_ms"]?) || 0.0,
+            cpu_usage_percent: OBS::Protocol::JsonValue.number(value["cpu_usage_percent"]?) || 0.0,
+            memory_usage_mb: OBS::Protocol::JsonValue.number(value["memory_usage_mb"]?) || 0.0,
+            available_disk_space_mb: OBS::Protocol::JsonValue.number(value["available_disk_space_mb"]?) || 0.0,
+            active_fps: OBS::Protocol::JsonValue.number(value["active_fps"]?) || 0.0,
+            average_frame_render_time_ms: OBS::Protocol::JsonValue.number(value["average_frame_render_time_ms"]?) || 0.0,
             render_skipped_frames: value["render_skipped_frames"]?.try(&.as_i64?) || 0_i64,
             render_total_frames: value["render_total_frames"]?.try(&.as_i64?) || 0_i64,
             output_skipped_frames: value["output_skipped_frames"]?.try(&.as_i64?) || 0_i64,
@@ -135,7 +136,7 @@ module Obsctl
           scene_collections: string_array(data["scene_collections"]?),
           current_scene_collection: data["current_scene_collection"]?.try(&.as_s?),
           stats: stats,
-          stream_bitrate_kbps: number(data["stream_bitrate_kbps"]?),
+          stream_bitrate_kbps: OBS::Protocol::JsonValue.number(data["stream_bitrate_kbps"]?),
           stream_duration_ms: data["stream_duration_ms"]?.try(&.as_i64?),
           record_duration_ms: data["record_duration_ms"]?.try(&.as_i64?),
           last_error: data["last_error"]?.try(&.as_s?),
@@ -147,10 +148,6 @@ module Obsctl
 
       def self.string_array(data : JSON::Any?) : Array(String)
         data.try(&.as_a?).try(&.compact_map(&.as_s?)) || [] of String
-      end
-
-      def self.number(data : JSON::Any?) : Float64?
-        data.try { |value| value.as_f? || value.as_i?.try(&.to_f64) }
       end
     end
   end
