@@ -146,9 +146,7 @@ module Obsctl
         socket_path = client_socket_path(options.config_path)
         return tui_runner.call(socket_path) if tui_runner
 
-        # The thin TUI needs local appearance/socket settings, but must not
-        # require the daemon's OBS password environment to be present.
-        config = File.exists?(options.config_path) ? Config::Config.from_yaml(File.read(options.config_path)) : Config::Config.default
+        config = Config::ConfigLoader.new.load_lenient(options.config_path)
         TUI::App.from_config(config, socket_path: socket_path, output: stdout, config_path: options.config_path).run
       end
 
@@ -438,11 +436,11 @@ module Obsctl
         "JSON output is not supported for command: #{name}"
       end
 
+      # A config that cannot be read must not stop a client from talking to a
+      # daemon that is running: the default location is the daemon's default
+      # too, so it is the best guess available.
       private def self.client_socket_path(config_path : String) : String
-        return IPC::SocketPath.resolve unless File.exists?(config_path)
-
-        config = Config::Config.from_yaml(File.read(config_path))
-        IPC::SocketPath.resolve(config.server.socket_path)
+        IPC::SocketPath.resolve(Config::ConfigLoader.new.load_lenient(config_path).server.socket_path)
       rescue
         IPC::SocketPath.resolve
       end

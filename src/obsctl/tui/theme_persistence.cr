@@ -1,4 +1,5 @@
 require "../config/config"
+require "../config/config_loader"
 require "../config/config_writer"
 require "./theme"
 
@@ -9,7 +10,7 @@ module Obsctl
 
       def save(path : String?, theme : Theme) : String
         return "theme applied (no config file to persist to)" unless path
-        config = File.exists?(path) ? Config::Config.from_yaml(File.read(path)) : Config::Config.default
+        config = Config::ConfigLoader.new.load_lenient(path)
         ui = config.ui
         config.ui = Config::UiConfig.new(
           refresh_interval_ms: ui.refresh_interval_ms,
