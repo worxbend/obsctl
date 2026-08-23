@@ -8,7 +8,7 @@ Top-level fields:
 - `server`: local daemon settings such as Unix socket path and remote shutdown policy
 - `connection`: OBS WebSocket connection and timeout settings
 - `reconnect`: daemon/TUI reconnect behavior
-- `ui`: refresh interval, palette prefix, icon flag, theme name, locale
+- `ui`: refresh interval, palette prefix, icon flag, theme name, locale, scene presets
 - `scenes`: configured scene aliases, shortcuts, groups, and stale markers
 - `audio.inputs`: configured audio aliases, shortcuts, kind, and stale markers
 - `keymap`: dashboard key bindings
@@ -42,6 +42,16 @@ ui:
   show_icons: true
   theme: default
   locale: en
+  # Optional. Left out entirely when no scene preset has been created.
+  scene_presets:
+    active: streaming
+    presets:
+      - name: streaming
+        hidden_scenes:
+          - Utility Cam
+          - BRB Loop
+      - name: editing
+        hidden_scenes: []
 keymap:
   quit: ["q", "ctrl+c"]
   command_palette: ["/", ":"]
@@ -89,6 +99,47 @@ The TUI supports `en` and `uk` for the localized header and connection
 surface, matching the Rust reference. Set `ui.locale`, or override it for one
 process with `OBSCTL_LOCALE`; the environment value takes precedence and
 unsupported values fall back to English.
+
+A large OBS setup often contains scenes that exist only to be referenced by
+other scenes — a lower-third, a background loop, a nested camera group. They are
+real scenes, but you never switch to them, so they are noise in the dashboard's
+scene list.
+
+`ui.scene_presets` is how you get rid of that noise. A *scene preset* is a name
+plus a list of scene names to leave out of the list: `streaming` in the example
+above hides `Utility Cam` and `BRB Loop`, while `editing` hides nothing.
+`ui.scene_presets.active` names the preset in effect. Presets are obsctl's own
+filter over the list it draws. They are not OBS profiles and not OBS scene
+collections — those are OBS's own concepts, the dashboard shows them in their
+own panels, and nothing in this section is ever sent to OBS. The daemon keeps
+reporting every scene, so `obsctl status --json`, `obsctl obs-status --json` and
+`obsctl completions candidates scenes` are unaffected by a preset and still list
+every scene OBS has.
+
+Which scenes the dashboard draws is decided by one of two rules, never both:
+
+- **A preset is active.** That preset is the complete answer: every scene except
+  the ones it lists is shown, and the per-scene `hidden` flag under `scenes:` is
+  not consulted.
+- **Nothing is active** — the section is absent, `active` is unset, or `active`
+  names a preset that is not in `presets`. Then the list behaves exactly as it
+  did before presets existed: scenes marked `hidden: true` under `scenes:` are
+  left out and everything else is shown.
+
+An `active` name with no matching preset is reported by `validate-config` as a
+warning rather than an error, because failing to load a config over a typo in a
+display setting would be a worse outcome than showing every scene.
+
+Editing the section by hand is supported, and so is editing it from the
+dashboard: `<leader>P` in the scene view opens the scene preset editor, which
+lists every scene with the hidden ones dimmed, toggles one with `t`, and writes
+the result back to this file. Two presets sharing a name, or a preset with a
+blank name, are rejected as config errors — `active` could not name either one
+unambiguously.
+
+The whole `scene_presets` block is omitted when there is nothing in it, so a
+config file that has never used the feature is rewritten unchanged by `config
+migrate` and `dump-config`.
 
 Unknown top-level fields are rejected with a config error. This avoids silently dropping future fields when config files are rewritten. Nested unknown fields are currently ignored by the typed loader and are not preserved on write. Older configs with `connection.reconnect` are still accepted, but new writes use the top-level `reconnect` section.
 

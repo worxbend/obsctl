@@ -356,6 +356,7 @@ Press `Space` and a menu appears showing every next key. No memorising.
 | Keys | What it does |
 | --- | --- |
 | `<leader>s` | 🎬 Switch scene — the quick picker, see below |
+| `<leader>P` | 🗂 Scene presets — choose which scenes the list shows |
 | `<leader>f` → `s` `a` `p` `c` | 🔍 Find: scenes, audio, profiles, collections |
 | `<leader>u` → `t` | 🎨 UI: theme picker |
 | `<leader>o` → `r` `d` `c` | 🔧 OBS: reload config, dump config, reconnect |
@@ -399,6 +400,63 @@ Two things worth knowing:
   the scenes panel shows you as `[b]` is the key that works. Shortcuts longer
   than one character (`brb`) still work on the command line and in the CLI —
   they just can't be a single press.
+
+### 🗂 Hide the scenes you never switch to (`<leader>P`)
+
+Scene lists grow. Half of a real OBS collection is scenes that exist only to be
+nested inside another scene — a lower third, a looping background, a camera
+group. They are scenes as far as OBS is concerned, but you never switch to one,
+and every time you scroll past them you're scrolling past furniture.
+
+A **scene preset** is a name plus the scenes to keep out of the list. It is
+obsctl's own idea, saved in your obsctl config file — not an OBS profile and not
+an OBS scene collection. Those two are OBS's, the dashboard shows them in their
+own panels, and a preset never touches either.
+
+Press `Space` then `P`. Every scene shows up, including the hidden ones — this
+is the one place that lists them, because it's the one place that can bring them
+back. Hidden scenes are dimmed and carry a hollow `○` instead of a filled `●`:
+
+```text
+╭─ 🗂  Scene presets  streaming ─────────────────────────╮
+│ ●  Main Camera                                         │
+│ ●  Screen Share                                        │
+│ ○  Utility Cam                                         │
+│ ○  BRB Loop                                            │
+│ t hide · n name · ⇥ switch preset · ↵ save · esc close │
+╰────────────────────────────────────────────────────────╯
+```
+
+The bottom row is every key the editor answers to, including the one that
+switches between the presets you've already saved — the title is where the
+preset's name goes, and a name of any length would have pushed the keys off the
+end of it.
+
+| Key | What it does |
+| --- | --- |
+| `t` or `Space` | Hide / unhide the scene under the cursor |
+| `j` `k` or `↑` `↓` | Move the cursor |
+| `n` | Name the preset you're building |
+| `Tab` / `Shift-Tab` | Load the next / previous preset you've already saved |
+| `Enter` | Save it and switch the list to it ✅ |
+| `Esc` | Leave without saving |
+| Click a row | Toggle it |
+
+Two things worth knowing:
+
+- **Nothing is written until `Enter`.** Toggling scenes builds up a draft that
+  lives in the dashboard; `Enter` writes it to your config file and makes it the
+  active preset, and `Esc` throws it away. Loading another preset with `Tab`
+  replaces the draft too, and says so in the title.
+- **A preset changes what this dashboard draws, and nothing else.** OBS still
+  has every scene, the daemon still reports every scene, and
+  `obsctl scene "Utility Cam"` still switches to a hidden one from the command
+  line. Hiding is a view, not a lock — so a preset can never leave you unable to
+  reach a scene in a hurry.
+
+The saved shape lives under `ui.scene_presets`; [`docs/config.md`](docs/config.md)
+describes it field by field, and editing it by hand is as supported as editing it
+from the dashboard.
 
 ### The command line (`:`)
 

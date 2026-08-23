@@ -452,11 +452,22 @@ TUI keyboard input:
   between channels.
 - `Ctrl-W` followed by `h`/`j`/`k`/`l`, or `Ctrl` with those keys or the
   arrows, moves between panels.
-- `Space` is the leader: `<leader>s` opens the scene picker, `<leader>f` finds
-  panels (`s`/`a`/`p`/`c`), `<leader>u t` opens themes, `<leader>o` sends OBS
-  commands (`r` reload, `d` dump, `c` reconnect), `<leader>m` toggles mute, and
-  `<leader>q` exits. A which-key menu lists the continuations while a sequence
-  is pending; `Esc` or an unbound key cancels it.
+- `Space` is the leader: `<leader>s` opens the scene picker, `<leader>P` opens
+  the scene-preset editor, `<leader>f` finds panels (`s`/`a`/`p`/`c`),
+  `<leader>u t` opens themes, `<leader>o` sends OBS commands (`r` reload, `d`
+  dump, `c` reconnect), `<leader>m` toggles mute, and `<leader>q` exits. A
+  which-key menu lists the continuations while a sequence is pending; `Esc` or
+  an unbound key cancels it. A terminal too short for every continuation gets
+  as many as fit and a final `+N more` row counting the rest.
+- The scene-preset editor chooses which scenes the dashboard's scene list shows
+  and writes that choice to `ui.scene_presets` in the config file. It captures
+  every key while it is open: `t` or `Space` hides/unhides the scene under the
+  cursor, `j`/`k` and the arrows move, `n` names the preset being built,
+  `Tab`/`Shift-Tab` load another saved preset, `Enter` saves and activates, and
+  `Esc`, `q` or `Ctrl-C` closes without saving. Those keys are listed on the
+  editor's own bottom row, so the way out and the way between saved presets are
+  both on screen. It is a change to what this dashboard draws only: it sends no command, the daemon and OBS are not told
+  about it, and every scene stays reachable from the CLI and the command line.
 - The scene picker labels each scene with one key and switches to it on that
   key alone. Labels are assigned `1`-`9` and then `a`-`z`, in list order,
   except that a scene configured with a single-character `shortcut` claims that
