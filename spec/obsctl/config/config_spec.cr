@@ -60,6 +60,40 @@ describe Obsctl::Config::Config do
     rewritten.keymap.command_palette.should eq([":"])
   end
 
+  it "loads and rewrites obsctl scene presets" do
+    yaml = <<-YAML
+      version: 1
+      ui:
+        scene_presets:
+          active: streaming
+          presets:
+            - name: streaming
+              hidden_scenes:
+                - Utility Cam
+                - BRB Loop
+            - name: editing
+              hidden_scenes: []
+      YAML
+
+    config = Obsctl::Config::Config.from_yaml(yaml)
+    config.ui.scene_presets.active.should eq("streaming")
+    config.ui.scene_presets.presets.map(&.name).should eq(["streaming", "editing"])
+    config.ui.scene_presets.presets.first.hidden_scenes.should eq(["Utility Cam", "BRB Loop"])
+    # An empty list is a preset that hides nothing, not an absent setting.
+    config.ui.scene_presets.presets.last.hidden_scenes.should be_empty
+
+    # A rewrite has to carry the section back out, or `config migrate` would
+    # drop presets the dashboard saved.
+    rewritten = Obsctl::Config::Config.from_yaml(config.to_yaml)
+    rewritten.ui.scene_presets.should eq(config.ui.scene_presets)
+  end
+
+  it "writes no scene preset section when none is configured" do
+    # Existing config files predate the feature, so a rewrite of one must come
+    # back byte-identical rather than gaining an empty section.
+    Obsctl::Config::Config.default.to_yaml.should_not contain("scene_presets")
+  end
+
   it "preserves an intentionally blank password_env as no env password" do
     config = Obsctl::Config::Config.from_yaml(<<-YAML)
       version: 1

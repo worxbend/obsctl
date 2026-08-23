@@ -46,6 +46,30 @@ describe Obsctl::Config::ConfigDump do
     merged.keymap.quit.should eq(["Q"])
   end
 
+  it "preserves configured scene presets" do
+    # Same reason as the keymap above: `dump-config` rewrites the whole file, so
+    # presets the merge forgets to carry across vanish from disk.
+    config = Obsctl::Config::Config.new(
+      ui: Obsctl::Config::UiConfig.new(
+        scene_presets: Obsctl::Config::ScenePresetsConfig.new(
+          active: "streaming",
+          presets: [
+            Obsctl::Config::ScenePresetConfig.new(
+              name: "streaming",
+              hidden_scenes: ["Utility Cam"]
+            ),
+          ]
+        )
+      )
+    )
+
+    merged = Obsctl::Config::ConfigDump.merge(config, ["Main Camera"], ["Mic/Aux"])
+
+    merged.ui.scene_presets.active.should eq("streaming")
+    merged.ui.scene_presets.presets.first.name.should eq("streaming")
+    merged.ui.scene_presets.presets.first.hidden_scenes.should eq(["Utility Cam"])
+  end
+
   it "reports duplicate aliases before writing a dumped config" do
     config = Obsctl::Config::Config.new(
       scenes: [

@@ -11,16 +11,11 @@ module Obsctl
       def save(path : String?, theme : Theme) : String
         return "theme applied (no config file to persist to)" unless path
         config = Config::ConfigLoader.new.load_lenient(path)
-        ui = config.ui
-        config.ui = Config::UiConfig.new(
-          refresh_interval_ms: ui.refresh_interval_ms,
-          command_palette_prefix: ui.command_palette_prefix,
-          advanced_ui: ui.advanced_ui,
-          show_icons: ui.show_icons,
-          theme: theme.id,
-          custom_theme: ui.custom_theme,
-          locale: ui.locale
-        )
+        # `copy_with` rather than a hand-listed `UiConfig.new`: picking a theme
+        # must not touch any other dashboard setting, and rebuilding the struct
+        # here would mean re-listing every field, so a field added later and
+        # forgotten here would have its default written over the user's value.
+        config.ui = config.ui.copy_with(theme: theme.id)
         Config::ConfigWriter.new.write(path, config, backup: File.exists?(path))
         "theme set: #{theme.id}"
       rescue ex

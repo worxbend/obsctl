@@ -129,6 +129,36 @@ module Obsctl
       )
     end
 
+    # One named set of scenes the dashboard leaves out of its scene list.
+    #
+    # This is obsctl's own grouping, unrelated to OBS profiles and OBS scene
+    # collections (which the dashboard shows in their own panels). Nothing here
+    # is ever sent to OBS: the daemon keeps reporting every scene and the
+    # dashboard decides which of them it draws.
+    struct ScenePresetConfig
+      config_value(
+        name : String,
+        hidden_scenes : Array(String) = [] of String,
+      )
+    end
+
+    # Every configured scene preset, plus which one is in effect.
+    #
+    # Nested inside `ui:` rather than declared as a top-level section on
+    # purpose: the Rust reference implementation rejects unknown *top-level*
+    # keys outright but ignores unknown keys inside `ui:`, so a config obsctl
+    # writes keeps loading there.
+    #
+    # `active` naming a preset that is not in the list is not an error. A
+    # hand-edited file has to degrade to "every scene visible" rather than to an
+    # empty scene list; `ConfigSchema.warnings` reports it instead.
+    struct ScenePresetsConfig
+      config_value(
+        active : String? = nil,
+        presets : Array(ScenePresetConfig) = [] of ScenePresetConfig,
+      )
+    end
+
     # Dashboard appearance and behavior.
     struct UiConfig
       config_value(
@@ -139,7 +169,39 @@ module Obsctl
         theme : String = "default",
         custom_theme : CustomThemeConfig? = nil,
         locale : String? = nil,
+        scene_presets : ScenePresetsConfig = ScenePresetsConfig.new,
       )
+
+      # Returns a copy of this config with only the named settings changed.
+      #
+      # `config_value` emits `getter`, not `property`, so changing one setting
+      # means rebuilding the whole struct. Callers that do that (the dashboard
+      # persists a theme change and a scene preset edit back to the config file)
+      # would each have to list every field, and a field left out of any one of
+      # those lists writes its default over a value the user set, with no error
+      # anywhere. Keeping the list here means there is one place to update when
+      # a setting is added.
+      def copy_with(
+        refresh_interval_ms : Int32 = @refresh_interval_ms,
+        command_palette_prefix : String = @command_palette_prefix,
+        advanced_ui : Bool = @advanced_ui,
+        show_icons : Bool = @show_icons,
+        theme : String = @theme,
+        custom_theme : CustomThemeConfig? = @custom_theme,
+        locale : String? = @locale,
+        scene_presets : ScenePresetsConfig = @scene_presets,
+      ) : self
+        UiConfig.new(
+          refresh_interval_ms: refresh_interval_ms,
+          command_palette_prefix: command_palette_prefix,
+          advanced_ui: advanced_ui,
+          show_icons: show_icons,
+          theme: theme,
+          custom_theme: custom_theme,
+          locale: locale,
+          scene_presets: scene_presets,
+        )
+      end
 
       # Raises `Domain::ConfigInvalid` when a dashboard setting would leave the
       # UI unable to run: a non-positive refresh interval, or an empty palette
@@ -423,6 +485,32 @@ module Obsctl
             write_custom_theme(yaml, custom)
           end
           write_optional(yaml, "locale", @ui.locale)
+          write_scene_presets(yaml, @ui.scene_presets)
+        end
+      end
+
+      # Omitted entirely while there is nothing to say, so a config file that
+      # never used scene presets is rewritten exactly as it was and `config
+      # migrate` reports no change for it. Same rule `custom_theme` and the
+      # per-scene `hidden` flag already follow.
+      private def write_scene_presets(yaml : YAML::Builder, presets : ScenePresetsConfig) : Nil
+        return if presets.active.nil? && presets.presets.empty?
+
+        yaml.scalar "scene_presets"
+        yaml.mapping do
+          write_optional(yaml, "active", presets.active)
+          yaml.scalar "presets"
+          yaml.sequence do
+            presets.presets.each do |preset|
+              yaml.mapping do
+                yaml.scalar "name"; yaml.scalar preset.name
+                # Written even when empty: an empty list is the meaningful
+                # statement "this preset hides nothing", not an absent setting.
+                yaml.scalar "hidden_scenes"
+                yaml.sequence { preset.hidden_scenes.each { |name| yaml.scalar name } }
+              end
+            end
+          end
         end
       end
 

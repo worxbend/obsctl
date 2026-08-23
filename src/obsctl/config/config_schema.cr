@@ -23,6 +23,16 @@ module Obsctl
         duplicates(config.scenes.compact_map(&.shortcut), "duplicate scene shortcut")
         duplicates(config.audio.inputs.compact_map(&.alias), "duplicate audio alias")
         duplicates(config.audio.inputs.compact_map(&.shortcut), "duplicate audio shortcut")
+        validate_scene_presets!(config.ui.scene_presets)
+      end
+
+      # A preset with no name cannot be selected or saved over, and two presets
+      # sharing a name would make `ui.scene_presets.active` ambiguous.
+      private def self.validate_scene_presets!(presets : ScenePresetsConfig) : Nil
+        presets.presets.each do |preset|
+          raise Domain::ConfigInvalid.new("ui.scene_presets preset name cannot be blank") if preset.name.blank?
+        end
+        duplicates(presets.presets.map(&.name), "duplicate scene preset")
       end
 
       # Returns secret-safe warnings for valid configs that still deserve user
@@ -38,6 +48,12 @@ module Obsctl
           unless {"en", "uk"}.includes?(locale.downcase)
             warnings << "ui.locale '#{locale}' is not supported (supported: en, uk); falling back to en"
           end
+        end
+        # A dangling `active` is deliberately survivable: emptying the scene
+        # list over a typo would be worse than showing every scene.
+        active = config.ui.scene_presets.active
+        if active && config.ui.scene_presets.presets.none? { |preset| preset.name == active }
+          warnings << "ui.scene_presets.active '#{active}' does not match any configured scene preset; every scene stays visible"
         end
         warnings
       end

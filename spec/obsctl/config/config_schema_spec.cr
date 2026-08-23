@@ -27,6 +27,60 @@ describe Obsctl::Config::ConfigSchema do
     end
   end
 
+  it "rejects duplicate scene preset names" do
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),
+      ui: Obsctl::Config::UiConfig.new(
+        scene_presets: Obsctl::Config::ScenePresetsConfig.new(
+          presets: [
+            Obsctl::Config::ScenePresetConfig.new(name: "streaming"),
+            Obsctl::Config::ScenePresetConfig.new(name: "streaming"),
+          ]
+        )
+      )
+    )
+
+    expect_raises(Obsctl::Domain::ConfigInvalid, /duplicate scene preset/) do
+      Obsctl::Config::ConfigSchema.validate!(config)
+    end
+  end
+
+  it "rejects a blank scene preset name" do
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),
+      ui: Obsctl::Config::UiConfig.new(
+        scene_presets: Obsctl::Config::ScenePresetsConfig.new(
+          presets: [Obsctl::Config::ScenePresetConfig.new(name: "  ")]
+        )
+      )
+    )
+
+    error = expect_raises(Obsctl::Domain::ConfigInvalid) do
+      Obsctl::Config::ConfigSchema.validate!(config)
+    end
+    error.message.should eq("ui.scene_presets preset name cannot be blank")
+  end
+
+  it "warns rather than fails when the active scene preset does not exist" do
+    # A hand-edited file has to degrade to "every scene visible"; refusing to
+    # load would lock the user out of the dashboard over a typo.
+    config = Obsctl::Config::Config.new(
+      connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),
+      ui: Obsctl::Config::UiConfig.new(
+        scene_presets: Obsctl::Config::ScenePresetsConfig.new(
+          active: "podcast",
+          presets: [Obsctl::Config::ScenePresetConfig.new(name: "streaming")]
+        )
+      )
+    )
+
+    Obsctl::Config::ConfigSchema.validate!(config)
+
+    warnings = Obsctl::Config::ConfigSchema.warnings(config)
+    warnings.size.should eq(1)
+    warnings.first.should contain("ui.scene_presets.active 'podcast'")
+  end
+
   it "rejects invalid reconnect values" do
     config = Obsctl::Config::Config.new(
       connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),
