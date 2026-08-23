@@ -28,6 +28,14 @@ module Obsctl
             border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
           )
           lines = WhichKeyLayout.visible(entries, rect).map { |entry| entry_line(entry, model) }
+          # A short terminal cannot show every continuation. Saying how many
+          # are missing is what tells the reader to make the window taller,
+          # instead of leaving them to conclude the binding does not exist.
+          if (dropped = WhichKeyLayout.overflow(entries, rect)) > 0
+            lines << CryTUI::Line.new([
+              CryTUI::Span.new(WhichKeyLayout.overflow_text(dropped), CryTUI::Style.new(foreground: theme.muted, modifiers: CryTUI::Modifier::Italic)),
+            ])
+          end
           CryTUI::Widgets::StyledText.new(lines, block: block).render(rect, buffer)
         end
 

@@ -6,6 +6,7 @@ require "./anim"
 require "./meter"
 require "./localization"
 require "./scene_picker"
+require "./scene_presets"
 
 module Obsctl
   module TUI
@@ -95,6 +96,29 @@ module Obsctl
       end
     end
 
+    # What the scene-preset editor is holding while it is open.
+    #
+    # The draft is deliberately separate from `Model#scene_presets`: toggling a
+    # scene has to repaint immediately, but must not change what the dashboard
+    # shows until the user saves, and Esc has to be able to throw the whole
+    # draft away. `name` is empty for a draft nobody has named yet, which is
+    # what turns Enter into a prompt instead of a save.
+    class ScenePresetEditorState
+      property active : Bool
+      property cursor : Int32
+      property name : String
+      property hidden : Set(String)
+      # True while the user is typing a name. The modal's keys mean different
+      # things in the two sub-modes -- `t` toggles a scene in one and types a
+      # letter in the other -- so the mode has to be part of the state rather
+      # than inferred.
+      property naming : Bool
+      property name_input : String
+
+      def initialize(@active = false, @cursor = 0, @name = "", @hidden = Set(String).new, @naming = false, @name_input = "")
+      end
+    end
+
     class Model
       MAX_LOG_ENTRIES = 200
 
@@ -166,6 +190,13 @@ module Obsctl
       # whichever panel is focused, and closing it without picking leaves the
       # dashboard exactly as it was.
       property scene_picker_cursor : Int32
+      # The scene presets read out of the config file.
+      #
+      # Filtering happens here in the dashboard rather than in the daemon: the
+      # daemon already reports every scene, so a preset needs no protocol
+      # change and takes effect without a round trip.
+      property scene_presets : ScenePresets
+      property scene_preset_editor : ScenePresetEditorState
 
       def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true, @command_palette_prefix = "/", @locale = "en")
         @snapshot = nil
@@ -190,6 +221,8 @@ module Obsctl
         @pending_sequence = ""
         @scene_picker_active = false
         @scene_picker_cursor = 0
+        @scene_presets = ScenePresets.empty
+        @scene_preset_editor = ScenePresetEditorState.new
       end
 
       # The scene picker's rows, rebuilt from the current scenes on every call
@@ -210,8 +243,23 @@ module Obsctl
         rich_ui? ? rich : fallback
       end
 
+      # Every scene the daemon reported, hidden ones included. The scene-preset
+      # editor lists these; everything else on the dashboard uses `scenes`.
+      def all_scenes : Array(OBS::State::SceneState)
+        @snapshot.try(&.scenes) || [] of OBS::State::SceneState
+      end
+
+      # The scenes the dashboard draws.
+      #
+      # An active scene preset is the complete answer to what is visible, so
+      # adopting one does not leave the per-scene `hidden` flag half-applied on
+      # top of it -- one rule per state, and no row the editor's toggle cannot
+      # bring back. With no preset active, which is the state every existing
+      # config is in, this is exactly the `hidden` filter it has always been.
       def scenes : Array(OBS::State::SceneState)
-        @snapshot.try(&.scenes.reject(&.hidden)) || [] of OBS::State::SceneState
+        preset = @scene_presets.active_preset
+        return all_scenes.reject(&.hidden) unless preset
+        all_scenes.reject { |scene| preset.hidden_scenes.includes?(scene.name) }
       end
 
       def audio_inputs : Array(OBS::State::AudioState)
@@ -433,6 +481,11 @@ module Obsctl
           @cursors[panel] = @cursors[panel].clamp(0, {item_count(panel) - 1, 0}.max)
         end
         @scene_picker_cursor = @scene_picker_cursor.clamp(0, {scenes.size - 1, 0}.max)
+        # Against `all_scenes`, not `scenes`: the editor is the one surface
+        # that lists hidden scenes too, so clamping it to the visible list
+        # would put its cursor out of reach of exactly the rows it exists to
+        # unhide.
+        @scene_preset_editor.cursor = @scene_preset_editor.cursor.clamp(0, {all_scenes.size - 1, 0}.max)
       end
 
       def focused_scene : OBS::State::SceneState?

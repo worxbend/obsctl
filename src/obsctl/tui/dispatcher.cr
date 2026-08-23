@@ -24,6 +24,11 @@ module Obsctl
 
       alias Sender = Proc(IPC::CommandPayload, IPC::Response)
       alias ThemePersister = Proc(Theme, String)
+      # Writes the edited scene presets to the config file and returns the line
+      # to show for it. A proc rather than a direct call into
+      # `ScenePresetPersistence` so the dispatcher stays free of the config
+      # layer and a spec can watch what it was handed.
+      alias ScenePresetPersister = Proc(ScenePresets, String)
       alias Viewport = Proc(CryTUI::Rect)
 
       # Half-page steps need to know how tall the focused panel is. The area is
@@ -38,6 +43,7 @@ module Obsctl
         @theme_persister : ThemePersister? = nil,
         @volume_debounce : Time::Span = VOLUME_DEBOUNCE,
         @viewport : Viewport? = nil,
+        @scene_preset_persister : ScenePresetPersister? = nil,
       )
         @volume_versions = Hash(String, UInt64).new(0_u64)
       end
@@ -74,6 +80,8 @@ module Obsctl
         pointer_action(action) ||
           palette_action(action) ||
           scene_picker_action(action) ||
+          scene_presets_action(action) ||
+          scene_preset_name_action(action) ||
           navigation_action(action) ||
           settings_action(action) ||
           command_action(action) ||
@@ -122,6 +130,168 @@ module Obsctl
 
         @model.scene_cursor = index
         target_command(IPC::CommandName::SET_SCENE, scene.name)
+      end
+
+      # The scene-preset editor: obsctl's own named sets of scenes to keep out
+      # of the scene list.
+      #
+      # Nothing here talks to the daemon. Every branch edits the draft on the
+      # model, and only `save_scene_preset` makes the draft the list the
+      # dashboard draws -- which is what lets Esc throw an edit away.
+      #
+      # Split from `scene_preset_name_action` because the two sub-modes
+      # together are more branches than ameba's complexity ratchet allows in
+      # one method.
+      private def scene_presets_action(action : Action) : ActionOutcome?
+        editor = @model.scene_preset_editor
+        case action.kind
+        when .open_scene_presets?
+          # Refusing to open on an empty list rather than showing an empty box:
+          # the editor swallows every key while it is open, so it would be a
+          # dead end with no visible reason.
+          return ActionOutcome.new(message: "no scenes to configure") if @model.all_scenes.empty?
+
+          open_scene_preset_editor
+          ActionOutcome::HANDLED
+        when .close_scene_presets?
+          editor.active = false
+          editor.naming = false
+          # Said out loud, because the draft is thrown away here and the only
+          # evidence otherwise would be the scene list not changing.
+          ActionOutcome.new(message: "scene preset editing cancelled")
+        when .scene_presets_navigate_up?
+          editor.cursor = {editor.cursor - 1, 0}.max
+          ActionOutcome::HANDLED
+        when .scene_presets_navigate_down?
+          editor.cursor = {editor.cursor + 1, {@model.all_scenes.size - 1, 0}.max}.min
+          ActionOutcome::HANDLED
+        when .scene_presets_toggle_scene?
+          toggle_scene_preset_scene(action.index)
+        when .scene_presets_cycle_next?     then cycle_scene_preset(1)
+        when .scene_presets_cycle_previous? then cycle_scene_preset(-1)
+        when .scene_presets_begin_naming?
+          editor.naming = true
+          editor.name_input = ""
+          ActionOutcome::HANDLED
+        when .scene_presets_save?
+          # An unnamed draft cannot be saved, so Enter asks for the name
+          # instead of failing: toggle first and name afterwards is the flow
+          # this supports.
+          if editor.name.empty?
+            editor.naming = true
+            editor.name_input = ""
+            return ActionOutcome.new(message: "name this scene preset")
+          end
+
+          save_scene_preset(editor.name)
+        end
+      end
+
+      private def open_scene_preset_editor : Nil
+        editor = @model.scene_preset_editor
+        preset = @model.scene_presets.active_preset
+        editor.name = preset.try(&.name) || ""
+        # A brand-new draft starts from what is on screen right now -- the
+        # scenes already flagged `hidden` in the config -- so a user adopting
+        # presets for the first time cannot open the editor, save, and watch
+        # the scene list change under them.
+        editor.hidden = preset ? preset.hidden_scenes.dup : @model.all_scenes.select(&.hidden).map(&.name).to_set
+        editor.cursor = 0
+        editor.naming = false
+        editor.name_input = ""
+        editor.active = true
+      end
+
+      # A click names its own row the way `PickScene` does, so a toggle cannot
+      # land on the wrong scene if the list moved between the click being
+      # reported and the action running.
+      private def toggle_scene_preset_scene(index : Int32?) : ActionOutcome
+        editor = @model.scene_preset_editor
+        editor.cursor = index if index
+        scene = @model.all_scenes[index || editor.cursor]?
+        return ActionOutcome::HANDLED unless scene
+
+        if editor.hidden.includes?(scene.name)
+          editor.hidden.delete(scene.name)
+        else
+          editor.hidden.add(scene.name)
+        end
+        ActionOutcome::HANDLED
+      end
+
+      # Tab walks the saved presets into the editor. Loading one replaces the
+      # draft, unsaved toggles included -- the status line names what is now
+      # being edited so that is visible rather than silent.
+      private def cycle_scene_preset(offset : Int32) : ActionOutcome
+        presets = @model.scene_presets.presets
+        return ActionOutcome.new(message: "no saved scene presets") if presets.empty?
+
+        editor = @model.scene_preset_editor
+        current = editor.name.empty? ? nil : @model.scene_presets.index_of(editor.name)
+        index = current ? (current + offset) % presets.size : (offset > 0 ? 0 : presets.size - 1)
+        preset = presets[index]
+        editor.name = preset.name
+        editor.hidden = preset.hidden_scenes.dup
+        ActionOutcome.new(message: "editing scene preset: #{preset.name}")
+      end
+
+      # Saving both stores the preset and makes it the active one, because the
+      # only reason to edit which scenes a preset hides is to then look at that
+      # list.
+      private def save_scene_preset(name : String) : ActionOutcome
+        editor = @model.scene_preset_editor
+        @model.scene_presets = @model.scene_presets.upsert(name, editor.hidden).activate(name)
+        editor.active = false
+        editor.naming = false
+        # The visible scene list just changed length, so cursors pointing past
+        # its new end have to come back inside it.
+        @model.clamp_cursors
+        ActionOutcome.new(message: @scene_preset_persister.try(&.call(@model.scene_presets)) || "scene preset saved: #{name}")
+      end
+
+      # The editor's naming sub-mode, which is a one-line text field with the
+      # same key set as the command palette's.
+      private def scene_preset_name_action(action : Action) : ActionOutcome?
+        editor = @model.scene_preset_editor
+        case action.kind
+        when .scene_presets_name_character?
+          editor.name_input += action.character.to_s
+          ActionOutcome::HANDLED
+        when .scene_presets_name_backspace?
+          # Per grapheme, not per byte or per codepoint: one press has to
+          # remove one character the user can see, including an emoji built out
+          # of several codepoints.
+          unless editor.name_input.empty?
+            editor.name_input = editor.name_input.each_grapheme.to_a[0...-1].join
+          end
+          ActionOutcome::HANDLED
+        when .scene_presets_name_clear_line?
+          editor.name_input = ""
+          ActionOutcome::HANDLED
+        when .scene_presets_name_cancel?
+          # Back to the list, not out of the editor: the draft is still there
+          # to save under another name.
+          editor.naming = false
+          editor.name_input = ""
+          ActionOutcome::HANDLED
+        when .scene_presets_name_submit?
+          name = editor.name_input.strip
+          return ActionOutcome.new(message: "scene preset name cannot be empty") if name.empty?
+
+          # Naming is not saving. Confirming the name puts the draft back in
+          # the list so more scenes can be toggled under it, and `Enter` there
+          # is what writes the config -- which is what the box says on screen
+          # ("n name" and "enter save" are separate hints, and the naming hint
+          # reads "enter confirm").
+          #
+          # Saving here instead would also close the modal, so the `Enter` the
+          # hint asks for next would land on the dashboard and switch the live
+          # OBS scene under the cursor.
+          editor.name = name
+          editor.name_input = ""
+          editor.naming = false
+          ActionOutcome.new(message: "scene preset named: #{name}; press enter to save")
+        end
       end
 
       private def palette_action(action : Action) : ActionOutcome?
@@ -421,12 +591,22 @@ module Obsctl
 
       # Bracketed paste is not a keystroke, so `Input` has no `Action` to map it
       # to and it arrives here directly rather than through `handle`. It still
-      # has to land in the palette the way typing does — appending to the line
-      # and recomputing completions — which is why the append lives next to the
-      # `palette_character?` branch instead of being spelled out again by the
-      # caller. Control characters are stripped: a pasted newline would submit
-      # a command the user never chose to run.
+      # has to land in whichever text field is open the way typing does —
+      # appending to the line and recomputing completions — which is why the
+      # append lives next to the `palette_character?` branch instead of being
+      # spelled out again by the caller. Control characters are stripped: a
+      # pasted newline would submit a command the user never chose to run.
       def paste(text : String) : Nil
+        editor = @model.scene_preset_editor
+        if editor.active && editor.naming
+          # The same strip for the same reason as the palette below: a pasted
+          # carriage return -- what a copied line ending arrives as -- would
+          # otherwise submit, here saving a preset under a name the user never
+          # chose.
+          editor.name_input += text.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
+          return
+        end
+
         palette = @model.command_palette
         return unless palette.active
 

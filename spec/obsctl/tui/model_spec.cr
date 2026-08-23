@@ -71,6 +71,53 @@ describe Obsctl::TUI::Model do
     model.snapshot.not_nil!.scenes.map(&.name).should eq(["Main", "Utility", "Cam"])
     model.move_down
     model.focused_scene.try(&.name).should eq("Cam")
+    # The editor is the one surface that has to see the hidden scene, because
+    # it is the only place a hidden scene can be brought back.
+    model.all_scenes.map(&.name).should eq(["Main", "Utility", "Cam"])
+  end
+
+  it "lets an active scene preset decide the whole visible list" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = tui_snapshot.copy_with(scenes: [
+      Obsctl::OBS::State::SceneState.new("Main", active: true),
+      Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
+      Obsctl::OBS::State::SceneState.new("Cam"),
+    ])
+    model.scene_presets = Obsctl::TUI::ScenePresets
+      .empty
+      .upsert("streaming", Set{"Cam"})
+      .activate("streaming")
+
+    # The preset is the complete answer: `Cam` goes because the preset hides
+    # it, and `Utility` comes back even though OBS reports it hidden.
+    model.scenes.map(&.name).should eq(["Main", "Utility"])
+  end
+
+  it "falls back to the hidden flag when the active preset is not configured" do
+    # A hand-edited config file naming a preset that is not there has to
+    # degrade to what the dashboard did before presets existed, rather than to
+    # an empty scene list.
+    model = Obsctl::TUI::Model.new
+    model.snapshot = tui_snapshot.copy_with(scenes: [
+      Obsctl::OBS::State::SceneState.new("Main", active: true),
+      Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
+    ])
+    model.scene_presets = Obsctl::TUI::ScenePresets.empty.activate("missing")
+
+    model.scenes.map(&.name).should eq(["Main"])
+  end
+
+  it "clamps the scene preset editor cursor against the unfiltered scene list" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = tui_snapshot.copy_with(scenes: [
+      Obsctl::OBS::State::SceneState.new("Main", active: true),
+      Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
+      Obsctl::OBS::State::SceneState.new("Cam"),
+    ])
+    model.scene_preset_editor.cursor = 99
+    model.clamp_cursors
+    # Two if it were clamped to the visible scenes; the editor lists all three.
+    model.scene_preset_editor.cursor.should eq(2)
   end
 
   it "caps rolling logs at 200 entries" do

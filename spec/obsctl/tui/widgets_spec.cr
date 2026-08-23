@@ -11,6 +11,7 @@ require "../../../src/obsctl/tui/widgets/dashboard"
 require "../../../src/obsctl/tui/widgets/settings"
 require "../../../src/obsctl/tui/widgets/splash"
 require "../../../src/obsctl/tui/widgets/scene_map"
+require "../../../src/obsctl/tui/hit_test"
 require "../../../src/obsctl/tui/widgets/which_key"
 
 private def widget_model
@@ -778,6 +779,7 @@ describe Obsctl::TUI::Widgets::WhichKey do
     text.should contain("<leader>  obsctl")
     text.should contain("+find")
     text.should contain("quit")
+    text.should contain("scene presets")
   end
 
   it "draws nothing while no sequence is pending" do
@@ -785,5 +787,26 @@ describe Obsctl::TUI::Widgets::WhichKey do
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 40))
     Obsctl::TUI::Widgets::WhichKey.render(buffer.area, buffer, model)
     rendered_text(buffer).strip.should be_empty
+  end
+
+  # A tmux pane this size has room for six of the leader's continuations. The
+  # menu is the only place those bindings are advertised, so stopping at six
+  # without a word would make the rest of them undiscoverable at this size.
+  it "counts the continuations a short terminal had no room for" do
+    model = widget_model
+    model.pending_sequence = "<leader>"
+    entries = Obsctl::TUI::Keymap.continuations("<leader>")
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 60, 12))
+    Obsctl::TUI::Widgets::WhichKey.render(buffer.area, buffer, model)
+    text = rendered_text(buffer)
+
+    rect = Obsctl::TUI::HitTest.which_key_area(model, buffer.area)
+    dropped = Obsctl::TUI::WhichKeyLayout.overflow(entries, rect)
+    dropped.should be > 0
+    text.should contain("+#{dropped} more")
+
+    # And the counter is chrome, not a binding: clicking it cannot run the
+    # entry that would otherwise have been on that row.
+    Obsctl::TUI::HitTest.which_key_entry(model, buffer.area, rect.x + 2, rect.bottom - 2).should be_nil
   end
 end

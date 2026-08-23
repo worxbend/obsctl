@@ -50,6 +50,27 @@ module Obsctl
       # picker. It names its own scene rather than acting on a cursor, so the
       # switch cannot land on the wrong one if the list moves underneath it.
       PickScene
+      # The scene-preset editor: obsctl's own named sets of scenes the
+      # dashboard leaves out of its scene list. Unrelated to OBS profiles and
+      # OBS scene collections, which have their own panels and their own
+      # actions.
+      OpenScenePresets
+      CloseScenePresets
+      ScenePresetsNavigateUp
+      ScenePresetsNavigateDown
+      # Hide or unhide one scene in the draft. `index` nil means the row under
+      # the editor's cursor and a set `index` means the row that was clicked,
+      # the same rule `PickScene` follows.
+      ScenePresetsToggleScene
+      ScenePresetsCycleNext
+      ScenePresetsCyclePrevious
+      ScenePresetsBeginNaming
+      ScenePresetsSave
+      ScenePresetsNameCharacter
+      ScenePresetsNameBackspace
+      ScenePresetsNameClearLine
+      ScenePresetsNameSubmit
+      ScenePresetsNameCancel
       # A key that begins a multi-key sequence, e.g. `g` or the leader.
       PendingSequence
       ClearSequence

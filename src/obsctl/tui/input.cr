@@ -28,13 +28,14 @@ module Obsctl
 
       # Resolves a key press to an action, or nil when nothing is bound.
       #
-      # The scene picker, the palette and the settings views capture every key,
-      # so they short-circuit. A half-typed key sequence captures every key too
-      # -- that is what makes `<leader>` and `g` behave like prefixes rather
-      # than like a keystroke that also does something on its own. Otherwise
-      # the binding groups are tried in priority order; each returns nil to
-      # pass the key along.
+      # The scene-preset editor, the scene picker, the palette and the settings
+      # views capture every key, so they short-circuit. A half-typed key
+      # sequence captures every key too -- that is what makes `<leader>` and
+      # `g` behave like prefixes rather than like a keystroke that also does
+      # something on its own. Otherwise the binding groups are tried in
+      # priority order; each returns nil to pass the key along.
       def handle_key(model : Model, key : CryTUI::KeyEvent) : Action?
+        return scene_presets_key(model, key) if model.scene_preset_editor.active
         return scene_picker_key(model, key) if model.scene_picker_active
         return palette_key(key) if model.command_palette.active
         return settings_key(key) if model.view.settings?
@@ -56,6 +57,7 @@ module Obsctl
       # click cannot cut the programme scene mid-broadcast, and it needs no
       # double-click timer to do it.
       def handle_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
+        return scene_presets_mouse(model, event, area) if model.scene_preset_editor.active
         return scene_picker_mouse(model, event, area) if model.scene_picker_active
         return which_key_mouse(model, event, area) unless model.pending_sequence.empty?
         return settings_mouse(model, event, area) if model.view.settings?
@@ -147,6 +149,64 @@ module Obsctl
         return unless event.kind.press? && event.button.left?
         index = HitTest.scene_picker_index(model, area, event.column, event.row)
         index ? Action.new(ActionKind::PickScene, index: index) : action(ActionKind::CloseScenePicker)
+      end
+
+      # While the scene-preset editor is open every key belongs to it, the way
+      # the scene picker claims every key: in here `q` does not quit and `t` is
+      # not one of the dashboard's bindings. An unbound key does nothing rather
+      # than closing, so a mistyped key costs a keystroke and not the draft.
+      private def scene_presets_key(model : Model, key : CryTUI::KeyEvent) : Action?
+        return scene_presets_name_key(key) if model.scene_preset_editor.naming
+
+        character = key.character
+        control = key.modifiers.control?
+
+        return action(ActionKind::CloseScenePresets) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::ScenePresetsSave) if key.code.enter?
+        return action(ActionKind::ScenePresetsNavigateUp) if key.code.up?
+        return action(ActionKind::ScenePresetsNavigateDown) if key.code.down?
+        return action(ActionKind::ScenePresetsCycleNext) if key.code.tab?
+        return action(ActionKind::ScenePresetsCyclePrevious) if key.code.back_tab?
+        # Control-modified keys are not editor bindings; the only one it
+        # answers to is the `Ctrl-C` handled above.
+        return if control
+
+        case character
+        when 't', ' ' then action(ActionKind::ScenePresetsToggleScene)
+        when 'j'      then action(ActionKind::ScenePresetsNavigateDown)
+        when 'k'      then action(ActionKind::ScenePresetsNavigateUp)
+        when 'n'      then action(ActionKind::ScenePresetsBeginNaming)
+        when 'q'      then action(ActionKind::CloseScenePresets)
+        end
+      end
+
+      # Naming a preset uses the same keys the palette line does, so the
+      # editing muscle memory carries over. Esc backs out to the list rather
+      # than closing the editor: the draft is still there to save under another
+      # name.
+      private def scene_presets_name_key(key : CryTUI::KeyEvent) : Action?
+        character = key.character
+        control = key.modifiers.control?
+
+        return action(ActionKind::ScenePresetsNameCancel) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::ScenePresetsNameSubmit) if key.code.enter?
+        return action(ActionKind::ScenePresetsNameBackspace) if key.code.backspace?
+        return action(ActionKind::ScenePresetsNameClearLine) if character == 'u' && control
+        return Action.new(ActionKind::ScenePresetsNameCharacter, character) if key.code.character? && character && !control
+        nil
+      end
+
+      # Clickable on the same rules the picker follows: a click on a row
+      # toggles it, a click anywhere else means what Esc means, and the wheel
+      # moves the cursor.
+      private def scene_presets_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
+        if event.scroll?
+          return action(event.kind.scroll_up? ? ActionKind::ScenePresetsNavigateUp : ActionKind::ScenePresetsNavigateDown)
+        end
+
+        return unless event.kind.press? && event.button.left?
+        index = HitTest.scene_presets_index(model, area, event.column, event.row)
+        index ? Action.new(ActionKind::ScenePresetsToggleScene, index: index) : action(ActionKind::CloseScenePresets)
       end
 
       # Clicking a theme previews it and clicking the previewed theme applies

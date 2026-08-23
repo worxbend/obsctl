@@ -79,6 +79,24 @@ module Obsctl
         item_at(rect, Array.new(model.scene_picker_entries.size, 1), model.scene_picker_cursor, row)
       end
 
+      # The scene under the pointer in the scene-preset editor, or nil for a
+      # click on its chrome, past its last row, or anywhere outside it -- all
+      # of which the caller treats as a request to close.
+      #
+      # Measured against `all_scenes` because the editor is the one surface
+      # that lists hidden scenes too.
+      def scene_presets_index(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Int32?
+        return unless model.scene_preset_editor.active
+
+        rect = ScenePresetsLayout.compute(area, model)
+        return unless contains?(rect, column, row)
+
+        # Against the list's own box, not the whole modal: the last row inside
+        # the border belongs to the hints, and a click on it is a click on the
+        # chrome rather than on the scene that would otherwise line up with it.
+        item_at(ScenePresetsLayout.list_area(rect), Array.new(model.all_scenes.size, 1), model.scene_preset_editor.cursor, row)
+      end
+
       # Where the which-key menu is drawn for the sequence being typed.
       def which_key_area(model : Model, area : CryTUI::Rect) : CryTUI::Rect
         WhichKeyLayout.compute(area, Keymap.continuations(model.pending_sequence), palette_area(model, area))

@@ -33,6 +33,9 @@ module Obsctl
         Binding.new("#{LEADER}q", ActionKind::Quit, "quit"),
         Binding.new("#{LEADER}m", ActionKind::ToggleMute, "toggle mute"),
         Binding.new("#{LEADER}s", ActionKind::OpenScenePicker, "switch scene"),
+        # Capital `P`: `Keymap.token` keeps the case of the key, so this is a
+        # different token from the `p` of `<leader>fp` and nothing collides.
+        Binding.new("#{LEADER}P", ActionKind::OpenScenePresets, "scene presets"),
         Binding.new("#{LEADER}fs", ActionKind::FocusScenes, "scenes"),
         Binding.new("#{LEADER}fa", ActionKind::FocusAudio, "audio"),
         Binding.new("#{LEADER}fp", ActionKind::FocusProfiles, "profiles"),
