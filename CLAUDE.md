@@ -19,7 +19,8 @@ Reuse a cache dir to speed up repeated builds: `CRYSTAL_CACHE_DIR=/tmp/obsctl-cr
 Running specs:
 
 ```bash
-crystal spec                                     # whole suite (make test)
+crystal spec                                     # obsctl's suite
+crystal spec crytui/spec                         # the crytui shard's suite (make test runs both)
 crystal spec spec/obsctl/cli/main_spec.cr        # one file
 crystal spec spec/obsctl/cli/main_spec.cr:120    # one example by line
 crystal spec spec/obsctl/tui                     # one directory
@@ -28,6 +29,8 @@ make contract-rs-compat                          # strict fixture compat against
 ```
 
 The suite is deterministic and needs no running OBS — it uses an in-tree fake obs-websocket server (`spec/support/fake_obs_server.cr`), real Unix sockets, and real PTYs.
+
+CryTUI lives in `crytui/` as its own shard, wired in as a `path:` dependency, so `shards install` symlinks `lib/crytui` to it and obsctl reaches it only as `require "crytui"`. Kiwi is CryTUI's dependency now, not obsctl's. The two spec suites are compiled separately — one program containing both would load CryTUI twice, under the symlinked path and the relative one, and fail to reopen its enums. The library also builds on its own: `cd crytui && shards install && crystal spec`.
 
 `ameba` is pinned to a master commit because 1.6.4 does not build on Crystal 1.21. CI lints only on the 1.21.0 floor leg; the `latest` leg installs `--production` and just builds + tests.
 
@@ -58,7 +61,7 @@ Adding an OBS call means going through `CommandExecutor` → `ObsSupervisor#with
 | `src/obsctl/obs/` | obs-websocket 5.x client, auth, protocol messages, state snapshots |
 | `src/obsctl/tui/` | dashboard: model, input → action, dispatcher, event applier, widgets |
 | `src/obsctl/config/` | YAML config, schema validation, atomic writes, dump/diff/explain |
-| `src/crytui/` | in-tree immediate-mode TUI library (Ratatui-inspired), independent of obsctl |
+| `crytui/` | a **separate shard** in this repository: immediate-mode TUI library (Ratatui-inspired), depends on nothing in obsctl and is consumed through `require "crytui"` |
 
 `src/obsctl.cr` is a four-line entry point delegating to `CLI::Main.run(ARGV)`.
 

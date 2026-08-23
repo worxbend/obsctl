@@ -1,4 +1,4 @@
-require "../../../crytui"
+require "crytui"
 require "../model"
 require "../anim"
 

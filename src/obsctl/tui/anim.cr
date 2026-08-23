@@ -1,4 +1,4 @@
-require "../../crytui"
+require "crytui"
 
 module Obsctl
   module TUI

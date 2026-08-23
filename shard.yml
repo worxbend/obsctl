@@ -13,9 +13,14 @@ crystal: ">= 1.21.0"
 license: MIT
 
 dependencies:
-  kiwi:
-    github: da1nerd/kiwi.cr
-    version: ~> 0.3.0
+  # CryTUI is developed in this repository, under crytui/, as its own shard
+  # rather than as a directory of obsctl. A path dependency keeps the two
+  # buildable together while the boundary between them stays a real one: the
+  # library depends on nothing here, and obsctl reaches it only through
+  # `require "crytui"`. Kiwi arrives through it, which is why obsctl no longer
+  # names Kiwi itself.
+  crytui:
+    path: ./crytui
 
 development_dependencies:
   ameba:

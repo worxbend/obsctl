@@ -99,4 +99,27 @@ describe "daemon-first architecture boundary" do
     supervisor_calls = pattern_usages(server_files, /@supervisor\.with_client\b/, "OBS action execution")
     usage_files(supervisor_calls).should eq([command_executor_path])
   end
+
+  # CryTUI is a separate shard under crytui/, not a directory of obsctl. Two
+  # rules keep that true rather than merely tidy, because both are easy to
+  # break by accident and neither breaks the build when broken.
+  it "keeps crytui a separate shard obsctl only consumes" do
+    obsctl_files = src_files(["src/obsctl/**/*.cr", "src/obsctl.cr", "spec/obsctl/**/*.cr"])
+
+    # Reaching into ../../crytui would still compile, and would quietly
+    # compile a second copy of the library alongside the installed shard.
+    relative = pattern_usages(obsctl_files, /require\s+"(?:\.\.\/)+crytui"/, "relative crytui require")
+    usage_files(relative).should eq([] of String)
+
+    # The dependency has to point one way. A `require` back into obsctl, or a
+    # reference to its namespace, would make the library unbuildable on its own.
+    crytui_files = src_files(["crytui/src/**/*.cr", "crytui/spec/**/*.cr"])
+    crytui_files.should_not be_empty
+
+    back_requires = pattern_usages(crytui_files, /require\s+"[^"]*obsctl/, "require back into obsctl")
+    usage_files(back_requires).should eq([] of String)
+
+    namespace = pattern_usages(crytui_files, /\bObsctl\b/, "obsctl namespace reference")
+    usage_files(namespace).should eq([] of String)
+  end
 end

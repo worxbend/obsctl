@@ -1,6 +1,6 @@
 require "io/console"
 require "termios"
-require "../../../src/crytui"
+require "../../src/crytui"
 
 private def terminal_mode
   mode = uninitialized LibC::Termios

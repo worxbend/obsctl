@@ -2,6 +2,15 @@
 /lib/
 /.shards/
 /.crystal/
+
+# crytui/ is its own shard and can be built on its own, which leaves a second
+# set of dependency directories behind. Its lock file is deliberately not
+# committed: lock files pin an application's dependency tree, and crytui is a
+# library — obsctl's own shard.lock is the one that decides what actually gets
+# built here.
+/crytui/lib/
+/crytui/.shards/
+/crytui/shard.lock
 *.dwarf
 *.log
 # The demo recording lives in docs/demo/ and is copied here by the Pages

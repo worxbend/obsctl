@@ -7,13 +7,20 @@
 Excluded:
   - lib
   - bin
+  # Building crytui/ on its own installs its dependencies here. They are
+  # vendored code, and the top-level `lib` entry does not reach a nested one.
+  - crytui/lib
 
 # `not_nil!` is the idiomatic way to assert a value in a spec, where a nil
 # would fail the example anyway and the alternative is noise around every
-# assertion. Production code under src/ keeps the rule enforced.
+# assertion. Library and application code keep the rule enforced.
+#
+# Both spec trees are listed because crytui/ is its own shard with its own
+# spec/ directory, which `spec/**/*.cr` does not reach.
 Lint/NotNil:
   Excluded:
     - spec/**/*.cr
+    - crytui/spec/**/*.cr
 
 # Specs pre-declare `x = nil.as(T?)` before a begin/ensure block so the
 # variable is in scope for cleanup. Ameba reads the declaration as useless,
@@ -26,6 +33,7 @@ Lint/NotNil:
 Lint/UselessAssign:
   Excluded:
     - spec/**/*.cr
+    - crytui/spec/**/*.cr
     - src/obsctl/config/config.cr
 
 # Enforced as a ratchet, not at ameba's default of 10.

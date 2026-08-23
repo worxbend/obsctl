@@ -1,0 +1,17 @@
+name: crytui
+version: 0.1.0
+
+authors:
+  - obsctl-cr contributors
+
+crystal: ">= 1.21.0"
+
+license: MIT
+
+# Kiwi solves the Cassowary constraints behind `CryTUI::Layout`. It is the only
+# runtime dependency, and it belongs to this shard rather than to obsctl, which
+# never names Kiwi itself.
+dependencies:
+  kiwi:
+    github: da1nerd/kiwi.cr
+    version: ~> 0.3.0

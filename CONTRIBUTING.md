@@ -41,7 +41,7 @@ That is equivalent to:
 | `make format-check` | `crystal tool format --check` reports no diffs |
 | `make lint` | `ameba` reports zero offenses |
 | `make build` | the binary compiles |
-| `make test` | `crystal spec` is fully green |
+| `make test` | both suites are fully green — obsctl's `spec/` and the crytui shard's `crytui/spec/` |
 
 `make format` rewrites files in place if `format-check` fails.
 
@@ -71,7 +71,7 @@ in the same PR and say why in the comment.
 | `src/obsctl/ipc/` | the Unix-socket protocol between client and daemon |
 | `src/obsctl/tui/` | the terminal dashboard |
 | `src/obsctl/config/` | config loading, schema validation, and dumping |
-| `src/crytui/` | the in-tree immediate-mode TUI library |
+| `crytui/` | the immediate-mode TUI library, a separate shard in this repository |
 | `spec/support/` | the fake OBS server and other spec helpers |
 | `spec/fixtures/` | frozen contract fixtures |
 | `docs/` | command grammar, config reference, and IPC protocol |

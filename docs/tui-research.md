@@ -71,9 +71,11 @@ metadata, input coverage, and compatibility gates are resolved.
 
 ## CryTUI Architecture
 
-`src/crytui` is an in-tree incubation library with a clean extraction path to a
-standalone shard. Its API follows the narrow Ratatui architecture rather than
-the Rust syntax:
+`crytui/` is a standalone shard developed in this repository. It depends on
+nothing in obsctl, ships its own `shard.yml`, and builds and tests on its own
+(`cd crytui && shards install && crystal spec`); obsctl consumes it as a
+`path:` dependency and reaches it only through `require "crytui"`. Its API
+follows the narrow Ratatui architecture rather than the Rust syntax:
 
 ```text
 obsctl TUI model + IPC events

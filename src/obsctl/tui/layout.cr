@@ -1,4 +1,4 @@
-require "../../crytui"
+require "crytui"
 require "./keymap"
 require "./model"
 require "./scene_picker"

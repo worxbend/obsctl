@@ -45,7 +45,7 @@ describe "CryTUI terminal lifecycle" do
   end
 
   it "restores the exact PTY mode after an exception" do
-    helper = File.expand_path("../fixtures/crytui/raw_restore_helper.cr", __DIR__)
+    helper = File.expand_path("../fixtures/raw_restore_helper.cr", __DIR__)
     command = "crystal run #{Process.quote(helper)}"
     output = IO::Memory.new
     error = IO::Memory.new

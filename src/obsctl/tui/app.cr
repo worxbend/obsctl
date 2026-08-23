@@ -1,4 +1,4 @@
-require "../../crytui"
+require "crytui"
 require "../ipc/socket_path"
 require "../config/config"
 require "./dispatcher"
