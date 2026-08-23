@@ -243,27 +243,9 @@ module Obsctl
         # rather than only the glyphs in it.
         private def centered(text : String, width : Int32, model : Model) : String
           return "" if width <= 0
-          fitted = truncate(text, width, model.advanced_ui ? "…" : "~")
+          fitted = CryTUI::TextWidth.truncate(text, width, model.advanced_ui ? "…" : "~")
           padding = width - CryTUI::TextWidth.width(fitted)
           "#{" " * (padding // 2)}#{fitted}#{" " * (padding - padding // 2)}"
-        end
-
-        private def truncate(text : String, width : Int32, ellipsis : String) : String
-          return text if CryTUI::TextWidth.width(text) <= width
-          limit = width - CryTUI::TextWidth.width(ellipsis)
-          return ellipsis[0, {width, 0}.max] if limit <= 0
-
-          used = 0
-          kept = String.build do |io|
-            text.each_grapheme do |grapheme|
-              symbol = grapheme.to_s
-              size = CryTUI::TextWidth.grapheme_width(symbol)
-              break if used + size > limit
-              io << symbol
-              used += size
-            end
-          end
-          "#{kept}#{ellipsis}"
         end
       end
     end

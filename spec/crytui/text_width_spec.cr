@@ -26,4 +26,28 @@ describe CryTUI::TextWidth do
     CryTUI::TextWidth.width("🗂").should eq(2)
     CryTUI::TextWidth.width("⚡🔊").should eq(4)
   end
+
+  it "fits text to a column count from either end" do
+    CryTUI::TextWidth.truncate("obsctl", 6, "…").should eq("obsctl")
+    CryTUI::TextWidth.truncate("obsctl", 4, "…").should eq("obs…")
+    CryTUI::TextWidth.truncate_start("obsctl", 4, "…").should eq("…ctl")
+    # No ellipsis asked for, so every column goes to the text itself.
+    CryTUI::TextWidth.truncate("obsctl", 3).should eq("obs")
+    CryTUI::TextWidth.truncate_start("obsctl", 3).should eq("ctl")
+  end
+
+  it "drops a two-column glyph whole rather than drawing half of it" do
+    # Half a wide glyph is not a thing a terminal can draw: keeping one column
+    # of it would push everything after it a column right.
+    CryTUI::TextWidth.width(CryTUI::TextWidth.truncate("界界界", 5, "")).should eq(4)
+    CryTUI::TextWidth.width(CryTUI::TextWidth.truncate_start("界界界", 5, "")).should eq(4)
+    # Three columns hold one wide glyph and the ellipsis, not one and a half.
+    CryTUI::TextWidth.truncate("界界界", 3, "…").should eq("界…")
+    CryTUI::TextWidth.truncate_start("界界界", 3, "…").should eq("…界")
+  end
+
+  it "cuts an ellipsis that is itself too long for the space" do
+    CryTUI::TextWidth.truncate("obsctl", 1, "..").should eq(".")
+    CryTUI::TextWidth.truncate_start("obsctl", 0, "…").should eq("")
+  end
 end

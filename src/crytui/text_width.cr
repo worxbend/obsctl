@@ -10,6 +10,61 @@ module CryTUI
       text.each_grapheme.sum { |grapheme| grapheme_width(grapheme.to_s) }
     end
 
+    # The beginning of `text` that fits in `cells` columns, with `ellipsis`
+    # standing in for what was cut off the end.
+    #
+    # Columns, not characters: a two-column glyph is dropped whole rather than
+    # half drawn, so the result never overruns the space it was fitted to.
+    # `text` is returned untouched when it already fits, and an ellipsis too
+    # long for the space is itself cut.
+    def truncate(text : String, cells : Int32, ellipsis : String = "") : String
+      return text if width(text) <= cells
+
+      room = cells - width(ellipsis)
+      return ellipsis[0, {cells, 0}.max] if room <= 0
+      "#{leading(text, room)}#{ellipsis}"
+    end
+
+    # The end of `text` that fits in `cells` columns, with `ellipsis` standing
+    # in for what was cut off the front.
+    #
+    # This is the half a one-line text field needs: the caret sits after the
+    # last character typed, so the end is the part that has to stay on screen
+    # while the beginning scrolls away.
+    def truncate_start(text : String, cells : Int32, ellipsis : String = "") : String
+      return text if width(text) <= cells
+
+      room = cells - width(ellipsis)
+      return ellipsis[0, {cells, 0}.max] if room <= 0
+      "#{ellipsis}#{trailing(text, room)}"
+    end
+
+    private def leading(text : String, cells : Int32) : String
+      used = 0
+      String.build do |io|
+        text.each_grapheme do |grapheme|
+          symbol = grapheme.to_s
+          size = grapheme_width(symbol)
+          break if used + size > cells
+          io << symbol
+          used += size
+        end
+      end
+    end
+
+    private def trailing(text : String, cells : Int32) : String
+      used = 0
+      kept = [] of String
+      text.each_grapheme.to_a.reverse_each do |grapheme|
+        symbol = grapheme.to_s
+        size = grapheme_width(symbol)
+        break if used + size > cells
+        kept.unshift(symbol)
+        used += size
+      end
+      kept.join
+    end
+
     def grapheme_width(grapheme : String) : Int32
       first = grapheme.each_char.first?
       return 0 unless first
