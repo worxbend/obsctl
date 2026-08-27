@@ -36,6 +36,21 @@ module CryTUI
       def self.char(byte : UInt8) : String
         (BASE + byte).chr.to_s
       end
+
+      # Rasterises a dot grid into braille cell bytes: one byte per character
+      # cell, with the block deciding whether each (row, col) dot is set. Lives
+      # here so every spinner shares one copy of the cell-dimension arithmetic
+      # and the `MAP` bit packing instead of reimplementing it per widget.
+      def self.pack(dot_rows : Int32, dot_cols : Int32, & : Int32, Int32 -> Bool) : Array(Array(UInt8))
+        grid = Array.new((dot_rows + 3) // 4) { Array.new((dot_cols + 1) // 2, 0_u8) }
+        dot_rows.times do |row|
+          dot_cols.times do |col|
+            next unless yield row, col
+            grid[row // 4][col // 2] |= 1_u8 << MAP[row % 4][col % 2]
+          end
+        end
+        grid
+      end
     end
 
     # The render tail every spinner shares: base style across the whole area,

@@ -142,15 +142,7 @@ module CryTUI
       def lines(arc_color : Color, dim_color : Color, alignment : Alignment) : Array(Line)
         rows = @grid.cells.size
         columns = @grid.cells[0].size
-        char_rows = (rows + 3) // 4
-        char_columns = (columns + 1) // 2
-        screen = Array.new(char_rows) { Array.new(char_columns, 0_u8) }
-        @grid.cells.each_with_index do |row_cells, row|
-          row_cells.each_with_index do |lit, col|
-            next unless lit
-            screen[row // 4][col // 2] |= 1_u8 << Braille::MAP[row % 4][col % 2]
-          end
-        end
+        screen = Braille.pack(rows, columns) { |row, col| @grid.cells[row][col] }
 
         active = arc_color
         screen.map_with_index do |row, y|

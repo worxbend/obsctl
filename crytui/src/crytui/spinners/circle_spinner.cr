@@ -105,24 +105,29 @@ module CryTUI
         min_col = perimeter.min_of(&.col)
         dot_rows = perimeter.max_of(&.row) - min_row + 1
         dot_cols = perimeter.max_of(&.col) - min_col + 1
-        char_rows = (dot_rows + 3) // 4
-        char_cols = (dot_cols + 1) // 2
 
         lit = Set(RingCoord).new
         arc.times { |offset| lit << perimeter[(tail + offset) % count] }
 
-        bright = Array.new(char_rows) { Array.new(char_cols, 0_u8) }
-        dim = Array.new(char_rows) { Array.new(char_cols, 0_u8) }
+        # Shifted to grid-local coordinates so the packer's (row, col) probes
+        # can be answered with plain set membership.
+        ring = Set(Tuple(Int32, Int32)).new
+        arc_dots = Set(Tuple(Int32, Int32)).new
         perimeter.each do |dot|
-          row = dot.row - min_row
-          col = dot.col - min_col
-          bit = 1_u8 << Braille::MAP[row % 4][col % 2]
-          target = lit.includes?(dot) ? bright : dim
-          target[row // 4][col // 2] |= bit
+          shifted = {dot.row - min_row, dot.col - min_col}
+          ring << shifted
+          arc_dots << shifted if lit.includes?(dot)
         end
 
-        (0...char_rows).map do |row|
-          spans = (0...char_cols).map do |col|
+        bright = Braille.pack(dot_rows, dot_cols) { |row, col| arc_dots.includes?({row, col}) }
+        # Dim is the ring minus the arc, not the complement of the arc: only
+        # perimeter dots may light, never the interior.
+        dim = Braille.pack(dot_rows, dot_cols) do |row, col|
+          ring.includes?({row, col}) && !arc_dots.includes?({row, col})
+        end
+
+        bright.map_with_index do |row_bytes, row|
+          spans = row_bytes.map_with_index do |_, col|
             byte = bright[row][col]
             color = @arc_color
             if byte == 0

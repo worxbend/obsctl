@@ -86,6 +86,27 @@ module CryTUI
     PASTE_START = "\e[200~"
     PASTE_END   = "\e[201~"
 
+    # Static lookup data, kept out of `parse_escape` so it is not rebuilt on
+    # every escape-prefixed keypress.
+    ESCAPE_SEQUENCES = {
+      "\e[A"    => KeyEvent.new(KeyCode::Up),
+      "\e[B"    => KeyEvent.new(KeyCode::Down),
+      "\e[C"    => KeyEvent.new(KeyCode::Right),
+      "\e[D"    => KeyEvent.new(KeyCode::Left),
+      "\e[1;5A" => KeyEvent.new(KeyCode::Up, modifiers: KeyModifiers::Control),
+      "\e[1;5B" => KeyEvent.new(KeyCode::Down, modifiers: KeyModifiers::Control),
+      "\e[1;5C" => KeyEvent.new(KeyCode::Right, modifiers: KeyModifiers::Control),
+      "\e[1;5D" => KeyEvent.new(KeyCode::Left, modifiers: KeyModifiers::Control),
+      "\e[Z"    => KeyEvent.new(KeyCode::BackTab, modifiers: KeyModifiers::Shift),
+      "\e[H"    => KeyEvent.new(KeyCode::Home),
+      "\e[F"    => KeyEvent.new(KeyCode::End),
+      "\e[3~"   => KeyEvent.new(KeyCode::Delete),
+      "\e[5~"   => KeyEvent.new(KeyCode::PageUp),
+      "\e[6~"   => KeyEvent.new(KeyCode::PageDown),
+      "\eOQ"    => KeyEvent.new(KeyCode::Function, function: 2),
+      "\e[12~"  => KeyEvent.new(KeyCode::Function, function: 2),
+    }
+
     def initialize
       @pending = ""
       @pasting = false
@@ -167,7 +188,6 @@ module CryTUI
 
     private def parse_character(char : Char) : KeyEvent
       case char.ord
-      when 0x03       then KeyEvent.character('c', KeyModifiers::Control)
       when 0x08, 0x7F then KeyEvent.new(KeyCode::Backspace)
       when 0x09       then KeyEvent.new(KeyCode::Tab)
       when 0x0A, 0x0D then KeyEvent.new(KeyCode::Enter)
@@ -183,28 +203,10 @@ module CryTUI
       if mouse = parse_mouse
         return mouse
       end
-      sequences = {
-        "\e[A"    => KeyEvent.new(KeyCode::Up),
-        "\e[B"    => KeyEvent.new(KeyCode::Down),
-        "\e[C"    => KeyEvent.new(KeyCode::Right),
-        "\e[D"    => KeyEvent.new(KeyCode::Left),
-        "\e[1;5A" => KeyEvent.new(KeyCode::Up, modifiers: KeyModifiers::Control),
-        "\e[1;5B" => KeyEvent.new(KeyCode::Down, modifiers: KeyModifiers::Control),
-        "\e[1;5C" => KeyEvent.new(KeyCode::Right, modifiers: KeyModifiers::Control),
-        "\e[1;5D" => KeyEvent.new(KeyCode::Left, modifiers: KeyModifiers::Control),
-        "\e[Z"    => KeyEvent.new(KeyCode::BackTab, modifiers: KeyModifiers::Shift),
-        "\e[H"    => KeyEvent.new(KeyCode::Home),
-        "\e[F"    => KeyEvent.new(KeyCode::End),
-        "\e[3~"   => KeyEvent.new(KeyCode::Delete),
-        "\e[5~"   => KeyEvent.new(KeyCode::PageUp),
-        "\e[6~"   => KeyEvent.new(KeyCode::PageDown),
-        "\eOQ"    => KeyEvent.new(KeyCode::Function, function: 2),
-        "\e[12~"  => KeyEvent.new(KeyCode::Function, function: 2),
-      }
-      if match = sequences.find { |sequence, _| @pending.starts_with?(sequence) }
+      if match = ESCAPE_SEQUENCES.find { |sequence, _| @pending.starts_with?(sequence) }
         return {match[1], match[0].bytesize}
       end
-      return if sequences.any? { |sequence, _| sequence.starts_with?(@pending) }
+      return if ESCAPE_SEQUENCES.any? { |sequence, _| sequence.starts_with?(@pending) }
 
       # Unknown complete CSI/SS3 sequences are consumed as Escape so malformed
       # input cannot permanently stall the parser.
