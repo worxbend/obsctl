@@ -5,7 +5,7 @@ require "./config_loader"
 require "./config_schema"
 require "./config_writer"
 require "../domain/errors"
-require "../runtime/logger"
+require "../runtime/secret_redaction"
 
 module Obsctl
   module Config
@@ -27,7 +27,7 @@ module Obsctl
       # secret-shaped setting is hidden on every output path at once. Anchored
       # on the whole leaf name so `password_env` — which holds the *name* of an
       # environment variable, not its value — keeps printing normally.
-      SENSITIVE_LEAF_KEY = Regex.new("\\A#{Runtime::Logger::SENSITIVE_KEY_PATTERN}\\z", Regex::Options::IGNORE_CASE)
+      SENSITIVE_LEAF_KEY = Regex.new("\\A#{Runtime::SecretRedaction::SENSITIVE_KEY_PATTERN}\\z", Regex::Options::IGNORE_CASE)
 
       # Where an effective value came from.
       enum Source
