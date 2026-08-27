@@ -2,10 +2,10 @@ require "../../spec_helper"
 require "../../../src/obsctl/tui/theme_persistence"
 
 describe Obsctl::TUI::ThemePersistence do
-  # This example is the regression guard for the rebuild trap `UiConfig#copy_with`
-  # exists to close. Saving a theme has to rewrite the whole `ui` section, so
+  # This example is the regression guard for the rebuild trap the
+  # `config_value`-generated `copy_with` exists to close. Saving a theme has to rewrite the whole `ui` section, so
   # any field the rewrite forgets is silently replaced by its default. The
-  # scene presets below are the newest such field and the one most likely to be
+  # scene profiles below are the newest such field and the one most likely to be
   # missed, which is why they are set here and checked afterwards.
   it "persists only the selected theme while preserving every other ui field" do
     path = File.join(Dir.tempdir, "obsctl-theme-#{Random.rand(1_000_000)}.yml")
@@ -18,13 +18,14 @@ describe Obsctl::TUI::ThemePersistence do
         show_icons: false,
         theme: "ember",
         locale: "uk",
-        scene_presets: Obsctl::Config::ScenePresetsConfig.new(
-          active: "streaming",
-          presets: [
-            Obsctl::Config::ScenePresetConfig.new(name: "streaming", hidden_scenes: ["Utility Cam"]),
-          ]
-        )
-      )
+      ),
+      # Top-level, not under `ui:` -- a theme write rebuilds the `ui` section,
+      # so profiles living outside it is part of what this example proves is
+      # left alone.
+      scene_profiles: [
+        Obsctl::Config::SceneProfileConfig.new(name: "streaming", hidden: ["Utility Cam"]),
+      ],
+      active_scene_profile: "streaming"
     )
     Obsctl::Config::ConfigWriter.new.write(path, config, backup: false)
 
@@ -36,9 +37,9 @@ describe Obsctl::TUI::ThemePersistence do
     persisted.ui.advanced_ui.should be_false
     persisted.ui.show_icons.should be_false
     persisted.ui.locale.should eq("uk")
-    persisted.ui.scene_presets.active.should eq("streaming")
-    persisted.ui.scene_presets.presets.map(&.name).should eq(["streaming"])
-    persisted.ui.scene_presets.presets[0].hidden_scenes.should eq(["Utility Cam"])
+    persisted.active_scene_profile.should eq("streaming")
+    persisted.scene_profiles.map(&.name).should eq(["streaming"])
+    persisted.scene_profiles[0].hidden.should eq(["Utility Cam"])
   ensure
     File.delete(path) if path && File.exists?(path)
     Dir.glob("#{path}.bak.*").each { |backup| File.delete(backup) } if path

@@ -8,9 +8,9 @@ require "./widgets/connection"
 require "./widgets/settings"
 require "./widgets/splash"
 require "./widgets/scene_picker"
-require "./widgets/scene_presets"
+require "./widgets/scene_profile_list"
+require "./widgets/scene_profiles"
 require "./widgets/which_key"
-require "./scene_preset_persistence"
 require "./theme_persistence"
 
 module Obsctl
@@ -56,11 +56,6 @@ module Obsctl
           command_palette_prefix: prefix,
           locale: Localization.resolve(config.ui.locale)
         )
-        # From the config file the dashboard itself loaded, not from the
-        # daemon: the daemon keeps reporting every scene and the dashboard is
-        # what decides which of them it draws, so a preset needs no round trip
-        # and works even when the daemon was started against another file.
-        model.scene_presets = ScenePresetPersistence.from_config(config)
         new(
           socket_path: socket_path,
           input: input,
@@ -105,8 +100,7 @@ module Obsctl
             @model,
             ->(payload : IPC::CommandPayload) { command_client.send(payload) },
             ->(theme : Theme) { ThemePersistence.save(@config_path, theme) },
-            viewport: -> { @area },
-            scene_preset_persister: ->(presets : ScenePresets) { ScenePresetPersistence.save(@config_path, presets) }
+            viewport: -> { @area }
           )
           connect_subscription
           # The first frame is unconditional; from here on a frame is painted
@@ -202,13 +196,18 @@ module Obsctl
             frame.buffer.set_style(frame.area, CryTUI::Style.new(background: @model.theme.background, foreground: @model.theme.foreground))
             Widgets::Connection.render_unavailable(frame.area, frame.buffer, @model)
           end
-          # All three float over whichever view is underneath. The two modals
-          # never open at the same time, so their order between themselves does
-          # not matter; the which-key menu is last because it is the most
-          # transient of the three and belongs on top even of a modal in the
-          # frame where `<leader>` is still pending.
+          # All four float over whichever view is underneath. The three modals
+          # are mutually exclusive -- each captures every key, and opening one
+          # closes the others -- so their order between themselves does not
+          # matter; an action that opened one without closing the rest would
+          # draw two overlays on top of each other and hand every key to
+          # whichever of them `Input#handle_key` tries first. The which-key
+          # menu stays last because it is the most transient of them and
+          # belongs on top even of a modal in the frame where `<leader>` is
+          # still pending.
           Widgets::ScenePicker.render(frame.area, frame.buffer, @model)
-          Widgets::ScenePresets.render(frame.area, frame.buffer, @model)
+          Widgets::SceneProfileList.render(frame.area, frame.buffer, @model)
+          Widgets::SceneProfiles.render(frame.area, frame.buffer, @model)
           Widgets::WhichKey.render(frame.area, frame.buffer, @model)
         end
       end

@@ -339,7 +339,7 @@ describe Obsctl::Server::Server do
         Obsctl::IPC::Request.new(
           "req-scene",
           Obsctl::IPC::Request::TYPE_COMMAND,
-          Obsctl::IPC::CommandPayload.new("set_scene", "screen")
+          Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "screen")
         )
       )
       break if response.try(&.ok)
@@ -390,7 +390,7 @@ describe Obsctl::Server::Server do
         Obsctl::IPC::Request.new(
           "req-broadcast-scene",
           Obsctl::IPC::Request::TYPE_COMMAND,
-          Obsctl::IPC::CommandPayload.new("set_scene", "screen")
+          Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "screen")
         )
       )
       break if response.try(&.ok)
@@ -616,7 +616,7 @@ describe Obsctl::Server::Server do
       Obsctl::IPC::Request.new(
         "req-missing-obs",
         Obsctl::IPC::Request::TYPE_COMMAND,
-        Obsctl::IPC::CommandPayload.new("set_scene", "main")
+        Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "main")
       )
     )
 
@@ -665,7 +665,7 @@ describe Obsctl::Server::Server do
       Obsctl::IPC::Request.new(
         "req-log-failure",
         Obsctl::IPC::Request::TYPE_COMMAND,
-        Obsctl::IPC::CommandPayload.new("set_scene", "main")
+        Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "main")
       )
     )
 
@@ -729,7 +729,7 @@ describe Obsctl::Server::Server do
       Obsctl::IPC::Request.new(
         "req-scene-after-close",
         Obsctl::IPC::Request::TYPE_COMMAND,
-        Obsctl::IPC::CommandPayload.new("set_scene", "screen")
+        Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "screen")
       )
     )
     response.ok.should be_false
@@ -944,7 +944,7 @@ describe Obsctl::Server::Server do
       Obsctl::IPC::Request.new(
         "req-scene-protocol-gap",
         Obsctl::IPC::Request::TYPE_COMMAND,
-        Obsctl::IPC::CommandPayload.new("set_scene", "screen")
+        Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "screen")
       )
     )
     scene_response.ok.should be_false
@@ -954,7 +954,7 @@ describe Obsctl::Server::Server do
       Obsctl::IPC::Request.new(
         "req-mute-protocol-gap",
         Obsctl::IPC::Request::TYPE_COMMAND,
-        Obsctl::IPC::CommandPayload.new("mute", "mic")
+        Obsctl::IPC::CommandPayload.new(name: "mute", target: "mic")
       )
     )
     mute_response.ok.should be_false
@@ -968,7 +968,7 @@ describe Obsctl::Server::Server do
       Obsctl::IPC::Request.new(
         "req-scene-after-protocol-reconnect",
         Obsctl::IPC::Request::TYPE_COMMAND,
-        Obsctl::IPC::CommandPayload.new("set_scene", "screen")
+        Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "screen")
       )
     )
     recovered.ok.should be_true

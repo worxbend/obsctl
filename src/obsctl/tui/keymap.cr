@@ -33,9 +33,16 @@ module Obsctl
         Binding.new("#{LEADER}q", ActionKind::Quit, "quit"),
         Binding.new("#{LEADER}m", ActionKind::ToggleMute, "toggle mute"),
         Binding.new("#{LEADER}s", ActionKind::OpenScenePicker, "switch scene"),
-        # Capital `P`: `Keymap.token` keeps the case of the key, so this is a
-        # different token from the `p` of `<leader>fp` and nothing collides.
-        Binding.new("#{LEADER}P", ActionKind::OpenScenePresets, "scene presets"),
+        # Lower-case `p` picks a profile, capital `P` edits one. `Keymap.token`
+        # keeps the case of the key, so these are two tokens; neither collides
+        # with the bare `p` that focuses the OBS Profiles panel, which needs no
+        # leader, nor with `<leader>fp`, which lives under the `f` group.
+        #
+        # Declared before the `P` row on purpose: `continuations` sorts by
+        # `token.downcase`, so with equal sort keys declaration order decides
+        # which of the two the which-key menu prints first.
+        Binding.new("#{LEADER}p", ActionKind::OpenSceneProfileList, "scene profiles"),
+        Binding.new("#{LEADER}P", ActionKind::OpenSceneProfiles, "edit profile"),
         Binding.new("#{LEADER}fs", ActionKind::FocusScenes, "scenes"),
         Binding.new("#{LEADER}fa", ActionKind::FocusAudio, "audio"),
         Binding.new("#{LEADER}fp", ActionKind::FocusProfiles, "profiles"),

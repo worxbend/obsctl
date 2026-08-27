@@ -58,7 +58,7 @@ describe Obsctl::TUI::CommandClient do
     end
 
     ready.receive
-    response = Obsctl::TUI::CommandClient.new(path).send(Obsctl::IPC::CommandPayload.new("set_scene", "Main"))
+    response = Obsctl::TUI::CommandClient.new(path).send(Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "Main"))
     request = received.receive
     request.id.should start_with("tui-")
     request.command.not_nil!.target.should eq("Main")
@@ -92,7 +92,7 @@ describe Obsctl::TUI::CommandClient do
 
     begin
       expect_raises(Obsctl::Domain::RequestTimeout) do
-        client.send(Obsctl::IPC::CommandPayload.new("set_scene", "Main"))
+        client.send(Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "Main"))
       end
     ensure
       release.send(nil)

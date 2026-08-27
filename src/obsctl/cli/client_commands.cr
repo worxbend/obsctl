@@ -67,11 +67,27 @@ module Obsctl
         return "ok" unless result
 
         case command
-        when Domain::StatusCommand       then @presenter.combined_status(result)
-        when Domain::ObsStatusCommand    then @presenter.obs_status(result)
-        when Domain::ServerStatusCommand then @presenter.server_status(result)
-        when Domain::RecordStatusCommand then @presenter.record_status(result)
-        else                                  result["message"]?.try(&.as_s?) || "ok"
+        when Domain::StatusCommand            then @presenter.combined_status(result)
+        when Domain::ObsStatusCommand         then @presenter.obs_status(result)
+        when Domain::ServerStatusCommand      then @presenter.server_status(result)
+        when Domain::RecordStatusCommand      then @presenter.record_status(result)
+        when Domain::ListSceneProfilesCommand then scene_profile_list(result)
+        else                                       result["message"]?.try(&.as_s?) || "ok"
+        end
+      end
+
+      # The one scene-profile command that answers with data rather than a
+      # sentence. Marks the active profile and says how many scenes each hides,
+      # so the listing answers "which one am I on" without a second command.
+      private def scene_profile_list(result : JSON::Any) : String
+        active = result["active"]?.try(&.as_s?)
+        profiles = result["profiles"]?.try(&.as_a?) || [] of JSON::Any
+        return "no scene profiles configured" if profiles.empty?
+
+        profiles.join("\n") do |profile|
+          name = profile["name"]?.try(&.as_s?) || ""
+          hidden = profile["hidden"]?.try(&.as_a?).try(&.size) || 0
+          "#{name == active ? "*" : " "} #{name} (hides #{hidden})"
         end
       end
 

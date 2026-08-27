@@ -1,4 +1,5 @@
 require "../../spec_helper"
+require "../../support/scene_profiles"
 require "../../../src/obsctl/tui/model"
 
 private def tui_snapshot
@@ -76,48 +77,106 @@ describe Obsctl::TUI::Model do
     model.all_scenes.map(&.name).should eq(["Main", "Utility", "Cam"])
   end
 
-  it "lets an active scene preset decide the whole visible list" do
+  it "lets an active scene profile decide the whole visible list" do
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot.copy_with(scenes: [
       Obsctl::OBS::State::SceneState.new("Main", active: true),
       Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
       Obsctl::OBS::State::SceneState.new("Cam"),
     ])
-    model.scene_presets = Obsctl::TUI::ScenePresets
-      .empty
-      .upsert("streaming", Set{"Cam"})
-      .activate("streaming")
+    set_scene_profiles(
+      model,
+      Obsctl::TUI::SceneProfiles.empty.upsert("streaming", Set{"Cam"}).activate("streaming"),
+      baseline_hidden: ["Utility"]
+    )
 
-    # The preset is the complete answer: `Cam` goes because the preset hides
-    # it, and `Utility` comes back even though OBS reports it hidden.
+    # The profile is the complete answer: `Cam` goes because the profile hides
+    # it, and `Utility` comes back even though the config marks it hidden.
     model.scenes.map(&.name).should eq(["Main", "Utility"])
   end
 
-  it "falls back to the hidden flag when the active preset is not configured" do
-    # A hand-edited config file naming a preset that is not there has to
-    # degrade to what the dashboard did before presets existed, rather than to
+  it "falls back to the hidden flag when the active profile is not configured" do
+    # A hand-edited config file naming a profile that is not there has to
+    # degrade to what the dashboard did before profiles existed, rather than to
     # an empty scene list.
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot.copy_with(scenes: [
       Obsctl::OBS::State::SceneState.new("Main", active: true),
       Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
     ])
-    model.scene_presets = Obsctl::TUI::ScenePresets.empty.activate("missing")
+    set_scene_profiles(model, Obsctl::TUI::SceneProfiles.empty.activate("missing"), baseline_hidden: ["Utility"])
 
     model.scenes.map(&.name).should eq(["Main"])
   end
 
-  it "clamps the scene preset editor cursor against the unfiltered scene list" do
+  it "clamps the scene profile editor cursor against the unfiltered scene list" do
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot.copy_with(scenes: [
       Obsctl::OBS::State::SceneState.new("Main", active: true),
       Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
       Obsctl::OBS::State::SceneState.new("Cam"),
     ])
-    model.scene_preset_editor.cursor = 99
+    model.scene_profile_editor.cursor = 99
     model.clamp_cursors
     # Two if it were clamped to the visible scenes; the editor lists all three.
-    model.scene_preset_editor.cursor.should eq(2)
+    model.scene_profile_editor.cursor.should eq(2)
+  end
+
+  it "puts show-every-scene first and marks it current while no profile is active" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = tui_snapshot
+    set_scene_profiles(model, Obsctl::TUI::SceneProfiles.empty.upsert("streaming", Set{"Cam"}).upsert("editing", Set(String).new))
+
+    entries = model.scene_profile_list_entries
+
+    entries.map(&.name).should eq(["Show every scene", "streaming", "editing"])
+    # The row that turns filtering off stands for no profile, which is what
+    # tells the verbs on a row there is nothing to edit or delete.
+    entries[0].profile.should be_nil
+    entries[0].active.should be_true
+    entries[1].active.should be_false
+  end
+
+  it "marks the saved profile that is in effect rather than the first row" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = tui_snapshot
+    set_scene_profiles(model, Obsctl::TUI::SceneProfiles.empty.upsert("streaming", Set{"Cam"}).upsert("editing", Set(String).new).activate("editing"))
+
+    entries = model.scene_profile_list_entries
+
+    entries.map(&.active).should eq([false, false, true])
+    entries[2].profile.try(&.name).should eq("editing")
+  end
+
+  it "labels rows by their own number and leaves a tenth profile unlabelled" do
+    profiles = Obsctl::TUI::SceneProfiles.empty
+    10.times { |index| profiles = profiles.upsert("profile #{index}", Set(String).new) }
+    model = Obsctl::TUI::Model.new
+    model.snapshot = tui_snapshot
+    set_scene_profiles(model, profiles)
+
+    entries = model.scene_profile_list_entries
+
+    entries.map(&.label).should eq(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', nil])
+    Obsctl::TUI::SceneProfileList.index_for(entries, '0').should eq(0)
+    Obsctl::TUI::SceneProfileList.index_for(entries, '3').should eq(3)
+    # The tenth profile carries no digit, so nothing resolves to it by key; the
+    # cursor is how it is reached.
+    Obsctl::TUI::SceneProfileList.index_for(entries, 'a').should be_nil
+  end
+
+  it "clamps the scene profile list cursor after profiles are removed" do
+    model = Obsctl::TUI::Model.new
+    model.snapshot = tui_snapshot
+    set_scene_profiles(model, Obsctl::TUI::SceneProfiles.empty.upsert("streaming", Set{"Cam"}).upsert("editing", Set(String).new))
+    model.scene_profile_list.cursor = 2
+
+    set_scene_profiles(model, model.scene_profiles.delete("editing"))
+    model.clamp_cursors
+
+    # One row per profile plus the show-every-scene row, so two rows and a
+    # cursor at index one.
+    model.scene_profile_list.cursor.should eq(1)
   end
 
   it "caps rolling logs at 200 entries" do

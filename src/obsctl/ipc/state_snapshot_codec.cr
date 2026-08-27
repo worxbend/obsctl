@@ -60,6 +60,8 @@ module Obsctl
           current_profile:          snapshot.current_profile,
           scene_collections:        snapshot.scene_collections,
           current_scene_collection: snapshot.current_scene_collection,
+          scene_profiles:           snapshot.scene_profiles.map { |profile| {name: profile.name, hidden: profile.hidden} },
+          active_scene_profile:     snapshot.active_scene_profile,
           stats:                    stats_json(snapshot.stats),
           stream_bitrate_kbps:      snapshot.stream_bitrate_kbps,
           stream_duration_ms:       snapshot.stream_duration_ms,
@@ -135,6 +137,10 @@ module Obsctl
           current_profile: data["current_profile"]?.try(&.as_s?),
           scene_collections: string_array(data["scene_collections"]?),
           current_scene_collection: data["current_scene_collection"]?.try(&.as_s?),
+          # Read leniently, so a snapshot from a daemon that predates scene
+          # profiles still renders instead of failing the whole decode.
+          scene_profiles: scene_profiles(data["scene_profiles"]?),
+          active_scene_profile: data["active_scene_profile"]?.try(&.as_s?),
           stats: stats,
           stream_bitrate_kbps: OBS::Protocol::JsonValue.number(data["stream_bitrate_kbps"]?),
           stream_duration_ms: data["stream_duration_ms"]?.try(&.as_i64?),
@@ -144,6 +150,18 @@ module Obsctl
         )
       rescue TypeCastError | KeyError | Time::Format::Error
         nil
+      end
+
+      def self.scene_profiles(data : JSON::Any?) : Array(OBS::State::SceneProfileState)
+        entries = data.try(&.as_a?)
+        return [] of OBS::State::SceneProfileState unless entries
+
+        entries.compact_map do |entry|
+          name = entry["name"]?.try(&.as_s?)
+          next unless name
+
+          OBS::State::SceneProfileState.new(name, string_array(entry["hidden"]?))
+        end
       end
 
       def self.string_array(data : JSON::Any?) : Array(String)

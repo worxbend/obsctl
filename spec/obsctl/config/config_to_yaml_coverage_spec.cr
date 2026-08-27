@@ -83,16 +83,14 @@ private def canonical_yaml : YAML::Any
         highlight_fg: "#cccccc",
       ),
       locale: "uk",
-      scene_presets: Obsctl::Config::ScenePresetsConfig.new(
-        active: "streaming",
-        presets: [
-          Obsctl::Config::ScenePresetConfig.new(
-            name: "streaming",
-            hidden_scenes: ["Utility Cam"],
-          ),
-        ],
-      ),
     ),
+    scene_profiles: [
+      Obsctl::Config::SceneProfileConfig.new(
+        name: "streaming",
+        hidden: ["Utility Cam"],
+      ),
+    ],
+    active_scene_profile: "streaming",
     keymap: Obsctl::Config::KeymapConfig.new(
       quit: ["q"],
       command_palette: ["/"],
@@ -156,12 +154,8 @@ describe Obsctl::Config::Config do
       assert_writes_every_field(["ui"], Obsctl::Config::UiConfig::FIELD_NAMES)
     end
 
-    it "writes every declared scene preset section field" do
-      assert_writes_every_field(["ui", "scene_presets"], Obsctl::Config::ScenePresetsConfig::FIELD_NAMES)
-    end
-
-    it "writes every declared scene preset field" do
-      assert_writes_every_field(["ui", "scene_presets", "presets", "0"], Obsctl::Config::ScenePresetConfig::FIELD_NAMES)
+    it "writes every declared scene profile field" do
+      assert_writes_every_field(["scene_profiles", "0"], Obsctl::Config::SceneProfileConfig::FIELD_NAMES)
     end
 
     it "writes every declared custom theme field" do

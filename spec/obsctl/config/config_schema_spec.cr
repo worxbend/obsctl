@@ -1,5 +1,18 @@
 require "../../spec_helper"
 
+private def profile_config(
+  profiles : Array(Obsctl::Config::SceneProfileConfig),
+  active : String? = nil,
+  scenes : Array(Obsctl::Config::SceneConfig) = [] of Obsctl::Config::SceneConfig,
+)
+  Obsctl::Config::Config.new(
+    connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),
+    scenes: scenes,
+    scene_profiles: profiles,
+    active_scene_profile: active
+  )
+end
+
 describe Obsctl::Config::ConfigSchema do
   it "round-trips hidden scene visibility metadata" do
     config = Obsctl::Config::Config.from_yaml(<<-YAML)
@@ -27,58 +40,65 @@ describe Obsctl::Config::ConfigSchema do
     end
   end
 
-  it "rejects duplicate scene preset names" do
-    config = Obsctl::Config::Config.new(
-      connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),
-      ui: Obsctl::Config::UiConfig.new(
-        scene_presets: Obsctl::Config::ScenePresetsConfig.new(
-          presets: [
-            Obsctl::Config::ScenePresetConfig.new(name: "streaming"),
-            Obsctl::Config::ScenePresetConfig.new(name: "streaming"),
-          ]
-        )
-      )
-    )
-
-    expect_raises(Obsctl::Domain::ConfigInvalid, /duplicate scene preset/) do
-      Obsctl::Config::ConfigSchema.validate!(config)
-    end
-  end
-
-  it "rejects a blank scene preset name" do
-    config = Obsctl::Config::Config.new(
-      connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),
-      ui: Obsctl::Config::UiConfig.new(
-        scene_presets: Obsctl::Config::ScenePresetsConfig.new(
-          presets: [Obsctl::Config::ScenePresetConfig.new(name: "  ")]
-        )
-      )
-    )
+  it "rejects two scene profiles whose names differ only in case or padding" do
+    # Matching is case- and whitespace-insensitive, so these two would make
+    # `active_scene_profile` ambiguous.
+    config = profile_config([
+      Obsctl::Config::SceneProfileConfig.new(name: "streaming"),
+      Obsctl::Config::SceneProfileConfig.new(name: "  Streaming  "),
+    ])
 
     error = expect_raises(Obsctl::Domain::ConfigInvalid) do
       Obsctl::Config::ConfigSchema.validate!(config)
     end
-    error.message.should eq("ui.scene_presets preset name cannot be blank")
+    # Reported with the name as written, so the user can find the line.
+    error.message.should eq("duplicate scene profile name: '  Streaming  '")
   end
 
-  it "warns rather than fails when the active scene preset does not exist" do
+  it "rejects an unusable scene profile name, saying which rule it broke" do
+    error = expect_raises(Obsctl::Domain::ConfigInvalid) do
+      Obsctl::Config::ConfigSchema.validate!(profile_config([Obsctl::Config::SceneProfileConfig.new(name: "  ")]))
+    end
+    error.message.should eq("scene profile name must not be blank")
+  end
+
+  it "rejects an unusable hidden scene name, naming the profile it is in" do
+    profile = Obsctl::Config::SceneProfileConfig.new(name: "streaming", hidden: ["bad\nname"])
+
+    error = expect_raises(Obsctl::Domain::ConfigInvalid) do
+      Obsctl::Config::ConfigSchema.validate!(profile_config([profile]))
+    end
+    error.message.should eq("scene profile 'streaming' hidden scene must not contain control characters")
+  end
+
+  it "warns rather than fails when the active scene profile does not exist" do
     # A hand-edited file has to degrade to "every scene visible"; refusing to
     # load would lock the user out of the dashboard over a typo.
-    config = Obsctl::Config::Config.new(
-      connection: Obsctl::Config::ConnectionConfig.new(password_env: ""),
-      ui: Obsctl::Config::UiConfig.new(
-        scene_presets: Obsctl::Config::ScenePresetsConfig.new(
-          active: "podcast",
-          presets: [Obsctl::Config::ScenePresetConfig.new(name: "streaming")]
-        )
-      )
-    )
+    config = profile_config([Obsctl::Config::SceneProfileConfig.new(name: "streaming")], active: "podcast")
 
     Obsctl::Config::ConfigSchema.validate!(config)
 
     warnings = Obsctl::Config::ConfigSchema.warnings(config)
-    warnings.size.should eq(1)
-    warnings.first.should contain("ui.scene_presets.active 'podcast'")
+    warnings.should eq(["active scene profile 'podcast' is not defined; no scenes are hidden by a profile"])
+  end
+
+  it "warns when a profile hides a scene the config does not list" do
+    config = profile_config(
+      [Obsctl::Config::SceneProfileConfig.new(name: "streaming", hidden: ["Gone"])],
+      scenes: [Obsctl::Config::SceneConfig.new(name: "Main")]
+    )
+
+    Obsctl::Config::ConfigSchema.warnings(config).should eq([
+      "scene profile 'streaming' hides 'Gone', which is not in the scenes list",
+    ])
+  end
+
+  it "stays quiet about unlisted scenes while there are no configured scenes" do
+    # An empty `scenes:` is what a fresh `obsctl init` writes, so there is no
+    # ground truth to check against and every profile would warn.
+    config = profile_config([Obsctl::Config::SceneProfileConfig.new(name: "streaming", hidden: ["Gone"])])
+
+    Obsctl::Config::ConfigSchema.warnings(config).should be_empty
   end
 
   it "rejects invalid reconnect values" do

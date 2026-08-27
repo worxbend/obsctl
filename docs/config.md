@@ -8,7 +8,8 @@ Top-level fields:
 - `server`: local daemon settings such as Unix socket path and remote shutdown policy
 - `connection`: OBS WebSocket connection and timeout settings
 - `reconnect`: daemon/TUI reconnect behavior
-- `ui`: refresh interval, palette prefix, icon flag, theme name, locale, scene presets
+- `ui`: refresh interval, palette prefix, icon flag, theme name, locale
+- `scene_profiles` / `active_scene_profile`: named sets of scene-visibility choices
 - `scenes`: configured scene aliases, shortcuts, groups, and stale markers
 - `audio.inputs`: configured audio aliases, shortcuts, kind, and stale markers
 - `keymap`: dashboard key bindings
@@ -42,16 +43,16 @@ ui:
   show_icons: true
   theme: default
   locale: en
-  # Optional. Left out entirely when no scene preset has been created.
-  scene_presets:
-    active: streaming
-    presets:
-      - name: streaming
-        hidden_scenes:
-          - Utility Cam
-          - BRB Loop
-      - name: editing
-        hidden_scenes: []
+# Optional, and top-level rather than under `ui:` -- these describe the `scenes:`
+# list above them. Left out entirely when no scene profile has been created.
+scene_profiles:
+  - name: streaming
+    hidden:
+      - Utility Cam
+      - BRB Loop
+  - name: editing
+    hidden: []
+active_scene_profile: streaming
 keymap:
   quit: ["q", "ctrl+c"]
   command_palette: ["/", ":"]
@@ -105,41 +106,69 @@ other scenes — a lower-third, a background loop, a nested camera group. They a
 real scenes, but you never switch to them, so they are noise in the dashboard's
 scene list.
 
-`ui.scene_presets` is how you get rid of that noise. A *scene preset* is a name
+`scene_profiles` is how you get rid of that noise. A *scene profile* is a name
 plus a list of scene names to leave out of the list: `streaming` in the example
 above hides `Utility Cam` and `BRB Loop`, while `editing` hides nothing.
-`ui.scene_presets.active` names the preset in effect. Presets are obsctl's own
-filter over the list it draws. They are not OBS profiles and not OBS scene
-collections — those are OBS's own concepts, the dashboard shows them in their
-own panels, and nothing in this section is ever sent to OBS. The daemon keeps
-reporting every scene, so `obsctl status --json`, `obsctl obs-status --json` and
-`obsctl completions candidates scenes` are unaffected by a preset and still list
-every scene OBS has.
+`active_scene_profile` names the profile in effect. Profiles are obsctl's own
+filter over the scene list. They are not OBS profiles and not OBS scene
+collections — those are OBS's own concepts, the dashboard shows them in their own
+panels, and nothing here is ever sent to OBS.
+
+Names are matched with surrounding whitespace trimmed and ASCII letters compared
+case-insensitively, so `active_scene_profile: "  STREAMING  "` finds a profile
+saved as `streaming`. The spelling stored under `name:` is the one obsctl reports
+back and writes to the file; matching loosely never rewrites it.
 
 Which scenes the dashboard draws is decided by one of two rules, never both:
 
-- **A preset is active.** That preset is the complete answer: every scene except
+- **A profile is active.** That profile is the complete answer: every scene except
   the ones it lists is shown, and the per-scene `hidden` flag under `scenes:` is
-  not consulted.
-- **Nothing is active** — the section is absent, `active` is unset, or `active`
-  names a preset that is not in `presets`. Then the list behaves exactly as it
-  did before presets existed: scenes marked `hidden: true` under `scenes:` are
-  left out and everything else is shown.
+  not consulted. This is what lets a profile *reveal* a scene that `scenes:` marks
+  hidden, and what makes "show every scene" expressible as a profile whose
+  `hidden:` list is empty. Adding the two lists together could do neither.
+- **Nothing is active** — the keys are absent, `active_scene_profile` is unset, or
+  it names a profile that is not in `scene_profiles`. Then scenes marked
+  `hidden: true` under `scenes:` are left out and everything else is shown.
 
-An `active` name with no matching preset is reported by `validate-config` as a
-warning rather than an error, because failing to load a config over a typo in a
-display setting would be a worse outcome than showing every scene.
+The **daemon** resolves that rule, not the dashboard. It reports every scene it
+knows about and marks each one hidden or not, so every client — a dashboard, a
+second dashboard, the CLI — draws the same list, and a profile switched anywhere
+takes effect everywhere without a reload. `obsctl status --json`, `obsctl
+obs-status --json` and `obsctl completions candidates scenes` still list every
+scene OBS has; the per-scene `hidden` flag is what changes.
 
-Editing the section by hand is supported, and so is editing it from the
-dashboard: `<leader>P` in the scene view opens the scene preset editor, which
-lists every scene with the hidden ones dimmed, toggles one with `t`, and writes
-the result back to this file. Two presets sharing a name, or a preset with a
-blank name, are rejected as config errors — `active` could not name either one
-unambiguously.
+Two profiles whose names differ only in case or padding, a profile with a blank
+name, and a name carrying control characters or longer than 256 characters are
+all rejected as config errors — `active_scene_profile` could not name one of a
+colliding pair unambiguously. Two things are warnings rather than errors, because
+either would otherwise empty a scene list over a typo:
 
-The whole `scene_presets` block is omitted when there is nothing in it, so a
-config file that has never used the feature is rewritten unchanged by `config
-migrate` and `dump-config`.
+- `active_scene_profile` naming a profile that is not defined.
+- A profile hiding a scene that is not in the `scenes:` list. Skipped entirely
+  when `scenes:` is empty, which is what a fresh `obsctl init` writes.
+
+Profiles can be managed from the CLI with `obsctl scene-profile`, and from the
+dashboard, where the two halves of the feature have a key each. `<leader>p` opens
+the scene profile list: it names every saved profile plus a "Show every scene"
+row, puts the one under the cursor into effect, and renames or deletes it.
+`<leader>P` opens the scene profile editor, which lists every scene with the
+hidden ones dimmed and toggles one with `t`, so it is where a profile's `hidden`
+list is chosen. Both ask the daemon, which is what writes this file.
+
+Saving a profile does not activate it — the editor lets you work on a profile you
+are not currently using, and switching the scene list out from under you would be
+a surprise. `<leader>p` is how a profile is put into effect.
+
+Both keys are omitted when there is nothing in them, so a config file that has
+never used the feature is rewritten unchanged by `config migrate` and
+`dump-config`. (The Rust implementation writes `scene_profiles: []` and
+`active_scene_profile: null` instead of leaving them out. Both sides default the
+keys to empty when reading, so the two agree on meaning and differ only in
+whether they spell the default out.)
+
+`dump-config` carries profiles across untouched. It learns which scenes OBS has
+now, but it never reconciles a profile's `hidden:` list against them: a profile
+naming a scene that has gone is left alone and only draws the warning above.
 
 Unknown top-level fields are rejected with a config error. This avoids silently dropping future fields when config files are rewritten. Nested unknown fields are currently ignored by the typed loader and are not preserved on write. Older configs with `connection.reconnect` are still accepted, but new writes use the top-level `reconnect` section.
 

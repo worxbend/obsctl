@@ -1,3 +1,4 @@
+require "./scene_profile_state"
 require "./scene_state"
 require "./audio_state"
 require "./output_state"
@@ -19,6 +20,16 @@ module Obsctl
         current_profile : String? = nil,
         scene_collections : Array(String) = [] of String,
         current_scene_collection : String? = nil,
+        # obsctl's own scene profiles, carried here rather than read from the
+        # config by each client: the daemon resolves which scenes a profile
+        # hides into `scenes[].hidden`, and a client that resolved it again
+        # could disagree with what the daemon already decided.
+        scene_profiles : Array(SceneProfileState) = [] of SceneProfileState,
+        # The profile in effect, spelled as `scene_profiles` spells it. `nil`
+        # when none is active, and also when the config names one that is not
+        # defined -- the snapshot never advertises a profile absent from the
+        # list beside it.
+        active_scene_profile : String? = nil,
         stats : ObsStats? = nil,
         stream_bitrate_kbps : Float64? = nil,
         stream_duration_ms : Int64? = nil,

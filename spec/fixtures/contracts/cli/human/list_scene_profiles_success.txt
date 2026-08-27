@@ -1,0 +1,2 @@
+* streaming (hides 2)
+  editing (hides 0)

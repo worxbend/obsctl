@@ -1,4 +1,5 @@
 require "../../spec_helper"
+require "../../support/scene_profiles"
 require "../../../src/obsctl/tui/widgets/header"
 require "../../../src/obsctl/tui/widgets/status_beacon"
 require "../../../src/obsctl/tui/widgets/scenes"
@@ -39,6 +40,12 @@ end
 
 private def rendered_text(buffer : CryTUI::Buffer)
   buffer.lines.join("\n")
+end
+
+# One saved profile, in effect. Enough for the two widgets that report which
+# profile is filtering the scene list.
+private def profile_profiles(name : String, hidden : Array(String)) : Obsctl::TUI::SceneProfiles
+  Obsctl::TUI::SceneProfiles.new([Obsctl::TUI::SceneProfile.new(name, hidden.to_set)], name)
 end
 
 private def beacon_model(streaming = false, recording = false, connected = true, advanced = true)
@@ -281,6 +288,21 @@ describe Obsctl::TUI::Widgets::Header do
     text.should contain("profile: Default")
   end
 
+  # The header's own reminder that the scene list is being filtered. It says
+  # "scene profile" and not bare "profile" because the span before it already
+  # prints the OBS profile, which is a different thing entirely.
+  it "reports the active scene profile beside the OBS profile" do
+    model = widget_model
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 110, 4))
+    Obsctl::TUI::Widgets::Header.render(buffer.area, buffer, model)
+    rendered_text(buffer).should_not contain("scene profile:")
+
+    set_scene_profiles(model, profile_profiles("streaming", ["Cam"]))
+    named = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 140, 4))
+    Obsctl::TUI::Widgets::Header.render(named.area, named, model)
+    rendered_text(named).should contain("scene profile: streaming")
+  end
+
   it "renders the animated gradient as styled block-title cells" do
     model = widget_model
     model.anim.frame = 7_u64
@@ -418,6 +440,47 @@ describe Obsctl::TUI::Widgets::Scenes do
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 40, 4))
     Obsctl::TUI::Widgets::Scenes.render(buffer.area, buffer, model)
     rendered_text(buffer).should contain("Scenes")
+  end
+
+  # The panel title is the primary "why is this list short" indicator: the
+  # count badge beside it reads fewer scenes than OBS has, and the profile's
+  # name is the explanation.
+  it "names the active profile in the panel title, and stays plain without one" do
+    model = widget_model
+    plain = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 64, 7))
+    Obsctl::TUI::Widgets::Scenes.render(plain.area, plain, model)
+    plain.lines[0].should contain("Scenes")
+    plain.lines[0].should_not contain("·")
+
+    set_scene_profiles(model, profile_profiles("streaming", ["Cam"]))
+    named = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 64, 7))
+    Obsctl::TUI::Widgets::Scenes.render(named.area, named, model)
+    named.lines[0].should contain("Scenes · streaming")
+  end
+
+  it "drops the profile name from a panel too narrow to carry it" do
+    model = widget_model
+    set_scene_profiles(model, profile_profiles("streaming", ["Cam"]))
+
+    narrow = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, Obsctl::TUI::Widgets::Scenes::PRESET_LABEL_MIN_WIDTH - 1, 7))
+    Obsctl::TUI::Widgets::Scenes.render(narrow.area, narrow, model)
+    narrow.lines[0].should_not contain("streaming")
+
+    wide = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, Obsctl::TUI::Widgets::Scenes::PRESET_LABEL_MIN_WIDTH, 7))
+    Obsctl::TUI::Widgets::Scenes.render(wide.area, wide, model)
+    wide.lines[0].should contain("streaming")
+  end
+
+  # A profile name is whatever the user typed, so the title fits it rather than
+  # letting it push the count badge and the key hint off the end of the border.
+  it "truncates a profile name too long for the title" do
+    model = widget_model
+    set_scene_profiles(model, profile_profiles("a" * 40, ["Cam"]))
+    buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 64, 7))
+
+    Obsctl::TUI::Widgets::Scenes.render(buffer.area, buffer, model)
+    buffer.lines[0].should contain("#{"a" * 15}…")
+    buffer.lines[0].should_not contain("a" * 17)
   end
 end
 
@@ -779,7 +842,10 @@ describe Obsctl::TUI::Widgets::WhichKey do
     text.should contain("<leader>  obsctl")
     text.should contain("+find")
     text.should contain("quit")
-    text.should contain("scene presets")
+    # `p` and `P` are separate rows and must not read alike: one chooses which
+    # saved profile is in effect, the other edits what a profile hides.
+    text.should contain("scene profiles")
+    text.should contain("edit profile")
   end
 
   it "draws nothing while no sequence is pending" do

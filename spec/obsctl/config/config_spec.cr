@@ -60,38 +60,75 @@ describe Obsctl::Config::Config do
     rewritten.keymap.command_palette.should eq([":"])
   end
 
-  it "loads and rewrites obsctl scene presets" do
+  it "loads and rewrites obsctl scene profiles" do
+    # Top-level, beside the `scenes:` list these describe, and spelled the way
+    # obsctl-rs spells them so one config file serves both implementations.
     yaml = <<-YAML
       version: 1
-      ui:
-        scene_presets:
-          active: streaming
-          presets:
-            - name: streaming
-              hidden_scenes:
-                - Utility Cam
-                - BRB Loop
-            - name: editing
-              hidden_scenes: []
+      scene_profiles:
+        - name: streaming
+          hidden:
+            - Utility Cam
+            - BRB Loop
+        - name: editing
+          hidden: []
+      active_scene_profile: streaming
       YAML
 
     config = Obsctl::Config::Config.from_yaml(yaml)
-    config.ui.scene_presets.active.should eq("streaming")
-    config.ui.scene_presets.presets.map(&.name).should eq(["streaming", "editing"])
-    config.ui.scene_presets.presets.first.hidden_scenes.should eq(["Utility Cam", "BRB Loop"])
-    # An empty list is a preset that hides nothing, not an absent setting.
-    config.ui.scene_presets.presets.last.hidden_scenes.should be_empty
+    config.active_scene_profile.should eq("streaming")
+    config.scene_profiles.map(&.name).should eq(["streaming", "editing"])
+    config.scene_profiles.first.hidden.should eq(["Utility Cam", "BRB Loop"])
+    # An empty list is a profile that hides nothing, not an absent setting.
+    config.scene_profiles.last.hidden.should be_empty
 
-    # A rewrite has to carry the section back out, or `config migrate` would
-    # drop presets the dashboard saved.
+    # A rewrite has to carry the keys back out, or `config migrate` would drop
+    # profiles the dashboard saved.
     rewritten = Obsctl::Config::Config.from_yaml(config.to_yaml)
-    rewritten.ui.scene_presets.should eq(config.ui.scene_presets)
+    rewritten.scene_profiles.should eq(config.scene_profiles)
+    rewritten.active_scene_profile.should eq("streaming")
   end
 
-  it "writes no scene preset section when none is configured" do
+  it "matches the active profile trimmed and case-insensitively" do
+    yaml = <<-YAML
+      version: 1
+      scene_profiles:
+        - name: Streaming
+          hidden: [Utility Cam]
+      active_scene_profile: "  streaming  "
+      YAML
+
+    # The stored spelling comes back, not the one that was written in
+    # `active_scene_profile`: the profile entry is the record of its name.
+    Obsctl::Config::Config.from_yaml(yaml).active_scene_profile_config.try(&.name).should eq("Streaming")
+  end
+
+  it "resolves an active profile as a replacement for the per-scene flags" do
+    yaml = <<-YAML
+      version: 1
+      scenes:
+        - name: Main
+        - name: Utility Cam
+          hidden: true
+        - name: Cam
+      scene_profiles:
+        - name: streaming
+          hidden: [Cam]
+      active_scene_profile: streaming
+      YAML
+
+    visibility = Obsctl::Config::Config.from_yaml(yaml).scene_visibility
+
+    # The profile is the whole answer: `Cam` goes because it names it, and
+    # `Utility Cam` comes back even though `scenes:` marks it hidden.
+    visibility.hidden?("Cam").should be_true
+    visibility.hidden?("Utility Cam").should be_false
+  end
+
+  it "writes no scene profile section when none is configured" do
     # Existing config files predate the feature, so a rewrite of one must come
     # back byte-identical rather than gaining an empty section.
-    Obsctl::Config::Config.default.to_yaml.should_not contain("scene_presets")
+    Obsctl::Config::Config.default.to_yaml.should_not contain("scene_profiles")
   end
 
   it "preserves an intentionally blank password_env as no env password" do

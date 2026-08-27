@@ -41,6 +41,15 @@ module Obsctl
       VALIDATE_CONFIG      = "validate_config"
       DUMP_CONFIG          = "dump_config"
       RELOAD_CONFIG        = "reload_config"
+      SET_SCENE_PROFILE    = "set_scene_profile"
+      # Switching a scene profile off is its own command rather than
+      # `set_scene_profile` with an empty target: a blank target is rejected as
+      # a malformed payload, and a reserved sentinel name ("none", "off") would
+      # collide with a scene profile a user is entitled to create.
+      CLEAR_SCENE_PROFILE  = "clear_scene_profile"
+      SAVE_SCENE_PROFILE   = "save_scene_profile"
+      DELETE_SCENE_PROFILE = "delete_scene_profile"
+      LIST_SCENE_PROFILES  = "list_scene_profiles"
     end
   end
 end

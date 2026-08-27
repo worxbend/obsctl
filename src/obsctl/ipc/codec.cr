@@ -48,9 +48,11 @@ module Obsctl
         raise Domain::IpcProtocolError.new("command request missing command payload") unless command_root
 
         command = CommandPayload.new(
-          string_field(command_root, "name"),
-          optional_string_field(command_root, "target"),
-          optional_int_field(command_root, "percent")
+          name: string_field(command_root, "name"),
+          hidden: optional_string_array_field(command_root, "hidden"),
+          rename_from: optional_string_field(command_root, "rename_from"),
+          target: optional_string_field(command_root, "target"),
+          percent: optional_int_field(command_root, "percent")
         )
         Request.new(id, Request::TYPE_COMMAND, command)
       end
@@ -98,6 +100,23 @@ module Obsctl
         text = value.as_s
         raise Domain::IpcProtocolError.new("IPC field #{key} cannot be empty") if text.empty?
         text
+      end
+
+      # An absent key and an explicit `null` both mean "not given"; an empty
+      # array does not. `save_scene_profile` declares its list required, so
+      # "this profile hides nothing" arrives as `[]` and has to survive as an
+      # empty array rather than collapse into `nil`.
+      private def optional_string_array_field(root : JSON::Any, key : String) : Array(String)?
+        value = root[key]?
+        return if value.nil? || value.raw.nil?
+
+        entries = value.as_a?
+        raise Domain::IpcProtocolError.new("IPC field #{key} must be an array") unless entries
+        entries.map do |entry|
+          text = entry.as_s?
+          raise Domain::IpcProtocolError.new("IPC field #{key} must contain only strings") unless text
+          text
+        end
       end
 
       private def optional_int_field(root : JSON::Any, key : String) : Int32?

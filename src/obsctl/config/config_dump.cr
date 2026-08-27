@@ -35,6 +35,13 @@ module Obsctl
           connection: config.connection,
           reconnect: config.reconnect,
           scenes: scenes,
+          # Carried across untouched. A merge learns which scenes OBS has now,
+          # but it never reconciles a profile's list against them: a profile
+          # hiding a scene that has gone is left alone, and `ConfigSchema`
+          # warns about it rather than the dump silently editing what the user
+          # saved.
+          scene_profiles: config.scene_profiles,
+          active_scene_profile: config.active_scene_profile,
           audio: AudioConfig.new(inputs),
           ui: config.ui,
           # Every field the merge does not touch must be carried across

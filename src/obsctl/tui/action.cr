@@ -50,27 +50,47 @@ module Obsctl
       # picker. It names its own scene rather than acting on a cursor, so the
       # switch cannot land on the wrong one if the list moves underneath it.
       PickScene
-      # The scene-preset editor: obsctl's own named sets of scenes the
+      # The scene-profile editor: obsctl's own named sets of scenes the
       # dashboard leaves out of its scene list. Unrelated to OBS profiles and
       # OBS scene collections, which have their own panels and their own
       # actions.
-      OpenScenePresets
-      CloseScenePresets
-      ScenePresetsNavigateUp
-      ScenePresetsNavigateDown
+      OpenSceneProfiles
+      CloseSceneProfiles
+      SceneProfilesNavigateUp
+      SceneProfilesNavigateDown
       # Hide or unhide one scene in the draft. `index` nil means the row under
       # the editor's cursor and a set `index` means the row that was clicked,
       # the same rule `PickScene` follows.
-      ScenePresetsToggleScene
-      ScenePresetsCycleNext
-      ScenePresetsCyclePrevious
-      ScenePresetsBeginNaming
-      ScenePresetsSave
-      ScenePresetsNameCharacter
-      ScenePresetsNameBackspace
-      ScenePresetsNameClearLine
-      ScenePresetsNameSubmit
-      ScenePresetsNameCancel
+      SceneProfilesToggleScene
+      SceneProfilesCycleNext
+      SceneProfilesCyclePrevious
+      SceneProfilesBeginNaming
+      SceneProfilesSave
+      SceneProfilesNameCharacter
+      SceneProfilesNameBackspace
+      SceneProfilesNameClearLine
+      SceneProfilesNameSubmit
+      SceneProfilesNameCancel
+      # The scene-profile list: choosing which saved profile is in effect, and
+      # managing the saved ones. Distinct from the editor above, which builds
+      # the set of scenes one profile hides. Nothing here reaches OBS or the
+      # daemon either -- it changes which scenes this dashboard draws.
+      OpenSceneProfileList
+      CloseSceneProfileList
+      SceneProfileListNavigateUp
+      SceneProfileListNavigateDown
+      SceneProfileListActivate
+      # Put the row at `index` into effect, from a digit press or a click. It
+      # names its own row rather than acting on a cursor, the same rule
+      # `PickScene` follows, so it cannot land on the wrong profile if the list
+      # moved underneath it. Row 0 is "show every scene".
+      PickSceneProfile
+      SceneProfileListEdit
+      SceneProfileListRename
+      SceneProfileListNew
+      SceneProfileListDeletePrompt
+      SceneProfileListDeleteConfirm
+      SceneProfileListDeleteCancel
       # A key that begins a multi-key sequence, e.g. `g` or the leader.
       PendingSequence
       ClearSequence

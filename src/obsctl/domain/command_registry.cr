@@ -8,6 +8,7 @@ module Obsctl
       None
       Scene
       Profile
+      SceneProfile
       SceneCollection
       AudioInput
       Percent
@@ -23,6 +24,7 @@ module Obsctl
         in None            then ""
         in Scene           then "<scene>"
         in Profile         then "<profile>"
+        in SceneProfile    then "<scene-profile>"
         in SceneCollection then "<collection>"
         in AudioInput      then "<audio-input>"
         in Percent         then "<0-100>"
@@ -179,6 +181,31 @@ module Obsctl
           name: "rec", aliases: ["record"], summary: "Control the recording output",
           arguments: [ArgumentKind::RecordAction], required_arguments: 0, json: true,
           build: ->(args : Array(String)) { CommandRegistry.build_record(args) }),
+
+        # Scene profiles are obsctl's own named sets of scene-visibility
+        # choices, unrelated to the OBS profile `profile` switches. Bare
+        # `scene-profile` reports which one is in effect rather than erroring
+        # on a missing argument, which is why `required_arguments` is 0.
+        CommandSpec.new(
+          name: "scene-profile", aliases: ["set-scene-profile"],
+          summary: "Switch the active scene profile, or report it when given no name",
+          arguments: [ArgumentKind::SceneProfile], required_arguments: 0, json: true,
+          build: ->(args : Array(String)) {
+            name = args[0]?
+            (name ? SetSceneProfileCommand.new(name) : ListSceneProfilesCommand.new).as(Command)
+          }),
+        CommandSpec.new(
+          name: "scene-profile-off", aliases: ["scene-profile-clear"],
+          summary: "Stop filtering the scene list by a scene profile", json: true,
+          build: ->(_args : Array(String)) { ClearSceneProfileCommand.new.as(Command) }),
+        CommandSpec.new(
+          name: "scene-profile-delete", aliases: ["delete-scene-profile"],
+          summary: "Delete a saved scene profile",
+          arguments: [ArgumentKind::SceneProfile], json: true,
+          build: ->(args : Array(String)) { DeleteSceneProfileCommand.new(args[0]).as(Command) }),
+        CommandSpec.new(
+          name: "scene-profiles", summary: "List saved scene profiles", json: true,
+          build: ->(_args : Array(String)) { ListSceneProfilesCommand.new.as(Command) }),
 
         CommandSpec.new(
           name: "dump-config", summary: "Merge live OBS names into the config file", json: true,

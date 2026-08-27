@@ -24,11 +24,6 @@ module Obsctl
 
       alias Sender = Proc(IPC::CommandPayload, IPC::Response)
       alias ThemePersister = Proc(Theme, String)
-      # Writes the edited scene presets to the config file and returns the line
-      # to show for it. A proc rather than a direct call into
-      # `ScenePresetPersistence` so the dispatcher stays free of the config
-      # layer and a spec can watch what it was handed.
-      alias ScenePresetPersister = Proc(ScenePresets, String)
       alias Viewport = Proc(CryTUI::Rect)
 
       # Half-page steps need to know how tall the focused panel is. The area is
@@ -43,7 +38,6 @@ module Obsctl
         @theme_persister : ThemePersister? = nil,
         @volume_debounce : Time::Span = VOLUME_DEBOUNCE,
         @viewport : Viewport? = nil,
-        @scene_preset_persister : ScenePresetPersister? = nil,
       )
         @volume_versions = Hash(String, UInt64).new(0_u64)
       end
@@ -80,8 +74,10 @@ module Obsctl
         pointer_action(action) ||
           palette_action(action) ||
           scene_picker_action(action) ||
-          scene_presets_action(action) ||
-          scene_preset_name_action(action) ||
+          scene_profile_list_action(action) ||
+          scene_profile_manage_action(action) ||
+          scene_profiles_action(action) ||
+          scene_profile_name_action(action) ||
           navigation_action(action) ||
           settings_action(action) ||
           command_action(action) ||
@@ -132,81 +128,238 @@ module Obsctl
         target_command(IPC::CommandName::SET_SCENE, scene.name)
       end
 
-      # The scene-preset editor: obsctl's own named sets of scenes to keep out
+      # The scene-profile list: which saved profile is in effect.
+      #
+      # Nothing here talks to the daemon -- the daemon keeps reporting every
+      # scene and this only changes which of them the dashboard draws. Unlike
+      # the editor, every branch here takes effect at once and is written to
+      # the config file at once: there is no draft to throw away, so there is
+      # nothing for an Esc to undo.
+      private def scene_profile_list_action(action : Action) : ActionOutcome?
+        list = @model.scene_profile_list
+        case action.kind
+        when .open_scene_profile_list?
+          # Opening on the row that is in effect, so the cursor starts where the
+          # eye already is. Unlike the picker this never refuses to open: with
+          # no profiles saved the list still has its "show every scene" row and
+          # its `n` key, which is how a first profile gets made.
+          list.cursor = @model.scene_profile_list_entries.index(&.active) || 0
+          list.confirming = false
+          list.active = true
+          ActionOutcome::HANDLED
+        when .close_scene_profile_list?
+          list.active = false
+          list.confirming = false
+          ActionOutcome::HANDLED
+        when .scene_profile_list_navigate_up?
+          list.cursor = {list.cursor - 1, 0}.max
+          ActionOutcome::HANDLED
+        when .scene_profile_list_navigate_down?
+          list.cursor = {list.cursor + 1, {@model.scene_profile_list_entries.size - 1, 0}.max}.min
+          ActionOutcome::HANDLED
+        when .scene_profile_list_activate?
+          activate_scene_profile(list.cursor)
+        when .pick_scene_profile?
+          index = action.index
+          index ? activate_scene_profile(index) : ActionOutcome::HANDLED
+        end
+      end
+
+      # Shown instead of opening the scene-profile editor when the daemon has
+      # not reported any scenes yet.
+      NO_SCENES_TO_CONFIGURE = "no scenes to configure"
+
+      # Puts a row into effect, closes the list, and writes the config file.
+      #
+      # Written immediately rather than on close, because activating is the
+      # whole action -- there is nothing else the user could still decide, and a
+      # profile that vanished on restart would look like the dashboard forgot.
+      # Row 0 is "show every scene", which is `activate(nil)`: the config keeps
+      # every saved profile and stops naming one.
+      private def activate_scene_profile(index : Int32) : ActionOutcome
+        entry = @model.scene_profile_list_entries[index]?
+        return ActionOutcome::HANDLED unless entry
+
+        @model.scene_profile_list.active = false
+        # Only asks. The scene list changes when the daemon pushes the snapshot
+        # this produces, and `Model#snapshot=` is what keeps the cursors on the
+        # scenes they were on across that change -- doing it here would run
+        # before the list had changed and re-seek nothing.
+        profile = entry.profile
+        return send_scene_profile(IPC::CommandPayload.new(name: IPC::CommandName::SET_SCENE_PROFILE, target: profile.name)) if profile
+
+        send_scene_profile(IPC::CommandPayload.new(name: IPC::CommandName::CLEAR_SCENE_PROFILE))
+      end
+
+      # Editing, creating and deleting from the list. Split from
+      # `scene_profile_list_action` because the two together are more branches
+      # than ameba's complexity ratchet allows in one method -- the same split
+      # the editor's two sub-modes already needed.
+      private def scene_profile_manage_action(action : Action) : ActionOutcome?
+        case action.kind
+        when .scene_profile_list_edit?   then edit_selected_scene_profile(naming: false)
+        when .scene_profile_list_rename? then edit_selected_scene_profile(naming: true)
+        when .scene_profile_list_new?
+          return ActionOutcome.new(message: NO_SCENES_TO_CONFIGURE) unless open_scene_profile_editor(profile: nil)
+
+          ActionOutcome.new(message: "new scene profile: toggle scenes, then n to name it")
+        when .scene_profile_list_delete_prompt?
+          entry = selected_scene_profile_entry
+          return ActionOutcome.new(message: "'#{SceneProfileList::SHOW_EVERY_SCENE}' is not a profile, so there is nothing to delete") unless entry && entry.profile
+
+          @model.scene_profile_list.confirming = true
+          # Said out loud as well as shown on the hint row, because a delete
+          # cannot be undone and the second press is the only thing standing
+          # between the user and losing the profile.
+          ActionOutcome.new(message: "delete scene profile '#{entry.name}'? press d again to confirm")
+        when .scene_profile_list_delete_cancel?
+          @model.scene_profile_list.confirming = false
+          ActionOutcome.new(message: "delete cancelled")
+        when .scene_profile_list_delete_confirm?
+          delete_selected_scene_profile
+        end
+      end
+
+      private def selected_scene_profile_entry : SceneProfileList::Entry?
+        @model.scene_profile_list_entries[@model.scene_profile_list.cursor]?
+      end
+
+      # Hands a saved profile to the editor, optionally with the name field
+      # already open so a rename is one keystroke rather than two.
+      #
+      # The list closes on the way: both modals capture every key, so exactly
+      # one of them may be open or the editor would silently swallow every key
+      # meant for the list drawn underneath it.
+      private def edit_selected_scene_profile(naming : Bool) : ActionOutcome
+        entry = selected_scene_profile_entry
+        profile = entry.try(&.profile)
+        return ActionOutcome.new(message: "'#{SceneProfileList::SHOW_EVERY_SCENE}' is not a profile, so there is nothing to edit") unless entry && profile
+
+        return ActionOutcome.new(message: NO_SCENES_TO_CONFIGURE) unless open_scene_profile_editor(profile: profile)
+
+        if naming
+          @model.scene_profile_editor.naming = true
+          # Seeded with the current name rather than blank: while the name
+          # field is open it takes the place of the title badge, so an empty
+          # field would mean retyping the name with the old one nowhere on
+          # screen. `n` inside the editor still starts from blank -- that one
+          # is naming a fresh draft, not correcting an existing name.
+          @model.scene_profile_editor.name_input = profile.name
+        end
+        ActionOutcome.new(message: naming ? "rename scene profile: #{entry.name}" : "editing scene profile: #{entry.name}")
+      end
+
+      private def delete_selected_scene_profile : ActionOutcome
+        entry = selected_scene_profile_entry
+        return ActionOutcome::HANDLED unless entry && entry.profile
+
+        @model.scene_profile_list.confirming = false
+        send_scene_profile(IPC::CommandPayload.new(name: IPC::CommandName::DELETE_SCENE_PROFILE, target: entry.name))
+      end
+
+      # The scene-profile editor: obsctl's own named sets of scenes to keep out
       # of the scene list.
       #
       # Nothing here talks to the daemon. Every branch edits the draft on the
-      # model, and only `save_scene_preset` makes the draft the list the
+      # model, and only `save_scene_profile` makes the draft the list the
       # dashboard draws -- which is what lets Esc throw an edit away.
       #
-      # Split from `scene_preset_name_action` because the two sub-modes
+      # Split from `scene_profile_name_action` because the two sub-modes
       # together are more branches than ameba's complexity ratchet allows in
       # one method.
-      private def scene_presets_action(action : Action) : ActionOutcome?
-        editor = @model.scene_preset_editor
+      private def scene_profiles_action(action : Action) : ActionOutcome?
+        editor = @model.scene_profile_editor
         case action.kind
-        when .open_scene_presets?
+        when .open_scene_profiles?
           # Refusing to open on an empty list rather than showing an empty box:
           # the editor swallows every key while it is open, so it would be a
           # dead end with no visible reason.
-          return ActionOutcome.new(message: "no scenes to configure") if @model.all_scenes.empty?
+          return ActionOutcome.new(message: NO_SCENES_TO_CONFIGURE) unless open_scene_profile_editor
 
-          open_scene_preset_editor
           ActionOutcome::HANDLED
-        when .close_scene_presets?
+        when .close_scene_profiles?
           editor.active = false
           editor.naming = false
           # Said out loud, because the draft is thrown away here and the only
           # evidence otherwise would be the scene list not changing.
-          ActionOutcome.new(message: "scene preset editing cancelled")
-        when .scene_presets_navigate_up?
+          ActionOutcome.new(message: "scene profile editing cancelled")
+        when .scene_profiles_navigate_up?
           editor.cursor = {editor.cursor - 1, 0}.max
           ActionOutcome::HANDLED
-        when .scene_presets_navigate_down?
+        when .scene_profiles_navigate_down?
           editor.cursor = {editor.cursor + 1, {@model.all_scenes.size - 1, 0}.max}.min
           ActionOutcome::HANDLED
-        when .scene_presets_toggle_scene?
-          toggle_scene_preset_scene(action.index)
-        when .scene_presets_cycle_next?     then cycle_scene_preset(1)
-        when .scene_presets_cycle_previous? then cycle_scene_preset(-1)
-        when .scene_presets_begin_naming?
+        when .scene_profiles_toggle_scene?
+          toggle_scene_profile_scene(action.index)
+        when .scene_profiles_cycle_next?     then cycle_scene_profile(1)
+        when .scene_profiles_cycle_previous? then cycle_scene_profile(-1)
+        when .scene_profiles_begin_naming?
           editor.naming = true
           editor.name_input = ""
           ActionOutcome::HANDLED
-        when .scene_presets_save?
+        when .scene_profiles_save?
           # An unnamed draft cannot be saved, so Enter asks for the name
           # instead of failing: toggle first and name afterwards is the flow
           # this supports.
           if editor.name.empty?
             editor.naming = true
             editor.name_input = ""
-            return ActionOutcome.new(message: "name this scene preset")
+            return ActionOutcome.new(message: "name this scene profile")
           end
 
-          save_scene_preset(editor.name)
+          save_scene_profile(editor.name)
         end
       end
 
-      private def open_scene_preset_editor : Nil
-        editor = @model.scene_preset_editor
-        preset = @model.scene_presets.active_preset
-        editor.name = preset.try(&.name) || ""
-        # A brand-new draft starts from what is on screen right now -- the
-        # scenes already flagged `hidden` in the config -- so a user adopting
-        # presets for the first time cannot open the editor, save, and watch
-        # the scene list change under them.
-        editor.hidden = preset ? preset.hidden_scenes.dup : @model.all_scenes.select(&.hidden).map(&.name).to_set
+      # Opens the editor on a saved profile, defaulting to whichever one is in
+      # effect. `nil` is a deliberate argument, not an absent one: it is how
+      # the list's `n` asks for a fresh draft instead of the active profile.
+      # Returns false without opening anything when there are no scenes to
+      # show. The editor captures every key while it is open and draws nothing
+      # at all for an empty scene list, so opening it then would leave the
+      # dashboard looking frozen with no visible reason. Every caller has to
+      # answer for that, not just the `<leader>P` one.
+      private def open_scene_profile_editor(profile : SceneProfile? = @model.scene_profiles.active_profile) : Bool
+        return false if @model.all_scenes.empty?
+
+        editor = @model.scene_profile_editor
+        # Both modals capture every key, so exactly one of them may be open --
+        # two overlays drawn on top of each other would leave the editor
+        # silently answering keys aimed at the list.
+        @model.scene_profile_list.active = false
+        @model.scene_profile_list.confirming = false
+        editor.name = profile.try(&.name) || ""
+        # The saved profile the draft came from, so saving it under a different
+        # name renames that profile rather than leaving a copy beside it.
+        editor.origin_name = profile.try(&.name)
+        # A brand-new draft starts from what is on screen right now, so a user
+        # adopting profiles for the first time cannot open the editor, save,
+        # and watch the scene list change under them.
+        #
+        # Unless a profile is already in effect: the daemon resolves an active
+        # profile *into* those `hidden` flags, so seeding from them there would
+        # make `n` a copy of the profile being used rather than the fresh draft
+        # it is meant to be.
+        editor.hidden =
+          if profile
+            profile.hidden.dup
+          elsif @model.scene_profiles.active_profile
+            Set(String).new
+          else
+            @model.all_scenes.select(&.hidden).map(&.name).to_set
+          end
         editor.cursor = 0
         editor.naming = false
         editor.name_input = ""
         editor.active = true
+        true
       end
 
       # A click names its own row the way `PickScene` does, so a toggle cannot
       # land on the wrong scene if the list moved between the click being
       # reported and the action running.
-      private def toggle_scene_preset_scene(index : Int32?) : ActionOutcome
-        editor = @model.scene_preset_editor
+      private def toggle_scene_profile_scene(index : Int32?) : ActionOutcome
+        editor = @model.scene_profile_editor
         editor.cursor = index if index
         scene = @model.all_scenes[index || editor.cursor]?
         return ActionOutcome::HANDLED unless scene
@@ -219,64 +372,108 @@ module Obsctl
         ActionOutcome::HANDLED
       end
 
-      # Tab walks the saved presets into the editor. Loading one replaces the
+      # Tab walks the saved profiles into the editor. Loading one replaces the
       # draft, unsaved toggles included -- the status line names what is now
       # being edited so that is visible rather than silent.
-      private def cycle_scene_preset(offset : Int32) : ActionOutcome
-        presets = @model.scene_presets.presets
-        return ActionOutcome.new(message: "no saved scene presets") if presets.empty?
+      private def cycle_scene_profile(offset : Int32) : ActionOutcome
+        profiles = @model.scene_profiles.profiles
+        return ActionOutcome.new(message: "no saved scene profiles") if profiles.empty?
 
-        editor = @model.scene_preset_editor
-        current = editor.name.empty? ? nil : @model.scene_presets.index_of(editor.name)
-        index = current ? (current + offset) % presets.size : (offset > 0 ? 0 : presets.size - 1)
-        preset = presets[index]
-        editor.name = preset.name
-        editor.hidden = preset.hidden_scenes.dup
-        ActionOutcome.new(message: "editing scene preset: #{preset.name}")
+        editor = @model.scene_profile_editor
+        current = editor.name.empty? ? nil : @model.scene_profiles.index_of(editor.name)
+        index = current ? (current + offset) % profiles.size : (offset > 0 ? 0 : profiles.size - 1)
+        profile = profiles[index]
+        editor.name = profile.name
+        editor.hidden = profile.hidden.dup
+        # Cycling onto a profile makes it the one the draft came from, so a
+        # rename after a Tab renames the profile on screen rather than adding a
+        # second one beside it.
+        editor.origin_name = profile.name
+        ActionOutcome.new(message: "editing scene profile: #{profile.name}")
       end
 
-      # Saving both stores the preset and makes it the active one, because the
-      # only reason to edit which scenes a preset hides is to then look at that
-      # list.
-      private def save_scene_preset(name : String) : ActionOutcome
-        editor = @model.scene_preset_editor
-        @model.scene_presets = @model.scene_presets.upsert(name, editor.hidden).activate(name)
+      # Saving hands the whole draft to the daemon in one command.
+      #
+      # One command rather than a save followed by a delete when the name
+      # changed: `rename_from` moves the entry where it stands, which keeps it
+      # in the position the user was looking at and keeps its hold on the
+      # active profile. The two-command form rewrote the config file twice and
+      # silently stopped hiding scenes whenever the profile being renamed was
+      # the one in effect.
+      #
+      # Unlike the old client-side save this does *not* activate the profile.
+      # The editor lets a user work on a profile they are not currently using,
+      # and switching the scene list out from under them would be a surprise;
+      # `<leader>p` is how a profile is put into effect.
+      private def save_scene_profile(name : String) : ActionOutcome
+        editor = @model.scene_profile_editor
+        # The saved profile this save moves away from, and nil when nothing is
+        # being moved: a draft saved under its own name is an edit of it, and a
+        # draft whose origin is no longer in the list has nothing to rename.
+        renamed_from = renamed_scene_profile(editor.origin_name, name)
         editor.active = false
         editor.naming = false
-        # The visible scene list just changed length, so cursors pointing past
-        # its new end have to come back inside it.
-        @model.clamp_cursors
-        ActionOutcome.new(message: @scene_preset_persister.try(&.call(@model.scene_presets)) || "scene preset saved: #{name}")
+        editor.origin_name = name
+        send_scene_profile(IPC::CommandPayload.new(
+          name: IPC::CommandName::SAVE_SCENE_PROFILE,
+          hidden: editor.hidden.to_a.sort!,
+          rename_from: renamed_from,
+          target: name
+        ))
+      end
+
+      private def renamed_scene_profile(origin : String?, name : String) : String?
+        return unless origin && origin != name
+        @model.scene_profiles.index_of(origin) ? origin : nil
+      end
+
+      # Asks the daemon to make a scene-profile change, and reports what it
+      # said.
+      #
+      # The dashboard does not write the config file for this any more and does
+      # not decide which scenes are hidden: the daemon owns both, resolves the
+      # active profile into a per-scene `hidden` flag, and pushes the result to
+      # every subscriber. That is what keeps two open dashboards -- and the CLI
+      # -- agreeing about what should be on screen.
+      private def send_scene_profile(payload : IPC::CommandPayload) : ActionOutcome
+        response = @sender.call(payload)
+        message = response.result.try(&.["message"]?).try(&.as_s?)
+        return ActionOutcome.new(message: message || "ok") if response.ok
+
+        ActionOutcome.new(message: response.error.try(&.message) || "scene profile command failed")
       end
 
       # The editor's naming sub-mode, which is a one-line text field with the
       # same key set as the command palette's.
-      private def scene_preset_name_action(action : Action) : ActionOutcome?
-        editor = @model.scene_preset_editor
+      private def scene_profile_name_action(action : Action) : ActionOutcome?
+        editor = @model.scene_profile_editor
         case action.kind
-        when .scene_presets_name_character?
+        when .scene_profiles_name_character?
           editor.name_input += action.character.to_s
           ActionOutcome::HANDLED
-        when .scene_presets_name_backspace?
-          # Per grapheme, not per byte or per codepoint: one press has to
-          # remove one character the user can see, including an emoji built out
-          # of several codepoints.
-          unless editor.name_input.empty?
-            editor.name_input = editor.name_input.each_grapheme.to_a[0...-1].join
-          end
+        when .scene_profiles_name_backspace?
+          editor.name_input = drop_last_grapheme(editor.name_input)
           ActionOutcome::HANDLED
-        when .scene_presets_name_clear_line?
+        when .scene_profiles_name_clear_line?
           editor.name_input = ""
           ActionOutcome::HANDLED
-        when .scene_presets_name_cancel?
+        when .scene_profiles_name_cancel?
           # Back to the list, not out of the editor: the draft is still there
           # to save under another name.
           editor.naming = false
           editor.name_input = ""
           ActionOutcome::HANDLED
-        when .scene_presets_name_submit?
+        when .scene_profiles_name_submit?
           name = editor.name_input.strip
-          return ActionOutcome.new(message: "scene preset name cannot be empty") if name.empty?
+          return ActionOutcome.new(message: "scene profile name cannot be empty") if name.empty?
+
+          # Refused rather than silently replacing the other profile: `upsert`
+          # overwrites by name, and the only evidence would have been someone
+          # else's hidden set quietly becoming this draft's. Saving over the
+          # profile this draft came from is still allowed -- that is editing it.
+          if @model.scene_profiles.index_of(name) && name != editor.origin_name
+            return ActionOutcome.new(message: "a scene profile named '#{name}' already exists; open it from <leader>p to edit it")
+          end
 
           # Naming is not saving. Confirming the name puts the draft back in
           # the list so more scenes can be toggled under it, and `Enter` there
@@ -290,7 +487,7 @@ module Obsctl
           editor.name = name
           editor.name_input = ""
           editor.naming = false
-          ActionOutcome.new(message: "scene preset named: #{name}; press enter to save")
+          ActionOutcome.new(message: "scene profile named: #{name}; press enter to save")
         end
       end
 
@@ -310,9 +507,7 @@ module Obsctl
           refresh_completions
           ActionOutcome::HANDLED
         when .palette_backspace?
-          unless @model.command_palette.input.empty?
-            @model.command_palette.input = @model.command_palette.input.each_grapheme.to_a[0...-1].join
-          end
+          @model.command_palette.input = drop_last_grapheme(@model.command_palette.input)
           refresh_completions
           ActionOutcome::HANDLED
         when .palette_submit?
@@ -553,7 +748,7 @@ module Obsctl
 
       private def target_command(name : String, target : String?) : ActionOutcome
         return ActionOutcome::HANDLED unless target
-        command(IPC::CommandPayload.new(name, target))
+        command(IPC::CommandPayload.new(name: name, target: target))
       end
 
       private def volume(delta : Int32) : ActionOutcome
@@ -573,7 +768,7 @@ module Obsctl
           next unless @volume_versions[input_name] == version
 
           begin
-            response = @sender.call(IPC::CommandPayload.new(IPC::CommandName::SET_VOLUME, input_name, percent))
+            response = @sender.call(IPC::CommandPayload.new(name: IPC::CommandName::SET_VOLUME, target: input_name, percent: percent))
             # Only failures are announced: the level the user just set is
             # already on screen, so "ok" would say nothing they cannot see.
             @model.set_last_result(result_message(response)) unless response.ok
@@ -597,11 +792,11 @@ module Obsctl
       # spelled out again by the caller. Control characters are stripped: a
       # pasted newline would submit a command the user never chose to run.
       def paste(text : String) : Nil
-        editor = @model.scene_preset_editor
+        editor = @model.scene_profile_editor
         if editor.active && editor.naming
           # The same strip for the same reason as the palette below: a pasted
           # carriage return -- what a copied line ending arrives as -- would
-          # otherwise submit, here saving a preset under a name the user never
+          # otherwise submit, here saving a profile under a name the user never
           # chose.
           editor.name_input += text.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
           return
@@ -612,6 +807,15 @@ module Obsctl
 
         palette.input += text.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
         refresh_completions
+      end
+
+      # Per grapheme, not per byte or per codepoint: one press has to
+      # remove one character the user can see, including an emoji built out
+      # of several codepoints.
+      private def drop_last_grapheme(text : String) : String
+        return text if text.empty?
+
+        text.each_grapheme.to_a[0...-1].join
       end
 
       private def refresh_completions

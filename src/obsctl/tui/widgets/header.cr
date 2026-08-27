@@ -68,6 +68,17 @@ module Obsctl
             spans << CryTUI::Span.new(model.advanced_ui ? "  ◇ " : "  - ", CryTUI::Style.new(foreground: theme.info))
             spans << CryTUI::Span.new(Localization.text(model.locale, :profile, profile), CryTUI::Style.new(foreground: theme.muted))
           end
+          # Last on the line on purpose: the header is width-constrained (the
+          # status beacon already takes the right-hand columns), and the Scenes
+          # panel title carries the same fact where it matters most, so this is
+          # the span that can afford to be the first one clipped.
+          #
+          # "scene profile", never bare "profile": the span above already prints
+          # the OBS profile, and an obsctl scene profile is an unrelated thing.
+          if profile = model.scene_profiles.active_profile
+            spans << CryTUI::Span.new(model.advanced_ui ? "  🗂 " : "  ~ ", CryTUI::Style.new(foreground: theme.accent))
+            spans << CryTUI::Span.new(Localization.text(model.locale, :scene_profile, profile.name), CryTUI::Style.new(foreground: theme.muted))
+          end
           CryTUI::Line.new(spans)
         end
 

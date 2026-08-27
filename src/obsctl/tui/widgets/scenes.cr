@@ -7,6 +7,14 @@ module Obsctl
         extend self
 
         FLASH_DURATION = 8_u64
+        # How wide the panel has to be before the active profile's name is worth
+        # the columns: below this the title is already competing with the count
+        # badge and the key hint, and a block clips its title without saying so.
+        PRESET_LABEL_MIN_WIDTH = 40
+        # A profile name is whatever the user typed, so it is fitted rather than
+        # trusted -- long enough to recognise, short enough to leave the hint on
+        # screen.
+        PRESET_LABEL_MAX_NAME = 16
 
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           theme = model.theme
@@ -26,10 +34,25 @@ module Obsctl
             style = scene.active ? CryTUI::Style.new(modifiers: CryTUI::Modifier::Bold) : CryTUI::Style.new
             CryTUI::Widgets::ListItem.new([CryTUI::Line.new(spans)], style)
           end
-          block = Chrome.panel(model.symbol("🎬", "S"), "Scenes", model.symbol("[s]  ↵ switch", "[s]  Enter switch"), items.size, focused, model)
+          block = Chrome.panel(model.symbol("🎬", "S"), title_label(model, area), model.symbol("[s]  ↵ switch", "[s]  Enter switch"), items.size, focused, model)
           highlight = focused ? CryTUI::Style.new(foreground: theme.highlight_foreground, background: theme.highlight_background, modifiers: CryTUI::Modifier::Bold) : CryTUI::Style.new(modifiers: CryTUI::Modifier::Dim)
           state = CryTUI::Widgets::ListState.new(selected: items.empty? ? nil : model.scene_cursor)
           CryTUI::Widgets::List.new(items, highlight_style: highlight, block: block).render(area, buffer, state)
+        end
+
+        # "Scenes", or "Scenes · streaming" when a profile is filtering the list.
+        #
+        # This is where the name of the active profile belongs, because this is
+        # the panel a profile shortens: the count badge beside it already reads a
+        # smaller number than OBS reports, and until now nothing on the
+        # dashboard said why. With no profile active the title is exactly the
+        # word it has always been.
+        private def title_label(model : Model, area : CryTUI::Rect) : String
+          profile = model.scene_profiles.active_profile
+          return "Scenes" unless profile && area.width >= PRESET_LABEL_MIN_WIDTH
+
+          name = CryTUI::TextWidth.truncate(profile.name, PRESET_LABEL_MAX_NAME, model.symbol("…", "~"))
+          "Scenes #{model.symbol("·", "-")} #{name}"
         end
 
         private def flash_intensity(model : Model, name : String) : Float64

@@ -137,6 +137,45 @@ describe Obsctl::TUI::HitTest do
   end
 end
 
+describe "scene profile list mouse routing" do
+  it "keeps every click for itself while it is open" do
+    model = mouse_model
+    model.scene_profile_list.active = true
+    areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
+    rect = Obsctl::TUI::SceneProfileListLayout.compute(AREA, model)
+
+    # The modal captures the pointer the same way it captures the keyboard: a
+    # click that fell through would switch the scene behind a box the reader
+    # cannot see past.
+    on_row = click(model, rect.x + 2, rect.y + 1).not_nil!
+    on_row.kind.should eq(Obsctl::TUI::ActionKind::PickSceneProfile)
+    on_row.index.should eq(0)
+
+    over_scenes = click(model, areas.scenes.x + 4, first_item_row(areas.scenes)).not_nil!
+    over_scenes.kind.should eq(Obsctl::TUI::ActionKind::CloseSceneProfileList)
+  end
+
+  it "reads the hint row as chrome, the way the editor does" do
+    model = mouse_model
+    model.scene_profile_list.active = true
+    rect = Obsctl::TUI::SceneProfileListLayout.compute(AREA, model)
+
+    hint = click(model, rect.x + 2, Obsctl::TUI::SceneProfileListLayout.hint_row(rect)).not_nil!
+    hint.kind.should eq(Obsctl::TUI::ActionKind::CloseSceneProfileList)
+  end
+
+  it "cancels an armed delete on any click rather than acting on it" do
+    model = mouse_model
+    model.scene_profile_list.active = true
+    model.scene_profile_list.confirming = true
+    rect = Obsctl::TUI::SceneProfileListLayout.compute(AREA, model)
+
+    # The two-press rule is the whole protection a delete gets, so a pointer
+    # that wandered in must not be able to supply the second press.
+    click(model, rect.x + 2, rect.y + 1).try(&.kind).should eq(Obsctl::TUI::ActionKind::SceneProfileListDeleteCancel)
+  end
+end
+
 describe "mouse input" do
   it "focuses and selects on the first click, and activates on the second" do
     model = mouse_model

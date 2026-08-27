@@ -27,7 +27,21 @@ module Obsctl
     # parser knows nothing about (`--topics`, `--headless`, `--dry-run`).
     # Declaring the flags as data keeps the splitter and the parser from
     # disagreeing about where the global section ends.
-    record FlagSpec, long : String, value : String? = nil, short : String? = nil, description : String = "" do
+    # The completion-facing fields exist so the generated shell scripts read
+    # off this table too instead of re-listing every flag per shell:
+    # `candidates` is the fixed word list a value flag accepts,
+    # `file_completion` marks a value flag whose value is a path, and
+    # `value_label` is the short lowercase noun zsh shows for the value
+    # (`--help` keeps the uppercase placeholder in `value`).
+    record FlagSpec,
+      long : String,
+      value : String? = nil,
+      short : String? = nil,
+      description : String = "",
+      shell_description : String? = nil,
+      candidates : Array(String)? = nil,
+      value_label : String? = nil,
+      file_completion : Bool = false do
       # Renders the flag in the form `OptionParser#on` expects.
       def to_flag : String
         value ? "#{long} #{value}" : long
@@ -37,20 +51,36 @@ module Obsctl
       def takes_value? : Bool
         !value.nil?
       end
+
+      # What the shell completion shows for this flag. `--help` descriptions
+      # like "debug|info|warn|error" restate the value list, which the shells
+      # already render as candidates, so a flag may carry a shorter
+      # completion-only wording and falls back to `description` otherwise.
+      def completion_description : String
+        shell_description || description
+      end
     end
 
     class OptionsParser
       BANNER = "Usage: obsctl [global options] [command] [args]"
 
       FLAGS = [
-        FlagSpec.new("--config", "PATH", description: "Path to config.yml"),
-        FlagSpec.new("--log-level", "LEVEL", description: "debug|info|warn|error"),
-        FlagSpec.new("--color", "WHEN", description: "auto|always|never (default: auto)"),
-        FlagSpec.new("--timeout", "SECONDS", description: "Give up on a daemon request after SECONDS"),
-        FlagSpec.new("--force", description: "Overwrite files for commands that support it"),
-        FlagSpec.new("--json", description: "Emit a JSON envelope for scriptable commands"),
-        FlagSpec.new("--quiet", short: "-q", description: "Suppress human output; rely on the exit code"),
-        FlagSpec.new("--version", short: "-V", description: "Show the obsctl version"),
+        FlagSpec.new("--config", "PATH", description: "Path to config.yml",
+          value_label: "file", file_completion: true),
+        FlagSpec.new("--log-level", "LEVEL", description: "debug|info|warn|error",
+          shell_description: "Log verbosity", candidates: ["debug", "info", "warn", "error"], value_label: "level"),
+        FlagSpec.new("--color", "WHEN", description: "auto|always|never (default: auto)",
+          shell_description: "When to colorize", candidates: ["auto", "always", "never"], value_label: "when"),
+        FlagSpec.new("--timeout", "SECONDS", description: "Give up on a daemon request after SECONDS",
+          shell_description: "Request timeout in seconds", value_label: "seconds"),
+        FlagSpec.new("--force", description: "Overwrite files for commands that support it",
+          shell_description: "Overwrite files"),
+        FlagSpec.new("--json", description: "Emit a JSON envelope for scriptable commands",
+          shell_description: "Emit a JSON envelope"),
+        FlagSpec.new("--quiet", short: "-q", description: "Suppress human output; rely on the exit code",
+          shell_description: "Suppress human output"),
+        FlagSpec.new("--version", short: "-V", description: "Show the obsctl version",
+          shell_description: "Show the version"),
         FlagSpec.new("--help", short: "-h", description: "Show help"),
       ]
 
@@ -93,6 +123,7 @@ module Obsctl
 
         global_argv, command, args = split(argv)
         parser.parse(global_argv)
+        command, args = translate_scene_profile_flags(command, args)
 
         Options.new(
           config_path: config_path,
@@ -111,6 +142,31 @@ module Obsctl
       end
 
       # Splits argv into the global option section, the command, and its args.
+      # Rewrites `obsctl scene-profile --off` and `--delete NAME` into the
+      # canonical commands `scene-profile-off` and `scene-profile-delete NAME`
+      # before the registry sees them.
+      #
+      # Done here rather than by teaching `CommandRegistry` about flags: every
+      # spec there is a name plus positional arguments, and the registry is what
+      # drives `--help`, the `--json` allowlist and the generated shell
+      # completions. Translating keeps the flag spellings obsctl-rs offers
+      # without putting a second argument grammar into the single source of
+      # truth.
+      private def translate_scene_profile_flags(command : String?, args : Array(String)) : Tuple(String?, Array(String))
+        return {command, args} unless command == "scene-profile" || command == "set-scene-profile"
+
+        case args.first?
+        when "--off", "--clear"
+          raise Domain::CommandParseError.new("scene-profile #{args.first} takes no argument") if args.size > 1
+          {"scene-profile-off", [] of String}
+        when "--delete"
+          raise Domain::CommandParseError.new("scene-profile --delete needs a scene profile name") unless args.size == 2
+          {"scene-profile-delete", [args[1]]}
+        else
+          {command, args}
+        end
+      end
+
       private def split(argv : Array(String)) : Tuple(Array(String), String?, Array(String))
         index = 0
         while index < argv.size

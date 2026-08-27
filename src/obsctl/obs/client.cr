@@ -238,6 +238,12 @@ module Obsctl
       # Fetches only the scene list and current scene for targeted state updates.
       def scene_snapshot : {current_scene: String?, scenes: Array(State::SceneState)}
         current = current_scene
+        # Resolved once for the whole list rather than per scene, and read from
+        # here rather than from `configured.hidden`: an active scene profile
+        # replaces the per-scene flags outright, so this is the single point at
+        # which hidden-ness enters a snapshot. Every client reads the answer
+        # rather than working it out again.
+        visibility = @config.scene_visibility
         scenes = scene_names.map do |name|
           configured = @config.scenes.find { |scene| scene.name == name }
           State::SceneState.new(
@@ -246,10 +252,23 @@ module Obsctl
             shortcut: configured.try(&.shortcut),
             group: configured.try(&.group),
             active: current == name,
-            hidden: configured.try(&.hidden) || false
+            hidden: visibility.hidden?(name)
           )
         end
         {current_scene: current, scenes: scenes}
+      end
+
+      # obsctl's own scene profiles, as clients see them. Read straight from the
+      # config: they are obsctl state, not OBS state, so nothing is asked of OBS
+      # here and they stay reportable while the connection is down.
+      def scene_profile_snapshot : {profiles: Array(State::SceneProfileState), active: String?}
+        profiles = @config.scene_profiles.map do |profile|
+          State::SceneProfileState.new(profile.name, profile.hidden)
+        end
+        # The stored spelling, and `nil` when the config names a profile that no
+        # longer exists: the snapshot must never advertise an active profile
+        # that is missing from the list beside it.
+        {profiles: profiles, active: @config.active_scene_profile_config.try(&.name)}
       end
 
       # Fetches only the audio input list for targeted state updates.
@@ -294,6 +313,7 @@ module Obsctl
         audio = audio_snapshot
         profile_data = profiles
         collection_data = scene_collections
+        scene_profile_data = scene_profile_snapshot
         output = output_details
         State::ObsSnapshot.new(
           connected: true,
@@ -307,6 +327,8 @@ module Obsctl
           current_profile: profile_data[:current],
           scene_collections: collection_data[:names],
           current_scene_collection: collection_data[:current],
+          scene_profiles: scene_profile_data[:profiles],
+          active_scene_profile: scene_profile_data[:active],
           stats: stats,
           stream_duration_ms: output[:stream_duration_ms],
           record_duration_ms: output[:record_duration_ms]

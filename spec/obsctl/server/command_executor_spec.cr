@@ -205,7 +205,7 @@ describe Obsctl::Server::CommandExecutor do
     # IPC protocol directly, so the daemon enforces its own contract.
     [-1, 101, 100_000].each do |percent|
       response = default_executor.execute(
-        command_request(Obsctl::IPC::CommandPayload.new("set_volume", "Desktop Audio", percent))
+        command_request(Obsctl::IPC::CommandPayload.new(name: "set_volume", target: "Desktop Audio", percent: percent))
       )
 
       expect_error(response, Obsctl::IPC::ErrorCode::COMMAND_PARSE_ERROR)
@@ -236,7 +236,7 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     response = default_executor(config).execute(
-      command_request(Obsctl::IPC::CommandPayload.new("set_scene", "missing"))
+      command_request(Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "missing"))
     )
 
     expect_error(response, Obsctl::IPC::ErrorCode::SCENE_NOT_FOUND)
@@ -250,7 +250,7 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     response = default_executor(config).execute(
-      command_request(Obsctl::IPC::CommandPayload.new("mute", "missing"))
+      command_request(Obsctl::IPC::CommandPayload.new(name: "mute", target: "missing"))
     )
 
     expect_error(response, Obsctl::IPC::ErrorCode::AUDIO_INPUT_NOT_FOUND)
@@ -265,7 +265,7 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     response = default_executor(config).execute(
-      command_request(Obsctl::IPC::CommandPayload.new("set_scene", "Cam"))
+      command_request(Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "Cam"))
     )
 
     expect_error(response, Obsctl::IPC::ErrorCode::ALIAS_AMBIGUOUS)
@@ -279,7 +279,7 @@ describe Obsctl::Server::CommandExecutor do
     )
 
     response = default_executor(config).execute(
-      command_request(Obsctl::IPC::CommandPayload.new("set_scene", "main"))
+      command_request(Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "main"))
     )
 
     expect_error(response, Obsctl::IPC::ErrorCode::OBS_UNAVAILABLE)
@@ -319,8 +319,8 @@ describe Obsctl::Server::CommandExecutor do
       obs.next_identify(2.seconds).should_not be_nil
       wait_for_command_executor_supervisor { state.snapshot.connected }
       executor = default_executor(obs.config, supervisor: supervisor, state: state)
-      profile = executor.execute(command_request(Obsctl::IPC::CommandPayload.new("set_profile", "Streaming")))
-      collection = executor.execute(command_request(Obsctl::IPC::CommandPayload.new("set_scene_collection", "Gaming")))
+      profile = executor.execute(command_request(Obsctl::IPC::CommandPayload.new(name: "set_profile", target: "Streaming")))
+      collection = executor.execute(command_request(Obsctl::IPC::CommandPayload.new(name: "set_scene_collection", target: "Gaming")))
       profile.result.not_nil!["message"].as_s.should eq("profile set: Streaming")
       collection.result.not_nil!["message"].as_s.should eq("scene collection set: Gaming")
       state.snapshot.current_profile.should eq("Streaming")
@@ -345,7 +345,7 @@ describe Obsctl::Server::CommandExecutor do
       requests_before = obs.request_count
 
       response = executor.execute(
-        command_request(Obsctl::IPC::CommandPayload.new("set_volume", "Desktop Audio", 35))
+        command_request(Obsctl::IPC::CommandPayload.new(name: "set_volume", target: "Desktop Audio", percent: 35))
       )
 
       response.ok.should be_true
@@ -708,7 +708,7 @@ describe Obsctl::Server::CommandExecutor do
     supervisor = FailingSupervisor.new(Obsctl::Domain::RequestTimeout.new("SetCurrentProgramScene"))
 
     response = default_executor(config, supervisor: supervisor).execute(
-      command_request(Obsctl::IPC::CommandPayload.new("set_scene", "main"))
+      command_request(Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "main"))
     )
 
     expect_error(response, Obsctl::IPC::ErrorCode::REQUEST_TIMEOUT)
@@ -724,7 +724,7 @@ describe Obsctl::Server::CommandExecutor do
     supervisor = FailingSupervisor.new(failure)
 
     response = default_executor(config, supervisor: supervisor).execute(
-      command_request(Obsctl::IPC::CommandPayload.new("set_scene", "main"))
+      command_request(Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "main"))
     )
 
     error = expect_error(response, Obsctl::IPC::ErrorCode::OBS_REQUEST_FAILED)
@@ -740,7 +740,7 @@ describe Obsctl::Server::CommandExecutor do
     supervisor = FailingSupervisor.new(Exception.new("password=supersecret token: abc123"))
 
     response = default_executor(config, supervisor: supervisor).execute(
-      command_request(Obsctl::IPC::CommandPayload.new("set_scene", "main"))
+      command_request(Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "main"))
     )
 
     error = expect_error(response, Obsctl::IPC::ErrorCode::SERVER_ERROR)

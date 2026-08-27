@@ -227,3 +227,83 @@ fixtures:
     purpose: Typed IPC request payload for volume.
     behavior: current_daemon
     contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/clear_scene_profile_success.txt
+    purpose: Human output for switching scene-profile filtering off.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/delete_scene_profile_success.txt
+    purpose: Human output for deleting a saved scene profile.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/list_scene_profiles_success.txt
+    purpose: Human listing of saved scene profiles, marking the active one.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/human
+    relative_path: cli/human/set_scene_profile_success.txt
+    purpose: Human output for putting a saved scene profile into effect.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/clear_scene_profile_success.json
+    purpose: JSON envelope for switching scene-profile filtering off.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/delete_scene_profile_success.json
+    purpose: JSON envelope for deleting a saved scene profile, reporting whether that deactivated it.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/list_scene_profiles_success.json
+    purpose: JSON envelope listing saved scene profiles and the active one.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/save_scene_profile_error.json
+    purpose: JSON envelope for a rename refused because another scene profile answers to that name.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/set_scene_profile_success.json
+    purpose: JSON envelope for putting a saved scene profile into effect.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: cli/json
+    relative_path: cli/json/set_scene_profile_error.json
+    purpose: JSON envelope for naming a scene profile that is not configured.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/clear_scene_profile_request.json
+    purpose: IPC request switching scene-profile filtering off; its own command rather than an empty target.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/delete_scene_profile_request.json
+    purpose: IPC request deleting a saved scene profile.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/list_scene_profiles_request.json
+    purpose: IPC request listing saved scene profiles.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/save_scene_profile_rename_request.json
+    purpose: IPC save request carrying rename_from, which is what makes a rename one command.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/save_scene_profile_request.json
+    purpose: IPC save request; the only command whose payload carries a list, pinned for its key order.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false
+  - category: ipc
+    relative_path: ipc/set_scene_profile_request.json
+    purpose: IPC request putting a saved scene profile into effect.
+    behavior: current_daemon
+    contains_dropped_reconnect_diagnostic_logs: false

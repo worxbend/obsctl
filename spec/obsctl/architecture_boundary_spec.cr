@@ -103,6 +103,47 @@ describe "daemon-first architecture boundary" do
   # CryTUI is a separate shard under crytui/, not a directory of obsctl. Two
   # rules keep that true rather than merely tidy, because both are easy to
   # break by accident and neither breaks the build when broken.
+  it "keeps the dashboard out of the config file, so the daemon owns what is hidden" do
+    # Scene profiles decide which scenes every client draws. If the dashboard
+    # wrote them itself, a second dashboard and the CLI would read a file that
+    # had changed under them, and the daemon's snapshot would disagree with what
+    # is on screen. The dashboard asks; the daemon writes and pushes the answer.
+    #
+    # `ThemePersistence` is the deliberate exception: a theme changes nothing
+    # any other client can observe.
+    theme_owner = "src/obsctl/tui/theme_persistence.cr"
+    offenders = src_files("src/obsctl/tui/**/*.cr").compact_map do |path|
+      relative = relative_path(path)
+      next if relative == theme_owner
+      next unless File.read(path).matches?(/\bConfig::ConfigWriter\b/)
+
+      relative
+    end
+
+    offenders.should eq([] of String)
+  end
+
+  it "keeps scene-profile visibility resolved in exactly one place" do
+    # `Domain::SceneVisibility` is the single answer to "is this scene hidden".
+    # Two places deciding it is how a client ends up disagreeing with the
+    # daemon, so only the config layer (which builds it) and the domain module
+    # itself may name the per-scene flag alongside a profile's list.
+    resolvers = src_files([
+      "src/obsctl/cli/**/*.cr",
+      "src/obsctl/server/**/*.cr",
+      "src/obsctl/tui/**/*.cr",
+    ]).compact_map do |path|
+      relative = relative_path(path)
+      next unless File.read(path).matches?(/SceneVisibility\.resolve/)
+
+      relative
+    end
+
+    # The executor resolves a *candidate* list to count what a profile would
+    # hide; nothing else may.
+    resolvers.should eq(["src/obsctl/server/command_executor.cr"])
+  end
+
   it "keeps crytui a separate shard obsctl only consumes" do
     obsctl_files = src_files(["src/obsctl/**/*.cr", "src/obsctl.cr", "spec/obsctl/**/*.cr"])
 

@@ -1,5 +1,6 @@
 require "./config"
 require "../domain/errors"
+require "../domain/scene_profiles"
 
 module Obsctl
   module Config
@@ -23,16 +24,35 @@ module Obsctl
         duplicates(config.scenes.compact_map(&.shortcut), "duplicate scene shortcut")
         duplicates(config.audio.inputs.compact_map(&.alias), "duplicate audio alias")
         duplicates(config.audio.inputs.compact_map(&.shortcut), "duplicate audio shortcut")
-        validate_scene_presets!(config.ui.scene_presets)
+        validate_scene_profiles!(config)
       end
 
-      # A preset with no name cannot be selected or saved over, and two presets
-      # sharing a name would make `ui.scene_presets.active` ambiguous.
-      private def self.validate_scene_presets!(presets : ScenePresetsConfig) : Nil
-        presets.presets.each do |preset|
-          raise Domain::ConfigInvalid.new("ui.scene_presets preset name cannot be blank") if preset.name.blank?
+      # A profile with an unusable name cannot be selected or saved over, and
+      # two profiles whose names differ only in case or padding would make
+      # `active_scene_profile` ambiguous.
+      #
+      # Runs after the alias and shortcut checks above so that a config with
+      # both faults reports the same one obsctl-rs reports first.
+      private def self.validate_scene_profiles!(config : Config) : Nil
+        config.scene_profiles.each do |profile|
+          if error = Domain::SceneProfileNames.checked_name_error(profile.name)
+            raise Domain::ConfigInvalid.new("scene profile name #{error}")
+          end
+          profile.hidden.each do |scene|
+            if error = Domain::SceneProfileNames.checked_name_error(scene)
+              raise Domain::ConfigInvalid.new("scene profile '#{profile.name}' hidden scene #{error}")
+            end
+          end
         end
-        duplicates(presets.presets.map(&.name), "duplicate scene preset")
+
+        seen = Set(String).new
+        config.scene_profiles.each do |profile|
+          # A name that will not normalize was already reported above; skipping
+          # it here avoids inventing a second message for the one fault.
+          next unless normalized = Domain::SceneProfileNames.normalized_name(profile.name)
+          # Reported with the name as written, so the user can find the line.
+          raise Domain::ConfigInvalid.new("duplicate scene profile name: '#{profile.name}'") unless seen.add?(normalized)
+        end
       end
 
       # Returns secret-safe warnings for valid configs that still deserve user
@@ -49,11 +69,33 @@ module Obsctl
             warnings << "ui.locale '#{locale}' is not supported (supported: en, uk); falling back to en"
           end
         end
-        # A dangling `active` is deliberately survivable: emptying the scene
-        # list over a typo would be worse than showing every scene.
-        active = config.ui.scene_presets.active
-        if active && config.ui.scene_presets.presets.none? { |preset| preset.name == active }
-          warnings << "ui.scene_presets.active '#{active}' does not match any configured scene preset; every scene stays visible"
+        warnings.concat(scene_profile_warnings(config))
+        warnings
+      end
+
+      # Warnings rather than errors, both of them, because either one would
+      # otherwise empty a scene list over a typo -- and a dashboard with no
+      # scenes looks broken in a way that "every scene is visible" does not.
+      private def self.scene_profile_warnings(config : Config) : Array(String)
+        warnings = [] of String
+        active = config.active_scene_profile
+        if active && config.active_scene_profile_config.nil?
+          warnings << "active scene profile '#{active}' is not defined; no scenes are hidden by a profile"
+        end
+
+        # Skipped entirely while `scenes:` is empty, which is what a fresh
+        # `obsctl init` writes: with no configured scenes there is no ground
+        # truth to check a profile against, so every profile would warn.
+        return warnings if config.scenes.empty?
+
+        known = config.scenes.compact_map { |scene| Domain::SceneProfileNames.normalized_name(scene.name) }.to_set
+        config.scene_profiles.each do |profile|
+          profile.hidden.each do |scene|
+            next unless normalized = Domain::SceneProfileNames.normalized_name(scene)
+            next if known.includes?(normalized)
+
+            warnings << "scene profile '#{profile.name}' hides '#{scene}', which is not in the scenes list"
+          end
         end
         warnings
       end

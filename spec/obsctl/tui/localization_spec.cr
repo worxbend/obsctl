@@ -1,4 +1,5 @@
 require "../../spec_helper"
+require "../../support/scene_profiles"
 require "../../../src/obsctl/tui/localization"
 require "../../../src/obsctl/tui/widgets/header"
 require "../../../src/obsctl/tui/widgets/connection"
@@ -23,13 +24,21 @@ describe Obsctl::TUI::Localization do
       audio_inputs: [] of Obsctl::OBS::State::AudioState,
       current_profile: "Потік"
     )
-    header = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 100, 4))
+    # The active scene profile lands inside the localized header, so it needs a
+    # Ukrainian entry of its own -- a key missing from `UK` degrades silently
+    # to the symbol's own name, and this example is what catches that.
+    set_scene_profiles(model, Obsctl::TUI::SceneProfiles.new(
+      [Obsctl::TUI::SceneProfile.new("Трансляція", Set{"Заставка"})],
+      "Трансляція"
+    ))
+    header = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 140, 4))
     Obsctl::TUI::Widgets::Header.render(header.area, header, model)
     text = header.lines.join("\n")
     text.should contain("демон: з'єднано")
     text.should contain("OBS: з'єднано (v30.1.0)")
     text.should contain("сцена: Головна")
     text.should contain("профіль: Потік")
+    text.should contain("профіль сцен: Трансляція")
 
     model.connected_to_daemon = false
     unavailable = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 80, 14))

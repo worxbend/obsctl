@@ -84,4 +84,30 @@ macro config_value(*fields)
     {% end %}
   )
   end
+
+  # Returns a copy of this config with only the named settings changed.
+  #
+  # `config_value` emits `getter`, not `property`, so changing one setting
+  # means rebuilding the whole struct. Callers that do that (the dashboard
+  # persists a theme change back to the config file) would each have to list
+  # every field, and a field left out of any one of those lists writes its
+  # default over a value the user set, with no error anywhere. Generating the
+  # method from the same field list as everything else means adding a setting
+  # cannot leave it behind.
+  #
+  # Each parameter's external name is the field name so call sites read
+  # naturally, but the internal name is prefixed: a field may be named after
+  # a keyword (`alias`), which Crystal accepts as an argument label but not
+  # as a plain parameter name.
+  def copy_with(
+    {% for field in fields %}
+      {{ field.var.id }} __{{ field.var.id }} : {{ field.type }} = @{{ field.var.id }},
+    {% end %}
+  ) : self
+    self.class.new(
+      {% for field in fields %}
+        {{ field.var.id }}: __{{ field.var.id }},
+      {% end %}
+    )
+  end
 end

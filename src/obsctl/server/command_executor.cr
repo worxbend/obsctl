@@ -2,8 +2,10 @@ require "json"
 require "../config/config"
 require "../config/config_dump"
 require "../config/config_loader"
+require "../config/config_schema"
 require "../config/config_writer"
 require "../domain/aliases"
+require "../domain/scene_profiles"
 require "../domain/volume"
 require "../domain/errors"
 require "../ipc/command_name"
@@ -49,6 +51,8 @@ module Obsctl
         IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.server_error)
       end
 
+      alias Handler = Proc(CommandExecutor, IPC::CommandPayload, JSON::Any)
+
       # Every IPC command the daemon answers, and the handler that answers it.
       #
       # A table rather than a chain of `case` arms because the key set has to be
@@ -56,8 +60,6 @@ module Obsctl
       # against the names the client surfaces can actually send, so a command
       # added to `Domain::Command` and forgotten here fails the build instead of
       # failing at runtime for whoever ran it first.
-      alias Handler = Proc(CommandExecutor, IPC::CommandPayload, JSON::Any)
-
       HANDLERS = {
         IPC::CommandName::PING              => Handler.new { |executor, _payload| executor.object({"message" => "pong"}) },
         IPC::CommandName::GET_SERVER_STATUS => Handler.new { |executor, _payload| executor.server_status },
@@ -87,6 +89,12 @@ module Obsctl
         IPC::CommandName::VALIDATE_CONFIG => Handler.new { |executor, _payload| executor.validate_config },
         IPC::CommandName::DUMP_CONFIG     => Handler.new { |executor, _payload| executor.dump_config },
         IPC::CommandName::RELOAD_CONFIG   => Handler.new { |executor, _payload| executor.reload_config },
+
+        IPC::CommandName::SET_SCENE_PROFILE    => Handler.new { |executor, payload| executor.set_scene_profile(payload) },
+        IPC::CommandName::CLEAR_SCENE_PROFILE  => Handler.new { |executor, _payload| executor.clear_scene_profile },
+        IPC::CommandName::SAVE_SCENE_PROFILE   => Handler.new { |executor, payload| executor.save_scene_profile(payload) },
+        IPC::CommandName::DELETE_SCENE_PROFILE => Handler.new { |executor, payload| executor.delete_scene_profile(payload) },
+        IPC::CommandName::LIST_SCENE_PROFILES  => Handler.new { |executor, _payload| executor.list_scene_profiles },
       }
 
       # Routes an IPC command to the handler that owns it.
@@ -224,6 +232,198 @@ module Obsctl
         @config.replace_with(Config::ConfigLoader.new.load(@config_path))
         refresh_snapshot
         object({"message" => "config reloaded: #{@config_path}"})
+      end
+
+      # Scene profiles: obsctl's own named sets of scene-visibility choices.
+      #
+      # None of these five reaches OBS. They edit the config file and the
+      # snapshot the daemon pushes, which is what makes the dashboard's scene
+      # list change without a round trip to OBS -- and what keeps every client
+      # agreeing about which scenes are hidden, since they all read the answer
+      # the daemon resolved rather than resolving it themselves.
+      protected def set_scene_profile(command : IPC::CommandPayload) : JSON::Any
+        name = scene_profile_name(required_target(command), "target")
+        profile = find_scene_profile(name)
+        raise Domain::ConfigInvalid.new("scene profile not found: #{name}") unless profile
+
+        updated = config_copy
+        # The stored spelling, not the caller's: the config is the record of
+        # what this profile is called, and a lookup that ignored case must not
+        # rewrite the name on every use.
+        updated.active_scene_profile = profile.name
+        persist_config!(updated)
+        object({
+          "message"  => "scene profile set: #{profile.name}",
+          "hidden"   => scenes_hidden_by(profile.hidden),
+          "listed"   => profile.hidden.size,
+          "warnings" => Config::ConfigSchema.warnings(updated),
+        })
+      end
+
+      protected def clear_scene_profile : JSON::Any
+        updated = config_copy
+        updated.active_scene_profile = nil
+        persist_config!(updated)
+        # Not an error when nothing was active: "stop filtering" is a statement
+        # about the state we want, not about the state we are in.
+        object({"message" => "scene profile cleared"})
+      end
+
+      protected def save_scene_profile(command : IPC::CommandPayload) : JSON::Any
+        name = scene_profile_name(required_target(command), "target")
+        hidden = scene_profile_hidden(command)
+        rename_from = command.rename_from.try { |value| scene_profile_name(value, "rename_from") }
+
+        updated = config_copy
+        placement = place_scene_profile(updated, name, rename_from)
+        profile = Config::SceneProfileConfig.new(name: name, hidden: hidden)
+        if index = placement[:index]
+          previous = updated.scene_profiles[index]
+          updated.scene_profiles[index] = profile
+          # The active pointer travels with a rename, so renaming the profile
+          # in effect does not quietly stop hiding scenes.
+          if placement[:renamed] && same_scene_profile_name?(updated.active_scene_profile, previous.name)
+            updated.active_scene_profile = name
+          end
+        else
+          updated.scene_profiles << profile
+        end
+
+        persist_config!(updated)
+        object({
+          "message"  => "scene profile saved: #{name}",
+          "hidden"   => scenes_hidden_by(hidden),
+          "listed"   => hidden.size,
+          "created"  => placement[:index].nil?,
+          "renamed"  => placement[:renamed],
+          "active"   => same_scene_profile_name?(updated.active_scene_profile, name),
+          "warnings" => Config::ConfigSchema.warnings(updated),
+        })
+      end
+
+      protected def delete_scene_profile(command : IPC::CommandPayload) : JSON::Any
+        name = scene_profile_name(required_target(command), "target")
+        profile = find_scene_profile(name)
+        raise Domain::ConfigInvalid.new("scene profile not found: #{name}") unless profile
+
+        updated = config_copy
+        updated.scene_profiles = updated.scene_profiles.reject { |entry| same_scene_profile_name?(entry.name, profile.name) }
+        # Deleting the profile in effect switches filtering off rather than
+        # leaving `active_scene_profile` naming something that is gone.
+        deactivated = same_scene_profile_name?(updated.active_scene_profile, profile.name)
+        updated.active_scene_profile = nil if deactivated
+        persist_config!(updated)
+        object({"message" => "scene profile deleted: #{profile.name}", "deactivated" => deactivated})
+      end
+
+      # Answered from the config already in memory: no file read and no file
+      # lock, so a listing never queues behind a save that is still writing.
+      protected def list_scene_profiles : JSON::Any
+        object({
+          "active"   => @config.active_scene_profile_config.try(&.name),
+          "profiles" => @config.scene_profiles.map { |profile| {"name" => profile.name, "hidden" => profile.hidden} },
+        })
+      end
+
+      # Where a save lands, and whether landing there is a rename.
+      #
+      # Four cases, and the first is the only one that refuses: renaming onto a
+      # name a *different* profile already answers to would destroy that
+      # profile, so it is an error rather than something done quietly -- and it
+      # is raised before anything is written, so a refused save leaves no file
+      # and no backup behind.
+      private def place_scene_profile(config : Config::Config, name : String, rename_from : String?)
+        replacing = rename_from.try { |previous| scene_profile_position(config, previous) }
+        by_name = scene_profile_position(config, name)
+
+        if replacing && by_name && replacing != by_name
+          raise Domain::ConfigInvalid.new("scene profile already exists: #{name}")
+        end
+
+        return {index: replacing, renamed: !same_scene_profile_name?(config.scene_profiles[replacing].name, name)} if replacing
+        # Replacing a profile of the same name adopts the caller's spelling,
+        # but is not a rename: it is the same profile saved over.
+        {index: by_name, renamed: false}
+      end
+
+      private def scene_profile_position(config : Config::Config, name : String) : Int32?
+        config.scene_profiles.index { |profile| same_scene_profile_name?(profile.name, name) }
+      end
+
+      private def find_scene_profile(name : String) : Config::SceneProfileConfig?
+        @config.scene_profiles.find { |profile| same_scene_profile_name?(profile.name, name) }
+      end
+
+      # Names match trimmed and case-insensitively. A name that cannot be
+      # normalized matches nothing, including another unusable name.
+      private def same_scene_profile_name?(left : String?, right : String?) : Bool
+        return false unless left && right
+
+        normalized = Domain::SceneProfileNames.normalized_name(left)
+        !normalized.nil? && normalized == Domain::SceneProfileNames.normalized_name(right)
+      end
+
+      # How many of these scenes will really disappear, as opposed to how many
+      # the profile lists: a profile may name scenes OBS no longer has.
+      # Falls back to the listed count while no snapshot has arrived, since
+      # there is nothing to intersect against yet.
+      private def scenes_hidden_by(hidden : Array(String)) : Int32
+        scenes = @state.snapshot.scenes
+        return hidden.size if scenes.empty?
+
+        visibility = Domain::SceneVisibility.resolve([] of Tuple(String, Bool), hidden)
+        scenes.count { |scene| visibility.hidden?(scene.name) }
+      end
+
+      private def scene_profile_name(value : String, label : String) : String
+        error = Domain::SceneProfileNames.checked_name_error(value)
+        raise Domain::CommandParseError.new("#{label} #{error}") if error
+
+        value.strip
+      end
+
+      # The cap on a scene profile's hidden list. Chosen so that the request
+      # carrying one and the snapshot it produces both stay inside the IPC
+      # line limit; the same number obsctl-rs enforces.
+      MAX_HIDDEN_SCENES_PER_PROFILE = 128
+
+      # At most `MAX_HIDDEN_SCENES_PER_PROFILE` entries, so the request and the
+      # snapshot it produces both stay inside the IPC line limit. Names that
+      # differ only in case or padding collapse, keeping the first spelling --
+      # the config records what a scene is called, and the first mention is the
+      # one the caller meant.
+      private def scene_profile_hidden(command : IPC::CommandPayload) : Array(String)
+        entries = command.hidden
+        raise Domain::CommandParseError.new("missing command hidden list") unless entries
+        if entries.size > MAX_HIDDEN_SCENES_PER_PROFILE
+          raise Domain::CommandParseError.new("hidden must name at most #{MAX_HIDDEN_SCENES_PER_PROFILE} scenes")
+        end
+
+        seen = Set(String).new
+        entries.compact_map do |entry|
+          name = scene_profile_name(entry, "hidden scene")
+          normalized = Domain::SceneProfileNames.normalized_name(name)
+          name if normalized && seen.add?(normalized)
+        end
+      end
+
+      # A copy to edit, so a command that fails partway leaves the shared config
+      # object untouched -- `@config` is only replaced once the write succeeded.
+      private def config_copy : Config::Config
+        copy = Config::Config.new
+        copy.replace_with(@config)
+        copy.scene_profiles = @config.scene_profiles.dup
+        copy
+      end
+
+      # Writes the edited config, then adopts it in place and republishes the
+      # snapshot. In place because the supervisor, this executor and the live
+      # OBS client all hold the same object; the snapshot refresh is what makes
+      # a profile change reach subscribed dashboards.
+      private def persist_config!(updated : Config::Config) : Nil
+        Config::ConfigWriter.new.write(@config_path, updated, backup: File.exists?(@config_path))
+        @config.replace_with(updated)
+        refresh_snapshot
       end
 
       protected def set_mute(command : IPC::CommandPayload, muted : Bool) : JSON::Any

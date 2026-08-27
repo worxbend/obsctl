@@ -27,7 +27,11 @@ end
 describe Obsctl::TUI::Completion do
   it "completes command prefixes with exact matches first" do
     model = completion_model
-    Obsctl::TUI::Completion.compute("/sc", model).should eq(["/scene"])
+    # `scene` is a prefix of the scene-profile commands, so an exact match
+    # leads and the longer spellings follow it in order.
+    Obsctl::TUI::Completion.compute("/sc", model).should eq([
+      "/scene", "/scene-profile", "/scene-profile-delete", "/scene-profile-off", "/scene-profiles",
+    ])
     Obsctl::TUI::Completion.compute("/REC", model).should eq(["/rec", "/reconnect"])
   end
 
@@ -54,7 +58,9 @@ end
 describe "palette leaders" do
   it "completes a colon line as its slash equivalent" do
     model = completion_model
-    Obsctl::TUI::Completion.compute(":sc", model).should eq([":scene"])
+    Obsctl::TUI::Completion.compute(":sc", model).should eq([
+      ":scene", ":scene-profile", ":scene-profile-delete", ":scene-profile-off", ":scene-profiles",
+    ])
     Obsctl::TUI::Completion.compute(":scene m", model).should eq([":scene m2", ":scene Main", ":scene Media"])
   end
 end

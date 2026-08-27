@@ -1,5 +1,6 @@
 require "yaml"
 require "../domain/errors"
+require "../domain/scene_profiles"
 require "./config_value"
 
 module Obsctl
@@ -129,33 +130,18 @@ module Obsctl
       )
     end
 
-    # One named set of scenes the dashboard leaves out of its scene list.
+    # One named set of scene-visibility choices -- an "obsctl scene profile",
+    # unrelated to an OBS profile and to an OBS scene collection (both of which
+    # the dashboard shows in panels of their own).
     #
-    # This is obsctl's own grouping, unrelated to OBS profiles and OBS scene
-    # collections (which the dashboard shows in their own panels). Nothing here
-    # is ever sent to OBS: the daemon keeps reporting every scene and the
-    # dashboard decides which of them it draws.
-    struct ScenePresetConfig
+    # `hidden` names the scenes this profile hides, spelled as OBS spells them;
+    # every other scene is visible while it is active. Nothing here is ever sent
+    # to OBS -- the daemon resolves the list into a per-scene `hidden` flag and
+    # every client reads that flag.
+    struct SceneProfileConfig
       config_value(
         name : String,
-        hidden_scenes : Array(String) = [] of String,
-      )
-    end
-
-    # Every configured scene preset, plus which one is in effect.
-    #
-    # Nested inside `ui:` rather than declared as a top-level section on
-    # purpose: the Rust reference implementation rejects unknown *top-level*
-    # keys outright but ignores unknown keys inside `ui:`, so a config obsctl
-    # writes keeps loading there.
-    #
-    # `active` naming a preset that is not in the list is not an error. A
-    # hand-edited file has to degrade to "every scene visible" rather than to an
-    # empty scene list; `ConfigSchema.warnings` reports it instead.
-    struct ScenePresetsConfig
-      config_value(
-        active : String? = nil,
-        presets : Array(ScenePresetConfig) = [] of ScenePresetConfig,
+        hidden : Array(String) = [] of String,
       )
     end
 
@@ -169,39 +155,7 @@ module Obsctl
         theme : String = "default",
         custom_theme : CustomThemeConfig? = nil,
         locale : String? = nil,
-        scene_presets : ScenePresetsConfig = ScenePresetsConfig.new,
       )
-
-      # Returns a copy of this config with only the named settings changed.
-      #
-      # `config_value` emits `getter`, not `property`, so changing one setting
-      # means rebuilding the whole struct. Callers that do that (the dashboard
-      # persists a theme change and a scene preset edit back to the config file)
-      # would each have to list every field, and a field left out of any one of
-      # those lists writes its default over a value the user set, with no error
-      # anywhere. Keeping the list here means there is one place to update when
-      # a setting is added.
-      def copy_with(
-        refresh_interval_ms : Int32 = @refresh_interval_ms,
-        command_palette_prefix : String = @command_palette_prefix,
-        advanced_ui : Bool = @advanced_ui,
-        show_icons : Bool = @show_icons,
-        theme : String = @theme,
-        custom_theme : CustomThemeConfig? = @custom_theme,
-        locale : String? = @locale,
-        scene_presets : ScenePresetsConfig = @scene_presets,
-      ) : self
-        UiConfig.new(
-          refresh_interval_ms: refresh_interval_ms,
-          command_palette_prefix: command_palette_prefix,
-          advanced_ui: advanced_ui,
-          show_icons: show_icons,
-          theme: theme,
-          custom_theme: custom_theme,
-          locale: locale,
-          scene_presets: scene_presets,
-        )
-      end
 
       # Raises `Domain::ConfigInvalid` when a dashboard setting would leave the
       # UI unable to run: a non-positive refresh interval, or an empty palette
@@ -235,6 +189,8 @@ module Obsctl
         "connection",
         "reconnect",
         "scenes",
+        "scene_profiles",
+        "active_scene_profile",
         "audio",
         "ui",
         "keymap",
@@ -253,6 +209,8 @@ module Obsctl
         getter connection : ConnectionConfig = ConnectionConfig.new
         getter reconnect : ReconnectConfig? = nil
         getter scenes : Array(SceneConfig) = [] of SceneConfig
+        getter scene_profiles : Array(SceneProfileConfig) = [] of SceneProfileConfig
+        getter active_scene_profile : String? = nil
         getter audio : AudioConfig = AudioConfig.new
         getter ui : UiConfig = UiConfig.new
         getter keymap : KeymapConfig = KeymapConfig.new
@@ -263,6 +221,8 @@ module Obsctl
       property connection : ConnectionConfig
       property reconnect : ReconnectConfig
       property scenes : Array(SceneConfig)
+      property scene_profiles : Array(SceneProfileConfig)
+      property active_scene_profile : String?
       property audio : AudioConfig
       property ui : UiConfig
       property keymap : KeymapConfig
@@ -275,6 +235,8 @@ module Obsctl
         @connection : ConnectionConfig = ConnectionConfig.new,
         @reconnect : ReconnectConfig = ReconnectConfig.new,
         @scenes : Array(SceneConfig) = [] of SceneConfig,
+        @scene_profiles : Array(SceneProfileConfig) = [] of SceneProfileConfig,
+        @active_scene_profile : String? = nil,
         @audio : AudioConfig = AudioConfig.new,
         @ui : UiConfig = UiConfig.new,
         @keymap : KeymapConfig = KeymapConfig.new,
@@ -282,6 +244,34 @@ module Obsctl
         if legacy_reconnect = @connection.reconnect
           @reconnect = legacy_reconnect
         end
+      end
+
+      # The profile `active_scene_profile` names, matched the way names are
+      # matched everywhere else -- trimmed and case-insensitively -- or `nil`
+      # when nothing is active or the name answers to no saved profile.
+      #
+      # A name nothing answers to degrading to `nil` rather than raising is
+      # deliberate: a hand-edited file has to fall back to the per-scene flags
+      # rather than to an empty scene list. `ConfigSchema.warnings` reports it.
+      def active_scene_profile_config : SceneProfileConfig?
+        wanted = @active_scene_profile.try { |name| Domain::SceneProfileNames.normalized_name(name) }
+        return unless wanted
+
+        @scene_profiles.find do |profile|
+          Domain::SceneProfileNames.normalized_name(profile.name) == wanted
+        end
+      end
+
+      # The one answer to "is this scene hidden", resolved from this config.
+      #
+      # Every caller goes through here rather than reading `scenes[].hidden` or
+      # a profile's list directly: two places deciding the same question is how
+      # a dashboard ends up disagreeing with the daemon about what to draw.
+      def scene_visibility : Domain::SceneVisibility
+        Domain::SceneVisibility.resolve(
+          @scenes.map { |scene| {scene.name, scene.hidden} },
+          active_scene_profile_config.try(&.hidden)
+        )
       end
 
       # Returns the built-in default configuration used by `obsctl init`.
@@ -321,6 +311,8 @@ module Obsctl
         @connection = other.connection
         @reconnect = other.reconnect
         @scenes = other.scenes
+        @scene_profiles = other.scene_profiles
+        @active_scene_profile = other.active_scene_profile
         @audio = other.audio
         @ui = other.ui
         @keymap = other.keymap
@@ -337,27 +329,17 @@ module Obsctl
           server: document.server,
           # A top-level `reconnect` outranks the legacy nested one, so the
           # nested copy is dropped before `initialize` can promote it.
-          connection: document.reconnect ? without_legacy_reconnect(document.connection) : document.connection,
+          connection: document.reconnect ? document.connection.copy_with(reconnect: nil) : document.connection,
           reconnect: document.reconnect || ReconnectConfig.new,
           scenes: document.scenes,
+          scene_profiles: document.scene_profiles,
+          active_scene_profile: document.active_scene_profile,
           audio: document.audio,
           ui: document.ui,
           keymap: document.keymap,
         )
       rescue ex : YAML::ParseException
         raise Domain::ConfigInvalid.new("invalid YAML: #{ex.message}")
-      end
-
-      private def self.without_legacy_reconnect(connection : ConnectionConfig) : ConnectionConfig
-        ConnectionConfig.new(
-          host: connection.host,
-          port: connection.port,
-          password_env: connection.password_env,
-          password: connection.password,
-          connect_timeout_ms: connection.connect_timeout_ms,
-          request_timeout_ms: connection.request_timeout_ms,
-          reconnect: nil,
-        )
       end
 
       private def self.reject_unknown_top_level_keys!(yaml : String) : Nil
@@ -371,201 +353,10 @@ module Obsctl
           end
         end
       end
-
-      # Writes the config in the canonical schema, including top-level
-      # `server` and `reconnect` sections.
-      #
-      # Written by hand rather than derived from the field declarations because
-      # this is the on-disk format `obsctl config migrate` converges a file
-      # towards: key order is fixed, `socket_path` and `pid_file` are emitted
-      # even when empty so the keys are discoverable, and flags that are off
-      # are left out. Those are format decisions, not serializer defaults.
-      def to_yaml(io : IO) : Nil
-        YAML.build(io) do |yaml|
-          yaml.mapping do
-            yaml.scalar "version"; yaml.scalar @version
-            write_server(yaml)
-            write_connection(yaml)
-            write_reconnect(yaml)
-            write_scenes(yaml)
-            write_audio(yaml)
-            write_ui(yaml)
-            write_keymap(yaml)
-          end
-        end
-      end
-
-      private def write_server(yaml : YAML::Builder) : Nil
-        yaml.scalar "server"
-        yaml.mapping do
-          yaml.scalar "socket_path"; write_nullable_string(yaml, @server.socket_path)
-          yaml.scalar "pid_file"; write_nullable_string(yaml, @server.pid_file)
-          yaml.scalar "allow_remote_shutdown"; yaml.scalar @server.allow_remote_shutdown
-          yaml.scalar "start_embedded_if_missing"; yaml.scalar @server.start_embedded_if_missing
-        end
-      end
-
-      private def write_connection(yaml : YAML::Builder) : Nil
-        yaml.scalar "connection"
-        yaml.mapping do
-          yaml.scalar "host"; yaml.scalar @connection.host
-          yaml.scalar "port"; yaml.scalar @connection.port
-          if password_env = @connection.password_env
-            yaml.scalar "password_env"; yaml.scalar password_env
-          end
-          if password = @connection.password
-            yaml.scalar "password"; yaml.scalar password
-          end
-          yaml.scalar "connect_timeout_ms"; yaml.scalar @connection.connect_timeout_ms
-          yaml.scalar "request_timeout_ms"; yaml.scalar @connection.request_timeout_ms
-        end
-      end
-
-      private def write_reconnect(yaml : YAML::Builder) : Nil
-        yaml.scalar "reconnect"
-        yaml.mapping do
-          yaml.scalar "enabled"; yaml.scalar @reconnect.enabled
-          yaml.scalar "endless"; yaml.scalar @reconnect.endless
-          yaml.scalar "initial_delay_ms"; yaml.scalar @reconnect.initial_delay_ms
-          yaml.scalar "max_delay_ms"; yaml.scalar @reconnect.max_delay_ms
-          yaml.scalar "multiplier"; yaml.scalar @reconnect.multiplier
-          yaml.scalar "jitter_ms"; yaml.scalar @reconnect.jitter_ms
-        end
-      end
-
-      private def write_scenes(yaml : YAML::Builder) : Nil
-        yaml.scalar "scenes"
-        yaml.sequence do
-          @scenes.each do |scene|
-            yaml.mapping do
-              yaml.scalar "name"; yaml.scalar scene.name
-              write_optional(yaml, "alias", scene.alias)
-              write_optional(yaml, "shortcut", scene.shortcut)
-              write_optional(yaml, "group", scene.group)
-              if scene.stale
-                yaml.scalar "stale"; yaml.scalar true
-              end
-              if scene.hidden
-                yaml.scalar "hidden"; yaml.scalar true
-              end
-            end
-          end
-        end
-      end
-
-      private def write_audio(yaml : YAML::Builder) : Nil
-        yaml.scalar "audio"
-        yaml.mapping do
-          yaml.scalar "inputs"
-          yaml.sequence do
-            @audio.inputs.each do |input|
-              yaml.mapping do
-                yaml.scalar "name"; yaml.scalar input.name
-                write_optional(yaml, "alias", input.alias)
-                write_optional(yaml, "shortcut", input.shortcut)
-                yaml.scalar "kind"; yaml.scalar input.kind
-                if input.stale
-                  yaml.scalar "stale"; yaml.scalar true
-                end
-              end
-            end
-          end
-        end
-      end
-
-      private def write_ui(yaml : YAML::Builder) : Nil
-        yaml.scalar "ui"
-        yaml.mapping do
-          yaml.scalar "refresh_interval_ms"; yaml.scalar @ui.refresh_interval_ms
-          yaml.scalar "command_palette_prefix"; yaml.scalar @ui.command_palette_prefix
-          yaml.scalar "advanced_ui"; yaml.scalar @ui.advanced_ui
-          yaml.scalar "show_icons"; yaml.scalar @ui.show_icons
-          yaml.scalar "theme"; yaml.scalar @ui.theme
-          if custom = @ui.custom_theme
-            write_custom_theme(yaml, custom)
-          end
-          write_optional(yaml, "locale", @ui.locale)
-          write_scene_presets(yaml, @ui.scene_presets)
-        end
-      end
-
-      # Omitted entirely while there is nothing to say, so a config file that
-      # never used scene presets is rewritten exactly as it was and `config
-      # migrate` reports no change for it. Same rule `custom_theme` and the
-      # per-scene `hidden` flag already follow.
-      private def write_scene_presets(yaml : YAML::Builder, presets : ScenePresetsConfig) : Nil
-        return if presets.active.nil? && presets.presets.empty?
-
-        yaml.scalar "scene_presets"
-        yaml.mapping do
-          write_optional(yaml, "active", presets.active)
-          yaml.scalar "presets"
-          yaml.sequence do
-            presets.presets.each do |preset|
-              yaml.mapping do
-                yaml.scalar "name"; yaml.scalar preset.name
-                # Written even when empty: an empty list is the meaningful
-                # statement "this preset hides nothing", not an absent setting.
-                yaml.scalar "hidden_scenes"
-                yaml.sequence { preset.hidden_scenes.each { |name| yaml.scalar name } }
-              end
-            end
-          end
-        end
-      end
-
-      private def write_custom_theme(yaml : YAML::Builder, custom : CustomThemeConfig) : Nil
-        yaml.scalar "custom_theme"
-        yaml.mapping do
-          write_optional(yaml, "bg", custom.bg)
-          write_optional(yaml, "accent", custom.accent)
-          write_optional(yaml, "accent_alt", custom.accent_alt)
-          write_optional(yaml, "fg", custom.fg)
-          write_optional(yaml, "muted", custom.muted)
-          write_optional(yaml, "border", custom.border)
-          write_optional(yaml, "border_focus", custom.border_focus)
-          write_optional(yaml, "success", custom.success)
-          write_optional(yaml, "warning", custom.warning)
-          write_optional(yaml, "danger", custom.danger)
-          write_optional(yaml, "info", custom.info)
-          write_optional(yaml, "highlight_bg", custom.highlight_bg)
-          write_optional(yaml, "highlight_fg", custom.highlight_fg)
-        end
-      end
-
-      private def write_keymap(yaml : YAML::Builder) : Nil
-        yaml.scalar "keymap"
-        yaml.mapping do
-          write_keys(yaml, "quit", @keymap.quit)
-          write_keys(yaml, "command_palette", @keymap.command_palette)
-          write_keys(yaml, "reload_config", @keymap.reload_config)
-          write_keys(yaml, "dump_config", @keymap.dump_config)
-        end
-      end
-
-      # Serializes the config to canonical YAML.
-      def to_yaml : String
-        String.build { |io| to_yaml(io) }
-      end
-
-      private def write_keys(yaml : YAML::Builder, key : String, keys : Array(String)) : Nil
-        yaml.scalar key
-        yaml.sequence { keys.each { |binding| yaml.scalar binding } }
-      end
-
-      private def write_optional(yaml : YAML::Builder, key : String, value : String?) : Nil
-        return unless value
-        yaml.scalar key
-        yaml.scalar value
-      end
-
-      private def write_nullable_string(yaml : YAML::Builder, value : String?) : Nil
-        if value
-          yaml.scalar value
-        else
-          yaml.scalar nil
-        end
-      end
     end
   end
 end
+
+# The canonical YAML writer reopens `Config`; required here so every file
+# that requires `./config` also sees `to_yaml`.
+require "./config_canonical_yaml"

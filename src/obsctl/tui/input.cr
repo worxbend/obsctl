@@ -4,6 +4,7 @@ require "./hit_test"
 require "./keymap"
 require "./model"
 require "./scene_picker"
+require "./scene_profile_list"
 
 module Obsctl
   module TUI
@@ -28,14 +29,20 @@ module Obsctl
 
       # Resolves a key press to an action, or nil when nothing is bound.
       #
-      # The scene-preset editor, the scene picker, the palette and the settings
-      # views capture every key, so they short-circuit. A half-typed key
-      # sequence captures every key too -- that is what makes `<leader>` and
-      # `g` behave like prefixes rather than like a keystroke that also does
-      # something on its own. Otherwise the binding groups are tried in
-      # priority order; each returns nil to pass the key along.
+      # The scene-profile editor, the scene-profile list, the scene picker, the
+      # palette and the settings views capture every key, so they
+      # short-circuit. A half-typed key sequence captures every key too -- that
+      # is what makes `<leader>` and `g` behave like prefixes rather than like
+      # a keystroke that also does something on its own. Otherwise the binding
+      # groups are tried in priority order; each returns nil to pass the key
+      # along.
+      #
+      # The editor is tried before the list because opening the editor from the
+      # list closes the list, so a frame where both are flagged active would be
+      # a bug rather than a state to resolve.
       def handle_key(model : Model, key : CryTUI::KeyEvent) : Action?
-        return scene_presets_key(model, key) if model.scene_preset_editor.active
+        return scene_profiles_key(model, key) if model.scene_profile_editor.active
+        return scene_profile_list_key(model, key) if model.scene_profile_list.active
         return scene_picker_key(model, key) if model.scene_picker_active
         return palette_key(key) if model.command_palette.active
         return settings_key(key) if model.view.settings?
@@ -57,7 +64,8 @@ module Obsctl
       # click cannot cut the programme scene mid-broadcast, and it needs no
       # double-click timer to do it.
       def handle_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
-        return scene_presets_mouse(model, event, area) if model.scene_preset_editor.active
+        return scene_profiles_mouse(model, event, area) if model.scene_profile_editor.active
+        return scene_profile_list_mouse(model, event, area) if model.scene_profile_list.active
         return scene_picker_mouse(model, event, area) if model.scene_picker_active
         return which_key_mouse(model, event, area) unless model.pending_sequence.empty?
         return settings_mouse(model, event, area) if model.view.settings?
@@ -151,62 +159,143 @@ module Obsctl
         index ? Action.new(ActionKind::PickScene, index: index) : action(ActionKind::CloseScenePicker)
       end
 
-      # While the scene-preset editor is open every key belongs to it, the way
+      # While the scene-profile editor is open every key belongs to it, the way
       # the scene picker claims every key: in here `q` does not quit and `t` is
       # not one of the dashboard's bindings. An unbound key does nothing rather
       # than closing, so a mistyped key costs a keystroke and not the draft.
-      private def scene_presets_key(model : Model, key : CryTUI::KeyEvent) : Action?
-        return scene_presets_name_key(key) if model.scene_preset_editor.naming
+      private def scene_profiles_key(model : Model, key : CryTUI::KeyEvent) : Action?
+        return scene_profiles_name_key(key) if model.scene_profile_editor.naming
 
         character = key.character
         control = key.modifiers.control?
 
-        return action(ActionKind::CloseScenePresets) if key.code.escape? || (character == 'c' && control)
-        return action(ActionKind::ScenePresetsSave) if key.code.enter?
-        return action(ActionKind::ScenePresetsNavigateUp) if key.code.up?
-        return action(ActionKind::ScenePresetsNavigateDown) if key.code.down?
-        return action(ActionKind::ScenePresetsCycleNext) if key.code.tab?
-        return action(ActionKind::ScenePresetsCyclePrevious) if key.code.back_tab?
+        return action(ActionKind::CloseSceneProfiles) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::SceneProfilesSave) if key.code.enter?
+        return action(ActionKind::SceneProfilesNavigateUp) if key.code.up?
+        return action(ActionKind::SceneProfilesNavigateDown) if key.code.down?
+        return action(ActionKind::SceneProfilesCycleNext) if key.code.tab?
+        return action(ActionKind::SceneProfilesCyclePrevious) if key.code.back_tab?
         # Control-modified keys are not editor bindings; the only one it
         # answers to is the `Ctrl-C` handled above.
         return if control
 
         case character
-        when 't', ' ' then action(ActionKind::ScenePresetsToggleScene)
-        when 'j'      then action(ActionKind::ScenePresetsNavigateDown)
-        when 'k'      then action(ActionKind::ScenePresetsNavigateUp)
-        when 'n'      then action(ActionKind::ScenePresetsBeginNaming)
-        when 'q'      then action(ActionKind::CloseScenePresets)
+        when 't', ' ' then action(ActionKind::SceneProfilesToggleScene)
+        when 'j'      then action(ActionKind::SceneProfilesNavigateDown)
+        when 'k'      then action(ActionKind::SceneProfilesNavigateUp)
+        when 'n'      then action(ActionKind::SceneProfilesBeginNaming)
+        when 'q'      then action(ActionKind::CloseSceneProfiles)
         end
       end
 
-      # Naming a preset uses the same keys the palette line does, so the
+      # Naming a profile uses the same keys the palette line does, so the
       # editing muscle memory carries over. Esc backs out to the list rather
       # than closing the editor: the draft is still there to save under another
       # name.
-      private def scene_presets_name_key(key : CryTUI::KeyEvent) : Action?
+      private def scene_profiles_name_key(key : CryTUI::KeyEvent) : Action?
         character = key.character
         control = key.modifiers.control?
 
-        return action(ActionKind::ScenePresetsNameCancel) if key.code.escape? || (character == 'c' && control)
-        return action(ActionKind::ScenePresetsNameSubmit) if key.code.enter?
-        return action(ActionKind::ScenePresetsNameBackspace) if key.code.backspace?
-        return action(ActionKind::ScenePresetsNameClearLine) if character == 'u' && control
-        return Action.new(ActionKind::ScenePresetsNameCharacter, character) if key.code.character? && character && !control
+        return action(ActionKind::SceneProfilesNameCancel) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::SceneProfilesNameSubmit) if key.code.enter?
+        return action(ActionKind::SceneProfilesNameBackspace) if key.code.backspace?
+        return action(ActionKind::SceneProfilesNameClearLine) if character == 'u' && control
+        return Action.new(ActionKind::SceneProfilesNameCharacter, character) if key.code.character? && character && !control
         nil
       end
 
       # Clickable on the same rules the picker follows: a click on a row
       # toggles it, a click anywhere else means what Esc means, and the wheel
       # moves the cursor.
-      private def scene_presets_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
+      private def scene_profiles_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
+        # While a name is being typed the modal is a text field, not a list:
+        # the pointer would otherwise change the draft underneath the reader,
+        # with the field still on screen saying nothing about it.
+        return if model.scene_profile_editor.naming
+
         if event.scroll?
-          return action(event.kind.scroll_up? ? ActionKind::ScenePresetsNavigateUp : ActionKind::ScenePresetsNavigateDown)
+          return action(event.kind.scroll_up? ? ActionKind::SceneProfilesNavigateUp : ActionKind::SceneProfilesNavigateDown)
         end
 
         return unless event.kind.press? && event.button.left?
-        index = HitTest.scene_presets_index(model, area, event.column, event.row)
-        index ? Action.new(ActionKind::ScenePresetsToggleScene, index: index) : action(ActionKind::CloseScenePresets)
+        index = HitTest.scene_profiles_index(model, area, event.column, event.row)
+        index ? Action.new(ActionKind::SceneProfilesToggleScene, index: index) : action(ActionKind::CloseSceneProfiles)
+      end
+
+      # While the scene-profile list is open every key belongs to it, the way the
+      # scene picker claims every key. A digit puts that row into effect at
+      # once; the letters are verbs on the row under the cursor. An unbound key
+      # does nothing rather than closing, so a mistyped key costs a keystroke
+      # and not the modal.
+      private def scene_profile_list_key(model : Model, key : CryTUI::KeyEvent) : Action?
+        return scene_profile_list_confirm_key(key) if model.scene_profile_list.confirming
+
+        character = key.character
+        control = key.modifiers.control?
+
+        return action(ActionKind::CloseSceneProfileList) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::SceneProfileListActivate) if key.code.enter?
+        return action(ActionKind::SceneProfileListNavigateUp) if key.code.up?
+        return action(ActionKind::SceneProfileListNavigateDown) if key.code.down?
+        # Control-modified keys are neither labels nor verbs; the only one the
+        # list answers to is the `Ctrl-C` handled above.
+        return if control
+
+        case character
+        when 'j' then action(ActionKind::SceneProfileListNavigateDown)
+        when 'k' then action(ActionKind::SceneProfileListNavigateUp)
+        when 'e' then action(ActionKind::SceneProfileListEdit)
+        when 'r' then action(ActionKind::SceneProfileListRename)
+        when 'n' then action(ActionKind::SceneProfileListNew)
+        when 'd' then action(ActionKind::SceneProfileListDeletePrompt)
+        when 'q' then action(ActionKind::CloseSceneProfileList)
+        else          scene_profile_list_label(model, key)
+        end
+      end
+
+      # A digit press, which names its own row rather than moving the cursor
+      # onto it first. Lifted out of the `case` above so neither method carries
+      # more branches than ameba's complexity ratchet allows.
+      private def scene_profile_list_label(model : Model, key : CryTUI::KeyEvent) : Action?
+        character = key.character
+        return unless character && key.code.character?
+
+        index = SceneProfileList.index_for(model.scene_profile_list_entries, character)
+        index ? Action.new(ActionKind::PickSceneProfile, index: index) : nil
+      end
+
+      # A delete waiting for its second press. Everything that is not the
+      # confirmation cancels it: there is no undo for a deleted profile, so the
+      # only key that removes one is the one the on-screen hint asks for.
+      private def scene_profile_list_confirm_key(key : CryTUI::KeyEvent) : Action?
+        # `d` and nothing else. Enter is the list's "use this row" key while
+        # browsing, so accepting it here would let a user who armed a delete by
+        # mistake destroy the profile with the key that normally means "yes,
+        # this one" -- and the hint row and docs both promise only `d`.
+        return action(ActionKind::SceneProfileListDeleteConfirm) if key.character == 'd' && !key.modifiers.control?
+
+        action(ActionKind::SceneProfileListDeleteCancel)
+      end
+
+      # Clickable on the same rules the picker follows: a click on a row puts it
+      # into effect, a click anywhere else means what Esc means, and the wheel
+      # moves the cursor. An armed delete swallows the press and disarms, so a
+      # stray click can never be the second press that removes a profile --
+      # while the wheel still scrolls, because browsing is not answering the
+      # question.
+      private def scene_profile_list_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
+        if event.scroll?
+          return action(event.kind.scroll_up? ? ActionKind::SceneProfileListNavigateUp : ActionKind::SceneProfileListNavigateDown)
+        end
+
+        return unless event.kind.press? && event.button.left?
+        # Only an actual button press disarms. A single click reports press and
+        # release, and a mouse that moved reports a drag, so cancelling on any
+        # event at all would say "delete cancelled" twice for one click.
+        return action(ActionKind::SceneProfileListDeleteCancel) if model.scene_profile_list.confirming
+
+        index = HitTest.scene_profile_list_index(model, area, event.column, event.row)
+        index ? Action.new(ActionKind::PickSceneProfile, index: index) : action(ActionKind::CloseSceneProfileList)
       end
 
       # Clicking a theme previews it and clicking the previewed theme applies

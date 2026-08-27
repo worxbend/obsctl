@@ -65,6 +65,11 @@ Required commands:
 - `obsctl rec|record pause`
 - `obsctl rec|record resume`
 - `obsctl rec|record status`
+- `obsctl scene-profile` (reports the saved profiles and which one is in effect)
+- `obsctl scene-profile <scene-profile-name>` (also `obsctl set-scene-profile`)
+- `obsctl scene-profile --off` (also `--clear`, or `obsctl scene-profile-off`)
+- `obsctl scene-profile --delete <scene-profile-name>` (also `obsctl scene-profile-delete`)
+- `obsctl scene-profiles`
 - `obsctl dump-config`
 - `obsctl reload-config`
 - `obsctl validate-config`
@@ -86,6 +91,10 @@ Required commands:
 - `/vol <audio-alias|shortcut|obs-name> <0-100>`
 - `/stream`
 - `/rec` or `/record` (optionally `start|stop|toggle|pause|resume|status`)
+- `/scene-profile <scene-profile-name>` (also `/set-scene-profile`)
+- `/scene-profile-off` (also `/scene-profile-clear`)
+- `/scene-profile-delete <scene-profile-name>` (also `/delete-scene-profile`)
+- `/scene-profiles`
 - `/dump-config`
 - `/reload-config`
 - `/status`
@@ -133,7 +142,8 @@ Non-interactive OBS control commands are IPC clients. They connect to the local 
 `--json` is available for every daemon command — `status`, `obs-status`,
 `server-status`, `reconnect`, `shutdown-server`, `scene`, `profile`,
 `collection`, `mute`, `unmute`, `toggle-mute`, `vol`/`volume`, `stream`,
-`rec`/`record`, `dump-config`, `reload-config`, `validate-config`, including
+`rec`/`record`, `scene-profile`, `scene-profile-off`, `scene-profile-delete`,
+`scene-profiles`, `dump-config`, `reload-config`, `validate-config`, including
 every alias of each — plus the locally served `doctor`, `config`, and `watch`.
 The flag can be placed before the command or after the command arguments:
 
@@ -452,22 +462,53 @@ TUI keyboard input:
   between channels.
 - `Ctrl-W` followed by `h`/`j`/`k`/`l`, or `Ctrl` with those keys or the
   arrows, moves between panels.
-- `Space` is the leader: `<leader>s` opens the scene picker, `<leader>P` opens
-  the scene-preset editor, `<leader>f` finds panels (`s`/`a`/`p`/`c`),
-  `<leader>u t` opens themes, `<leader>o` sends OBS commands (`r` reload, `d`
-  dump, `c` reconnect), `<leader>m` toggles mute, and `<leader>q` exits. A
-  which-key menu lists the continuations while a sequence is pending; `Esc` or
-  an unbound key cancels it. A terminal too short for every continuation gets
-  as many as fit and a final `+N more` row counting the rest.
-- The scene-preset editor chooses which scenes the dashboard's scene list shows
-  and writes that choice to `ui.scene_presets` in the config file. It captures
-  every key while it is open: `t` or `Space` hides/unhides the scene under the
-  cursor, `j`/`k` and the arrows move, `n` names the preset being built,
-  `Tab`/`Shift-Tab` load another saved preset, `Enter` saves and activates, and
-  `Esc`, `q` or `Ctrl-C` closes without saving. Those keys are listed on the
-  editor's own bottom row, so the way out and the way between saved presets are
-  both on screen. It is a change to what this dashboard draws only: it sends no command, the daemon and OBS are not told
-  about it, and every scene stays reachable from the CLI and the command line.
+- `Space` is the leader: `<leader>s` opens the scene picker, `<leader>p` opens
+  the scene-profile list, `<leader>P` opens the scene-profile editor, `<leader>f`
+  finds panels (`s`/`a`/`p`/`c`), `<leader>u t` opens themes, `<leader>o` sends
+  OBS commands (`r` reload, `d` dump, `c` reconnect), `<leader>m` toggles mute,
+  and `<leader>q` exits. A which-key menu lists the continuations while a
+  sequence is pending; `Esc` or an unbound key cancels it. A terminal too short
+  for every continuation gets as many as fit and a final `+N more` row counting
+  the rest.
+- The scene-profile list chooses which saved profile the scene list is filtered
+  by, and manages the saved profiles themselves. It captures every key while it
+  is open: `0` puts every scene back in the list, `1`-`9` put that numbered
+  profile into effect immediately, `Enter` uses the row under the cursor, `j`/`k`
+  and the arrows move, `e` opens the profile under the cursor in the scene-profile
+  editor, `r` opens it there with its name field already up and already holding the
+  current name, `n` starts a new
+  profile in the editor, `d` pressed twice deletes the profile under the cursor,
+  and `Esc`, `q` or `Ctrl-C` closes. Between the two `d` presses the hint row
+  names the profile at stake and any other key calls the delete off, `Enter`
+  included -- it means "use this row" everywhere else in the list, so it is not
+  allowed to be the press that destroys a profile. A click cancels a pending
+  delete; the wheel keeps scrolling, because browsing is not an answer. The first
+  row is "Show every scene" rather than a saved profile, so `e`, `r` and `d`
+  answer on it with a message instead of acting. `e`, `r` and `n` also answer
+  with a message rather than opening the editor while the daemon has reported no
+  scenes, since the editor captures every key and would draw nothing. Activating a row, confirming a
+  delete and saving from the editor are all sent to the daemon, which owns the
+  config file and the scene list; the daemon's reply is what the status line
+  shows, and the scene list changes when the daemon pushes the new state. None of
+  it reaches OBS.
+- The scene-profile editor chooses which scenes a profile keeps out of the scene
+  list and asks the daemon to save it under `scene_profiles` in the config file. It captures every key while it is open: `t` or `Space`
+  hides/unhides the scene under the cursor, `j`/`k` and the arrows move, `n`
+  names the profile being built, `Tab`/`Shift-Tab` load another saved profile into
+  the draft, `Enter` saves, and `Esc`, `q` or `Ctrl-C` closes without saving.
+  Saving does **not** activate: the editor lets you work on a profile you are not
+  using, and switching the scene list out from under you would be a surprise --
+  `<leader>p` is how a profile is put into effect. Those keys are listed on the editor's own bottom row, so the
+  way out and the way to another saved profile are both on screen. Loading a
+  profile with `Tab` edits a copy of it in the draft and does not put it into
+  effect; that is what `<leader>p` is for. Saving a draft that was loaded from a
+  saved profile under a different name renames that profile in place rather than
+  leaving a second copy beside it, and a name already taken by a different saved
+  profile is refused when it is confirmed, because two profiles sharing a name are
+  a config error. A rename travels as one `save_scene_profile` carrying
+  `rename_from`, so the entry keeps its place in the list and its hold on the
+  active profile. Nothing here reaches OBS, and every scene stays reachable from
+  the CLI and the command line whatever a profile hides.
 - The scene picker labels each scene with one key and switches to it on that
   key alone. Labels are assigned `1`-`9` and then `a`-`z`, in list order,
   except that a scene configured with a single-character `shortcut` claims that
@@ -494,7 +535,53 @@ TUI mouse input:
   elsewhere cancels the sequence.
 - Clicking a scene picker row switches to that scene; clicking outside the box
   closes it, and the wheel moves its cursor.
+- Clicking a scene-profile list row puts that profile into effect, and clicking
+  the first row puts every scene back in the list; clicking the hint row, the
+  border or outside closes it, and the wheel moves its cursor. While a delete is
+  armed any click calls it off and does nothing else, so a stray click can never
+  be the second `d`.
 - Clicking a completion chip puts it on the command line, the wheel cycles
   completions, and a click outside the panel closes the line.
 - In theme settings a click previews the theme under the pointer, a second
   click on it persists the selection, and the wheel moves through the list.
+
+
+## Scene profiles
+
+A *scene profile* is obsctl's own named set of scene-visibility choices, stored
+in the config file under the top-level `scene_profiles` key and described in
+`docs/config.md`. It is unrelated to an OBS profile, which is what
+`obsctl profile` switches.
+
+```
+obsctl scene-profile                  # list the saved profiles, marking the active one
+obsctl scene-profile streaming        # put "streaming" into effect
+obsctl scene-profile --off            # stop filtering (alias: --clear)
+obsctl scene-profile --delete night   # remove "night" from the config
+obsctl scene-profiles                 # the same listing as the bare form
+```
+
+The flag forms are rewritten to the canonical commands `scene-profile-off` and
+`scene-profile-delete` before parsing, so both spellings work everywhere and both
+appear in shell completions.
+
+Human output for the listing marks the active profile with `*` and says how many
+scenes each one hides:
+
+```
+* streaming (hides 2)
+  editing (hides 0)
+```
+
+`--json` wraps the daemon's result object unchanged. `scene-profile <name>`
+answers with `message`, `hidden` (how many scenes really disappear), `listed`
+(how many the profile names) and `warnings`; `scene-profile --delete` answers with
+`message` and `deactivated`; the listing answers with `active` and `profiles`.
+
+Naming a profile that does not exist, and renaming one onto a name a different
+profile already answers to, are both config errors and exit **2**. Names are
+matched with whitespace trimmed and ASCII letters compared case-insensitively.
+
+Switching a profile changes the config file and the state the daemon pushes, so
+an open dashboard follows along without a reload. Nothing here is sent to OBS,
+and every scene stays reachable by name whatever a profile hides.

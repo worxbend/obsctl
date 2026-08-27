@@ -6,7 +6,8 @@ require "./anim"
 require "./meter"
 require "./localization"
 require "./scene_picker"
-require "./scene_presets"
+require "./scene_profiles"
+require "./scene_profile_list"
 
 module Obsctl
   module TUI
@@ -96,14 +97,14 @@ module Obsctl
       end
     end
 
-    # What the scene-preset editor is holding while it is open.
+    # What the scene-profile editor is holding while it is open.
     #
-    # The draft is deliberately separate from `Model#scene_presets`: toggling a
+    # The draft is deliberately separate from `Model#scene_profiles`: toggling a
     # scene has to repaint immediately, but must not change what the dashboard
     # shows until the user saves, and Esc has to be able to throw the whole
     # draft away. `name` is empty for a draft nobody has named yet, which is
     # what turns Enter into a prompt instead of a save.
-    class ScenePresetEditorState
+    class SceneProfileEditorState
       property active : Bool
       property cursor : Int32
       property name : String
@@ -114,8 +115,32 @@ module Obsctl
       # than inferred.
       property naming : Bool
       property name_input : String
+      # The saved profile this draft was loaded from, or nil for a draft that is
+      # not based on one.
+      #
+      # This is what makes renaming possible: saving under a different name
+      # renames that profile in place instead of leaving the original behind
+      # beside a copy of it.
+      property origin_name : String?
 
-      def initialize(@active = false, @cursor = 0, @name = "", @hidden = Set(String).new, @naming = false, @name_input = "")
+      def initialize(@active = false, @cursor = 0, @name = "", @hidden = Set(String).new, @naming = false, @name_input = "", @origin_name = nil)
+      end
+    end
+
+    # What the scene-profile list is holding while it is open.
+    #
+    # A class of its own rather than two properties on the model, the way the
+    # scene picker does it, because this modal has a sub-mode: `confirming` is
+    # a delete waiting for its second press, during which the keys mean
+    # different things -- the same reason `SceneProfileEditorState` carries
+    # `naming` rather than inferring it.
+    class SceneProfileListState
+      property active : Bool
+      property cursor : Int32
+      # True after the first `d`, while a delete waits for the second press.
+      property confirming : Bool
+
+      def initialize(@active = false, @cursor = 0, @confirming = false)
       end
     end
 
@@ -190,13 +215,8 @@ module Obsctl
       # whichever panel is focused, and closing it without picking leaves the
       # dashboard exactly as it was.
       property scene_picker_cursor : Int32
-      # The scene presets read out of the config file.
-      #
-      # Filtering happens here in the dashboard rather than in the daemon: the
-      # daemon already reports every scene, so a preset needs no protocol
-      # change and takes effect without a round trip.
-      property scene_presets : ScenePresets
-      property scene_preset_editor : ScenePresetEditorState
+      property scene_profile_editor : SceneProfileEditorState
+      property scene_profile_list : SceneProfileListState
 
       def initialize(@theme = Theme.default, @show_icons = true, @advanced_ui = true, @command_palette_prefix = "/", @locale = "en")
         @snapshot = nil
@@ -221,8 +241,8 @@ module Obsctl
         @pending_sequence = ""
         @scene_picker_active = false
         @scene_picker_cursor = 0
-        @scene_presets = ScenePresets.empty
-        @scene_preset_editor = ScenePresetEditorState.new
+        @scene_profile_editor = SceneProfileEditorState.new
+        @scene_profile_list = SceneProfileListState.new
       end
 
       # The scene picker's rows, rebuilt from the current scenes on every call
@@ -235,6 +255,13 @@ module Obsctl
         ScenePicker.entries(scenes)
       end
 
+      # The scene-profile list's rows, rebuilt on every call rather than stored,
+      # for the same reason `scene_picker_entries` is: input resolution, the
+      # widget and the hit test all have to get the same answer.
+      def scene_profile_list_entries : Array(SceneProfileList::Entry)
+        SceneProfileList.entries(scene_profiles)
+      end
+
       def rich_ui? : Bool
         @show_icons && @advanced_ui
       end
@@ -243,7 +270,7 @@ module Obsctl
         rich_ui? ? rich : fallback
       end
 
-      # Every scene the daemon reported, hidden ones included. The scene-preset
+      # Every scene the daemon reported, hidden ones included. The scene-profile
       # editor lists these; everything else on the dashboard uses `scenes`.
       def all_scenes : Array(OBS::State::SceneState)
         @snapshot.try(&.scenes) || [] of OBS::State::SceneState
@@ -251,15 +278,28 @@ module Obsctl
 
       # The scenes the dashboard draws.
       #
-      # An active scene preset is the complete answer to what is visible, so
-      # adopting one does not leave the per-scene `hidden` flag half-applied on
-      # top of it -- one rule per state, and no row the editor's toggle cannot
-      # bring back. With no preset active, which is the state every existing
-      # config is in, this is exactly the `hidden` filter it has always been.
+      # One `reject`, because the daemon has already done the deciding: it
+      # resolves the active profile against the per-scene `hidden` flags -- an
+      # active profile replaces those flags rather than adding to them -- and
+      # ships the answer as `hidden` on each scene. The dashboard asking the
+      # same question again is exactly how a client ends up disagreeing with
+      # the daemon about what should be on screen.
       def scenes : Array(OBS::State::SceneState)
-        preset = @scene_presets.active_preset
-        return all_scenes.reject(&.hidden) unless preset
-        all_scenes.reject { |scene| preset.hidden_scenes.includes?(scene.name) }
+        all_scenes.reject(&.hidden)
+      end
+
+      # The saved scene profiles the daemon reported, and which one is in
+      # effect. Read from the snapshot rather than from the config file so that
+      # the dashboard, the CLI and a second dashboard all see one answer, and so
+      # that a profile saved anywhere shows up here without a reload.
+      def scene_profiles : SceneProfiles
+        snapshot = @snapshot
+        return SceneProfiles.empty unless snapshot
+
+        SceneProfiles.new(
+          snapshot.scene_profiles.map { |profile| SceneProfile.new(profile.name, profile.hidden.to_set) },
+          snapshot.active_scene_profile
+        )
       end
 
       def audio_inputs : Array(OBS::State::AudioState)
@@ -363,8 +403,25 @@ module Obsctl
       # be skipped by a caller that assigns the field directly: an edit the
       # user is still making is newer than any snapshot the daemon computed
       # before that edit reached it, and therefore wins.
+      # Adopts a new snapshot, keeping the scene cursors on the scenes they were
+      # pointing at.
+      #
+      # The cursors are indexes into the visible scene list, and a snapshot can
+      # change what that list contains -- a scene profile switched on here, by
+      # the CLI, or by a second dashboard; a scene added or removed in OBS.
+      # Clamping alone keeps an index in range but not on the same scene, so the
+      # highlight would slide to a neighbour and the next Enter would tell OBS
+      # to switch to whatever it landed on. Re-seeking by name is what stops a
+      # filter change from becoming an unasked-for scene change.
+      #
+      # A cursor whose scene the new snapshot no longer shows has nowhere to go
+      # and keeps the clamped position.
       def snapshot=(snapshot : OBS::State::ObsSnapshot?) : OBS::State::ObsSnapshot?
+        focused = focused_scene.try(&.name)
+        picked = scenes[@scene_picker_cursor]?.try(&.name)
         @snapshot = snapshot.try { |value| with_pending_volumes(value) }
+        retarget_scene_cursors(focused, picked)
+        @snapshot
       end
 
       private def with_pending_volumes(snapshot : OBS::State::ObsSnapshot) : OBS::State::ObsSnapshot
@@ -485,7 +542,24 @@ module Obsctl
         # that lists hidden scenes too, so clamping it to the visible list
         # would put its cursor out of reach of exactly the rows it exists to
         # unhide.
-        @scene_preset_editor.cursor = @scene_preset_editor.cursor.clamp(0, {all_scenes.size - 1, 0}.max)
+        @scene_profile_editor.cursor = @scene_profile_editor.cursor.clamp(0, {all_scenes.size - 1, 0}.max)
+        # Against the row count, which is one more than the number of profiles:
+        # the "show every scene" row is a row like any other here.
+        @scene_profile_list.cursor = @scene_profile_list.cursor.clamp(0, {scene_profile_list_entries.size - 1, 0}.max)
+      end
+
+      # Re-seeks the two scene cursors onto the named scenes, and clamps
+      # whatever is left over. `snapshot=` is the caller that matters; see the
+      # reasoning there.
+      def retarget_scene_cursors(scene_name : String?, picker_name : String?) : Nil
+        clamp_cursors
+        visible = scenes
+        if scene_name && (index = visible.index { |scene| scene.name == scene_name })
+          set_cursor(FocusPanel::Scenes, index)
+        end
+        if picker_name && (index = visible.index { |scene| scene.name == picker_name })
+          @scene_picker_cursor = index
+        end
       end
 
       def focused_scene : OBS::State::SceneState?

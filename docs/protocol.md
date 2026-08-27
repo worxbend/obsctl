@@ -28,11 +28,61 @@ Supported command names:
 | Outputs | `toggle_stream`, `toggle_record` |
 | Recording | `start_record`, `stop_record`, `pause_record`, `resume_record`, `record_status` |
 | Config | `dump_config`, `reload_config`, `validate_config` |
+| Scene profiles | `set_scene_profile`, `clear_scene_profile`, `save_scene_profile`, `delete_scene_profile`, `list_scene_profiles` |
 | Lifecycle | `reconnect_obs`, `shutdown_server` |
 
 `set_volume` carries a `percent` field the server validates against the same
 0-100 range the CLI accepts; an out-of-range value is rejected with
 `COMMAND_PARSE_ERROR` rather than forwarded to OBS.
+
+### Scene profile commands
+
+A *scene profile* is obsctl's own named set of scene-visibility choices, stored
+in the config file under the top-level `scene_profiles` key. None of these five
+commands reaches OBS: they edit the config and the pushed snapshot, which is what
+makes every connected client agree about which scenes are hidden.
+
+Command arguments are siblings of `name` inside the `command` object — there is
+no nested `args` object — and follow it in alphabetical order.
+
+| Command | Required | Optional |
+| --- | --- | --- |
+| `set_scene_profile` | `target` | — |
+| `clear_scene_profile` | — | — |
+| `save_scene_profile` | `target`, `hidden` | `rename_from` |
+| `delete_scene_profile` | `target` | — |
+| `list_scene_profiles` | — | — |
+
+Switching filtering off is its own command rather than `set_scene_profile` with
+an empty target: a blank target is rejected as a malformed payload, and a
+reserved sentinel name (`none`, `off`) would collide with a profile a user is
+entitled to create.
+
+`save_scene_profile` is the only command whose payload carries a list:
+
+```json
+{"type":"command","id":"req-000007","command":{"name":"save_scene_profile","hidden":["Utility BG","Overlay Src"],"target":"streaming"}}
+```
+
+- `target` is the name the profile will have **after** the save.
+- `hidden` is required, so "this profile hides nothing" travels as `[]` rather
+  than as a missing key. At most **128** entries, which keeps both the request
+  and the snapshot it produces inside the 64 KiB IPC line limit. Entries whose
+  names differ only in case or padding collapse, keeping the first spelling.
+- `rename_from` names the existing profile being replaced, and is what makes a
+  rename one command. It is left out entirely rather than sent as `null` when
+  there is nothing to rename, so a daemon that has never heard of it still
+  accepts every payload an ordinary save produces. Renaming onto a name a
+  *different* profile answers to is refused with `CONFIG_INVALID` before anything
+  is written.
+
+Names are validated like any other target: trimmed, non-blank, no control
+characters, at most 256 characters. Matching between names is case-insensitive
+over ASCII.
+
+`list_scene_profiles` answers `{"active": <name or null>, "profiles": [{"name":
+…, "hidden": [...]}]}` from the config already in memory, so a listing never
+queues behind a save that is still writing.
 
 `status` returns the combined daemon and OBS payload, `get_obs_status` returns
 only the OBS snapshot, and `get_server_status` returns only daemon status.
@@ -150,6 +200,24 @@ Pushed event:
 ```json
 {"type":"event","topic":"state","data":{"connected":true,"current_scene":"Main Camera"}}
 ```
+
+The `state` payload carries `scene_profiles` and `active_scene_profile` between
+`current_scene_collection` and `last_error`:
+
+```json
+"scene_profiles": [{"name": "streaming", "hidden": ["Utility BG"]}],
+"active_scene_profile": "streaming"
+```
+
+`active_scene_profile` is `null` when no profile is in effect, and also when the
+config names one that is not defined — the snapshot never advertises a profile
+absent from the list beside it. Each scene in `scenes` carries the **resolved**
+`hidden` flag: the daemon has already applied the active profile (which replaces
+the per-scene flags rather than adding to them), so a client draws the list by
+dropping the scenes marked hidden and must not resolve the rule again.
+
+Both keys are read leniently, so a snapshot from a daemon that predates scene
+profiles still decodes.
 
 ## Public IPC Error Codes
 

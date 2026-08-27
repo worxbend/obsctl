@@ -79,22 +79,37 @@ module Obsctl
         item_at(rect, Array.new(model.scene_picker_entries.size, 1), model.scene_picker_cursor, row)
       end
 
-      # The scene under the pointer in the scene-preset editor, or nil for a
+      # The scene under the pointer in the scene-profile editor, or nil for a
       # click on its chrome, past its last row, or anywhere outside it -- all
       # of which the caller treats as a request to close.
       #
       # Measured against `all_scenes` because the editor is the one surface
       # that lists hidden scenes too.
-      def scene_presets_index(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Int32?
-        return unless model.scene_preset_editor.active
+      def scene_profiles_index(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Int32?
+        return unless model.scene_profile_editor.active
 
-        rect = ScenePresetsLayout.compute(area, model)
+        rect = SceneProfilesLayout.compute(area, model)
         return unless contains?(rect, column, row)
 
         # Against the list's own box, not the whole modal: the last row inside
         # the border belongs to the hints, and a click on it is a click on the
         # chrome rather than on the scene that would otherwise line up with it.
-        item_at(ScenePresetsLayout.list_area(rect), Array.new(model.all_scenes.size, 1), model.scene_preset_editor.cursor, row)
+        item_at(SceneProfilesLayout.list_area(rect), Array.new(model.all_scenes.size, 1), model.scene_profile_editor.cursor, row)
+      end
+
+      # The profile row under the pointer in the scene-profile list, or nil for a
+      # click on its chrome, past its last row, or anywhere outside it -- all
+      # of which the caller treats as a request to close.
+      def scene_profile_list_index(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Int32?
+        return unless model.scene_profile_list.active
+
+        rect = SceneProfileListLayout.compute(area, model)
+        return unless contains?(rect, column, row)
+
+        # Against the list's own box, not the whole modal: the last row inside
+        # the border belongs to the hints, and a click on it is a click on the
+        # chrome rather than on the profile that would otherwise line up with it.
+        item_at(SceneProfileListLayout.list_area(rect), Array.new(model.scene_profile_list_entries.size, 1), model.scene_profile_list.cursor, row)
       end
 
       # Where the which-key menu is drawn for the sequence being typed.

@@ -1,5 +1,5 @@
 require "../layout"
-require "../scene_presets"
+require "../scene_profiles"
 require "./chrome"
 
 module Obsctl
@@ -15,14 +15,14 @@ module Obsctl
       # Drawn after the dashboard so it floats above it, and it blanks its own
       # cells first because an overlay otherwise inherits whatever the panels
       # underneath already painted.
-      module ScenePresets
+      module SceneProfiles
         extend self
 
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
-          return unless model.scene_preset_editor.active
+          return unless model.scene_profile_editor.active
 
           scenes = model.all_scenes
-          rect = ScenePresetsLayout.compute(area, model)
+          rect = SceneProfilesLayout.compute(area, model)
           return if rect.empty?
 
           theme = model.theme
@@ -30,7 +30,7 @@ module Obsctl
           frame = block(model, rect)
           frame.render(rect, buffer)
           items = scenes.map { |scene| item(scene, model) }
-          state = CryTUI::Widgets::ListState.new(selected: model.scene_preset_editor.cursor)
+          state = CryTUI::Widgets::ListState.new(selected: model.scene_profile_editor.cursor)
           highlight = CryTUI::Style.new(
             foreground: theme.highlight_foreground,
             background: theme.highlight_background,
@@ -40,20 +40,20 @@ module Obsctl
           # list gets only the rows above the hint row and the border is around
           # both of them.
           CryTUI::Widgets::List.new(items, highlight_style: highlight)
-            .render(frame.inner(ScenePresetsLayout.list_area(rect)), buffer, state)
+            .render(frame.inner(SceneProfilesLayout.list_area(rect)), buffer, state)
           render_hints(rect, frame.inner(rect), buffer, model)
         end
 
         # The keys, on the last row inside the border. They are not in the
-        # title because the title carries the preset's name, and a name of any
+        # title because the title carries the profile's name, and a name of any
         # length would push them off the end of the line -- taking the way out
         # of the modal with them.
         private def render_hints(rect : CryTUI::Rect, inner : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           return if inner.height <= 0
 
           style = CryTUI::Style.new(foreground: model.theme.muted, background: model.theme.background)
-          text = CryTUI::TextWidth.truncate(ScenePresetsLayout.hint_text(model, rect.width), inner.width, model.symbol("…", "~"))
-          buffer.set_string(inner.x, ScenePresetsLayout.hint_row(rect), text, style, inner.width)
+          text = CryTUI::TextWidth.truncate(SceneProfilesLayout.hint_text(model, rect.width), inner.width, model.symbol("…", "~"))
+          buffer.set_string(inner.x, SceneProfilesLayout.hint_row(rect), text, style, inner.width)
         end
 
         # Built here rather than through `Chrome.panel` because a dashboard
@@ -63,7 +63,7 @@ module Obsctl
           theme = model.theme
           # Through the shared layout, and against the width the box actually
           # got, so the title drawn is the title that fits the box.
-          heading, name = ScenePresetsLayout.title_parts(model, rect.width)
+          heading, name = SceneProfilesLayout.title_parts(model, rect.width)
           title = CryTUI::Line.new([
             CryTUI::Span.new(heading, CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold)),
             CryTUI::Span.new(name, CryTUI::Style.new(foreground: theme.badge_foreground, background: theme.badge_background, modifiers: CryTUI::Modifier::Bold)),
@@ -82,11 +82,11 @@ module Obsctl
           (rect.y...rect.bottom).each { |row| buffer.set_string(rect.x, row, blank, style) }
         end
 
-        # Split so the spans concatenate back to `ScenePresetsLayout.row_text`,
+        # Split so the spans concatenate back to `SceneProfilesLayout.row_text`,
         # which is what the box was measured and hit-tested against.
         private def item(scene : OBS::State::SceneState, model : Model) : CryTUI::Widgets::ListItem
           theme = model.theme
-          hidden = model.scene_preset_editor.hidden.includes?(scene.name)
+          hidden = model.scene_profile_editor.hidden.includes?(scene.name)
           # `Dim` as well as the muted colour: the selection bar re-tints a span
           # whose own colour cannot be read against it (see `ForegroundGuard`),
           # so a hidden row under the cursor would otherwise lose the only
@@ -95,7 +95,7 @@ module Obsctl
           marker_style = hidden ? dim : CryTUI::Style.new(foreground: theme.success)
           name_style = hidden ? dim : CryTUI::Style.new(foreground: scene.active ? theme.success : theme.foreground)
           line = CryTUI::Line.new([
-            CryTUI::Span.new(" #{ScenePresetsLayout.marker(model, hidden)}", marker_style),
+            CryTUI::Span.new(" #{SceneProfilesLayout.marker(model, hidden)}", marker_style),
             CryTUI::Span.new("  ", CryTUI::Style.new(foreground: theme.muted)),
             CryTUI::Span.new("#{scene.name} ", name_style),
           ])

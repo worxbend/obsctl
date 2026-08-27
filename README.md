@@ -356,7 +356,8 @@ Press `Space` and a menu appears showing every next key. No memorising.
 | Keys | What it does |
 | --- | --- |
 | `<leader>s` | 🎬 Switch scene — the quick picker, see below |
-| `<leader>P` | 🗂 Scene presets — choose which scenes the list shows |
+| `<leader>p` | 🗂 Scene profiles — pick one, switch, rename, delete |
+| `<leader>P` | 🗂 Edit profile — choose which scenes it hides |
 | `<leader>f` → `s` `a` `p` `c` | 🔍 Find: scenes, audio, profiles, collections |
 | `<leader>u` → `t` | 🎨 UI: theme picker |
 | `<leader>o` → `r` `d` `c` | 🔧 OBS: reload config, dump config, reconnect |
@@ -408,55 +409,119 @@ nested inside another scene — a lower third, a looping background, a camera
 group. They are scenes as far as OBS is concerned, but you never switch to one,
 and every time you scroll past them you're scrolling past furniture.
 
-A **scene preset** is a name plus the scenes to keep out of the list. It is
+A **scene profile** is a name plus the scenes to keep out of the list. It is
 obsctl's own idea, saved in your obsctl config file — not an OBS profile and not
 an OBS scene collection. Those two are OBS's, the dashboard shows them in their
-own panels, and a preset never touches either.
+own panels, and a profile never touches either.
+
+The daemon owns them, so a profile you switch on here also applies to `obsctl
+scene-profile` on the command line and to a second dashboard, without either
+having to reload.
 
 Press `Space` then `P`. Every scene shows up, including the hidden ones — this
 is the one place that lists them, because it's the one place that can bring them
 back. Hidden scenes are dimmed and carry a hollow `○` instead of a filled `●`:
 
 ```text
-╭─ 🗂  Scene presets  streaming ─────────────────────────╮
-│ ●  Main Camera                                         │
-│ ●  Screen Share                                        │
-│ ○  Utility Cam                                         │
-│ ○  BRB Loop                                            │
-│ t hide · n name · ⇥ switch preset · ↵ save · esc close │
-╰────────────────────────────────────────────────────────╯
+╭─ 🗂  Edit profile  streaming ──────────────────────────╮
+│ ●  Main Camera                                        │
+│ ●  Screen Share                                       │
+│ ○  Utility Cam                                        │
+│ ○  BRB Loop                                           │
+│ t hide · n name · ⇥ load profile · ↵ save · esc close  │
+╰───────────────────────────────────────────────────────╯
 ```
 
-The bottom row is every key the editor answers to, including the one that
-switches between the presets you've already saved — the title is where the
-preset's name goes, and a name of any length would have pushed the keys off the
-end of it.
+The bottom row is every key the editor answers to, including the one that loads
+a profile you've already saved into the draft — the title is where the profile's
+name goes, and a name of any length would have pushed the keys off the end of
+it.
 
 | Key | What it does |
 | --- | --- |
 | `t` or `Space` | Hide / unhide the scene under the cursor |
 | `j` `k` or `↑` `↓` | Move the cursor |
-| `n` | Name the preset you're building |
-| `Tab` / `Shift-Tab` | Load the next / previous preset you've already saved |
-| `Enter` | Save it and switch the list to it ✅ |
+| `n` | Name the profile you're building |
+| `Tab` / `Shift-Tab` | Load the next / previous profile you've already saved |
+| `Enter` | Save it ✅ |
 | `Esc` | Leave without saving |
 | Click a row | Toggle it |
 
-Two things worth knowing:
+Three things worth knowing:
 
-- **Nothing is written until `Enter`.** Toggling scenes builds up a draft that
-  lives in the dashboard; `Enter` writes it to your config file and makes it the
-  active preset, and `Esc` throws it away. Loading another preset with `Tab`
+- **Nothing is saved until `Enter`.** Toggling scenes builds up a draft that
+  lives in the dashboard; `Enter` sends it to the daemon, which writes it to your
+  config file, and `Esc` throws it away. Loading another profile with `Tab`
   replaces the draft too, and says so in the title.
-- **A preset changes what this dashboard draws, and nothing else.** OBS still
-  has every scene, the daemon still reports every scene, and
-  `obsctl scene "Utility Cam"` still switches to a hidden one from the command
-  line. Hiding is a view, not a lock — so a preset can never leave you unable to
-  reach a scene in a hurry.
+- **Saving doesn't switch to it.** The editor lets you work on a profile you're
+  not currently using, and having the scene list change under you would be a
+  surprise. `<leader>p` is how you put one into effect.
+- **Renaming a profile renames it.** If you load `streaming` with `Tab`, press
+  `n` and type `podcast`, saving moves that profile to the new name and leaves it
+  where it was in the list — you get one profile called `podcast`, not two. A name
+  another profile already has is refused, because two profiles can't share one.
+- **A profile changes which scenes are drawn, not which exist.** OBS still has
+  every scene and `obsctl scene "Utility Cam"` still switches to a hidden one from
+  the command line. Wherever a scene list is drawn a hidden scene is hidden — the
+  `<leader>s` picker and the palette's completions both go by the list you can
+  see — so `<leader>p` `0` is how you get it back on screen. Hiding is a view, not
+  a lock.
 
-The saved shape lives under `ui.scene_presets`; [`docs/config.md`](docs/config.md)
-describes it field by field, and editing it by hand is as supported as editing it
-from the dashboard.
+### 🗂 Pick a profile, or put every scene back (`<leader>p`)
+
+Building a profile is one key; living with them is the other. Press `Space` then
+a **lower-case `p`** and every profile you've saved is on screen, with the one in
+effect marked `▶` and the number of scenes it hides beside its name. The top
+row isn't a profile at all — it's the way back to the full list:
+
+```text
+╭─ 🗂  Scene profiles  03   ↵ use · esc close ──────────────╮
+│ 0  ◇  Show every scene                                   │
+│ 1  ▶  streaming · hides 2                                │
+│ 2  ◇  editing · hides 0                                  │
+│ ↵ use · e edit · r rename · n new · d delete · esc close │
+╰──────────────────────────────────────────────────────────╯
+```
+
+Press `1` and the scene list is `streaming`'s. Press `0` and every scene is back.
+The row numbers *are* the keys, so nothing has to be remembered.
+
+| Key | What it does |
+| --- | --- |
+| `0` | Show every scene again — no profile in effect |
+| `1`–`9` | Put that profile into effect, immediately |
+| `↑` `↓` or `j` `k` | Move the cursor (for a tenth profile, which runs out of digits) |
+| `Enter` | Use the one under the cursor |
+| `e` | Open it in the editor, to change which scenes it hides |
+| `r` | Open it in the editor with the name field up, to rename it |
+| `n` | Start a new profile from scratch |
+| `d` then `d` | Delete it — the first `d` asks, the second does it |
+| `Esc` or `q` | Never mind |
+| Click a row | Use it |
+
+Three things worth knowing:
+
+- **`d` asks before it deletes.** The first press turns the bottom row into
+  `delete “streaming”? · d confirm · esc cancel`, naming the profile you're about
+  to lose. The second `d` does it; **any** other key calls it off, `Enter`
+  included — it means "use this row" everywhere else in the list, so it isn't
+  allowed to be the press that destroys a profile — as does a stray click. Deleting the profile that was in effect puts every
+  scene back rather than leaving the list filtered by something that's gone.
+- **This one takes effect as you go.** Unlike the editor, where nothing is sent
+  until `Enter`, activating a row or confirming a delete asks the daemon straight
+  away — so the profile you were using is still the profile you're using after a
+  restart, and the CLI agrees. If the daemon refuses, the status line says why.
+- **You can always see which one is on.** The scenes panel title reads
+  `Scenes · streaming` instead of `Scenes`, and the header adds
+  `🗂 scene profile: streaming` next to the OBS profile. A short scene list is
+  never a mystery.
+
+The saved shape lives under the top-level `scene_profiles` key;
+[`docs/config.md`](docs/config.md) describes it field by field, and editing it by
+hand is as supported as editing it from the dashboard. From a shell, `obsctl
+scene-profile` lists them, `obsctl scene-profile <name>` switches, and `obsctl
+scene-profile --off` puts every scene back — see
+[`docs/commands.md`](docs/commands.md).
 
 ### The command line (`:`)
 

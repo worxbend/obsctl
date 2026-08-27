@@ -8,7 +8,7 @@ describe Obsctl::IPC::Codec do
     request = Obsctl::IPC::Request.new(
       "req-000001",
       Obsctl::IPC::Request::TYPE_COMMAND,
-      Obsctl::IPC::CommandPayload.new("set_scene", "main")
+      Obsctl::IPC::CommandPayload.new(name: "set_scene", target: "main")
     )
 
     decoded = codec.decode(codec.encode(request)).as(Obsctl::IPC::Request)
