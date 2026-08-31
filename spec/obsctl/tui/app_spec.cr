@@ -85,6 +85,23 @@ describe Obsctl::TUI::App do
     model.last_result_frame.should eq(42_u64)
   end
 
+  it "applies a deferred outcome and owes a frame for it" do
+    # The debounced volume send answers from its own fiber, after the keypress
+    # that started it has been handled. Arriving as a message is what puts it
+    # through `apply_outcome` and marks a frame owed, so the error shows up on
+    # the next frame instead of waiting for the refresh tick.
+    model = Obsctl::TUI::Model.new
+    app = Obsctl::TUI::App.new(model: model)
+    sender = ->(_payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true) }
+    dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)
+
+    outcome = Obsctl::TUI::ActionOutcome.new(message: "error: obsctl server is not running")
+    app.process(Obsctl::TUI::DeferredOutcome.new(outcome), dispatcher).should be_false
+
+    model.last_result.should eq("error: obsctl server is not running")
+    app.needs_render?.should be_true
+  end
+
   it "quits when terminal input closes instead of ticking forever" do
     model = Obsctl::TUI::Model.new
     app = Obsctl::TUI::App.new(model: model)

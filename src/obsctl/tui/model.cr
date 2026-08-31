@@ -192,6 +192,17 @@ module Obsctl
       end
     end
 
+    # Everything the dashboard draws, in one mutable object.
+    #
+    # Three fibers write to it: the run loop (keys, mouse and the refresh
+    # tick), the debounce fiber that settles a volume edit 120 ms after the
+    # last keypress, and the fiber that reads pushed events off the daemon
+    # socket. None of them locks, and none needs to: Crystal schedules fibers
+    # cooperatively on a single thread here, so a fiber keeps the model to
+    # itself until it reaches a point where it yields -- an I/O wait, a
+    # `sleep`, or a channel operation. What is not safe is leaving the model
+    # half-updated *across* such a point, so each of the three does its writes
+    # in one uninterrupted run.
     class Model
       MAX_LOG_ENTRIES = 200
 

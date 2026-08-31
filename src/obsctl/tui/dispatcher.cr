@@ -26,6 +26,9 @@ module Obsctl
       alias Sender = Proc(IPC::CommandPayload, IPC::Response)
       alias ThemePersister = Proc(Theme, String)
       alias Viewport = Proc(CryTUI::Rect)
+      # Where an outcome goes when it is produced too late to be returned --
+      # see `report`.
+      alias OutcomeSink = Proc(ActionOutcome, Nil)
 
       # Half-page steps need to know how tall the focused panel is. The area is
       # read through a proc rather than stored because it changes with every
@@ -39,6 +42,7 @@ module Obsctl
         @theme_persister : ThemePersister? = nil,
         @volume_debounce : Time::Span = VOLUME_DEBOUNCE,
         @viewport : Viewport? = nil,
+        @outcomes : OutcomeSink? = nil,
       )
         @volume_versions = Hash(String, UInt64).new(0_u64)
       end
@@ -736,6 +740,27 @@ module Obsctl
         "error [#{error.code}]: #{error.message}"
       end
 
+      # Says something the status bar should show, from code that can no longer
+      # return an `ActionOutcome`.
+      #
+      # Every other answer this class gives is a returned outcome, which the
+      # caller applies and then paints. The debounced volume send cannot do
+      # that: its action returned 120 ms before the daemon replied. So it hands
+      # the outcome to the sink instead — the App fills that in with a send
+      # into the same message queue keys and pushed events arrive on, which
+      # both applies the message and gets a frame painted for it right away.
+      #
+      # Without a sink the message is written straight to the model, which is
+      # what a Dispatcher driven without an App does: specs build one from a
+      # bare sender proc, and there is no queue for it to post to.
+      private def report(message : String) : Nil
+        if sink = @outcomes
+          sink.call(ActionOutcome.new(message: message))
+        else
+          @model.set_last_result(message)
+        end
+      end
+
       private def target_command(name : String, target : String?) : ActionOutcome
         return ActionOutcome::HANDLED unless target
         command(IPC::CommandPayload.new(name: name, target: target))
@@ -761,9 +786,9 @@ module Obsctl
             response = @sender.call(IPC::CommandPayload.new(name: IPC::CommandName::SET_VOLUME, target: input_name, percent: percent))
             # Only failures are announced: the level the user just set is
             # already on screen, so "ok" would say nothing they cannot see.
-            @model.set_last_result(result_message(response)) unless response.ok
+            report(result_message(response)) unless response.ok
           rescue ex : Domain::ObsctlError | IO::Error
-            @model.set_last_result("error: #{ex.message}")
+            report("error: #{ex.message}")
           ensure
             # The edit is no longer in flight however it ended, so daemon
             # snapshots take over again. Only the fiber that survived the

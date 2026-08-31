@@ -75,6 +75,56 @@ describe Obsctl::TUI::Dispatcher do
     sent.first.percent.should eq(80)
   end
 
+  it "answers a failed debounced volume send through the outcome sink" do
+    # The debounced send replies long after the keypress that started it, so it
+    # cannot return an outcome the way every other command does. It hands one
+    # to the sink instead, which the App turns into a message on its own queue
+    # -- that is what gets the error painted on the next frame rather than
+    # whenever the refresh tick next comes round.
+    model, _, _ = dispatcher_fixture
+    outcomes = [] of Obsctl::TUI::ActionOutcome
+    dispatcher = Obsctl::TUI::Dispatcher.new(
+      model,
+      ->(_payload : Obsctl::IPC::CommandPayload) { raise Obsctl::Domain::ServerUnavailable.new },
+      volume_debounce: 10.milliseconds,
+      outcomes: ->(outcome : Obsctl::TUI::ActionOutcome) { outcomes << outcome; nil }
+    )
+    model.focus = Obsctl::TUI::FocusPanel::Audio
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::VolumeUp))
+
+    deadline = Time.instant + 1.second
+    while outcomes.empty?
+      raise "timed out waiting for the debounced outcome" if Time.instant >= deadline
+      Fiber.yield
+    end
+
+    outcomes.map(&.message).should eq(["error: obsctl server is not running"])
+    # Reported, not written: the App applies the outcome, the fiber does not.
+    model.last_result.should be_nil
+  end
+
+  it "writes the debounced answer to the model when there is no sink" do
+    # A Dispatcher can be driven without an App -- as these specs do, from a
+    # bare sender proc -- and then there is no message queue to post to. The
+    # status line still has to say what happened, so the fallback writes it.
+    model, _, _ = dispatcher_fixture
+    dispatcher = Obsctl::TUI::Dispatcher.new(
+      model,
+      ->(_payload : Obsctl::IPC::CommandPayload) { raise Obsctl::Domain::ServerUnavailable.new },
+      volume_debounce: 10.milliseconds
+    )
+    model.focus = Obsctl::TUI::FocusPanel::Audio
+    dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::VolumeUp))
+
+    deadline = Time.instant + 1.second
+    while model.last_result.nil?
+      raise "timed out waiting for the debounced status line" if Time.instant >= deadline
+      Fiber.yield
+    end
+
+    model.last_result.should eq("error: obsctl server is not running")
+  end
+
   it "parses palette commands and formats remote errors" do
     model = Obsctl::TUI::Model.new
     sender = ->(_payload : Obsctl::IPC::CommandPayload) do

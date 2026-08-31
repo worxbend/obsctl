@@ -20,10 +20,16 @@ module Obsctl
       event : IPC::Event? = nil,
       error : String? = nil
 
+    # An answer from the Dispatcher that arrived after the action that asked
+    # for it had already been handled — today only the debounced volume send,
+    # which replies 120 ms late from its own fiber. Coming in as a message is
+    # what gets it applied and painted the same way a keypress's answer is.
+    record DeferredOutcome, outcome : ActionOutcome
+
     record InputClosed
     record ResizeDetected
 
-    alias AppMessage = CryTUI::InputEvent | SubscriptionMessage | InputClosed | ResizeDetected
+    alias AppMessage = CryTUI::InputEvent | SubscriptionMessage | DeferredOutcome | InputClosed | ResizeDetected
 
     class App
       DEFAULT_REFRESH = 100.milliseconds
@@ -100,7 +106,8 @@ module Obsctl
             @model,
             ->(payload : IPC::CommandPayload) { command_client.send(payload) },
             ->(theme : Theme) { ThemePersistence.save(@config_path, theme) },
-            viewport: -> { @area }
+            viewport: -> { @area },
+            outcomes: ->(outcome : ActionOutcome) { @messages.send(DeferredOutcome.new(outcome)); nil }
           )
           connect_subscription
           # The first frame is unconditional; from here on a frame is painted
@@ -173,6 +180,8 @@ module Obsctl
             @needs_render = true
           end
           false
+        when DeferredOutcome
+          apply_outcome(message.outcome)
         when InputClosed
           @exit_code = 1
           true
