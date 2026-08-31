@@ -68,6 +68,24 @@ module Obsctl
       def normalized_name(value : String) : String?
         checked_name(value).try(&.downcase(Unicode::CaseOptions::ASCII))
       end
+
+      # Whether two names refer to the same scene or scene profile: trimmed and
+      # case-insensitively. A name that cannot be normalized matches nothing,
+      # including another unusable name.
+      #
+      # Every place that has to decide "is this the one the user meant" asks
+      # here. The rule had been written out again in the daemon and in the
+      # config layer, which is the shape a rule takes just before one copy
+      # drifts and two layers disagree about which profile a name points at.
+      #
+      # `nil` is accepted on either side so callers holding an optional pointer
+      # (`active_scene_profile`, most obviously) need no nil-check of their own.
+      def same?(left : String?, right : String?) : Bool
+        return false unless left && right
+
+        normalized = normalized_name(left)
+        !normalized.nil? && normalized == normalized_name(right)
+      end
     end
 
     # The resolved answer to "is this scene hidden", built once from the config.

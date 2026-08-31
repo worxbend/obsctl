@@ -254,11 +254,8 @@ module Obsctl
       # deliberate: a hand-edited file has to fall back to the per-scene flags
       # rather than to an empty scene list. `ConfigSchema.warnings` reports it.
       def active_scene_profile_config : SceneProfileConfig?
-        wanted = @active_scene_profile.try { |name| Domain::SceneProfileNames.normalized_name(name) }
-        return unless wanted
-
         @scene_profiles.find do |profile|
-          Domain::SceneProfileNames.normalized_name(profile.name) == wanted
+          Domain::SceneProfileNames.same?(profile.name, @active_scene_profile)
         end
       end
 

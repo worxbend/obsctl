@@ -282,7 +282,7 @@ module Obsctl
           updated.scene_profiles[index] = profile
           # The active pointer travels with a rename, so renaming the profile
           # in effect does not quietly stop hiding scenes.
-          if placement[:renamed] && same_scene_profile_name?(updated.active_scene_profile, previous.name)
+          if placement[:renamed] && Domain::SceneProfileNames.same?(updated.active_scene_profile, previous.name)
             updated.active_scene_profile = name
           end
         else
@@ -296,7 +296,7 @@ module Obsctl
           "listed"   => hidden.size,
           "created"  => placement[:index].nil?,
           "renamed"  => placement[:renamed],
-          "active"   => same_scene_profile_name?(updated.active_scene_profile, name),
+          "active"   => Domain::SceneProfileNames.same?(updated.active_scene_profile, name),
           "warnings" => Config::ConfigSchema.warnings(updated),
         })
       end
@@ -307,10 +307,10 @@ module Obsctl
         raise Domain::ConfigInvalid.new("scene profile not found: #{name}") unless profile
 
         updated = config_copy
-        updated.scene_profiles = updated.scene_profiles.reject { |entry| same_scene_profile_name?(entry.name, profile.name) }
+        updated.scene_profiles = updated.scene_profiles.reject { |entry| Domain::SceneProfileNames.same?(entry.name, profile.name) }
         # Deleting the profile in effect switches filtering off rather than
         # leaving `active_scene_profile` naming something that is gone.
-        deactivated = same_scene_profile_name?(updated.active_scene_profile, profile.name)
+        deactivated = Domain::SceneProfileNames.same?(updated.active_scene_profile, profile.name)
         updated.active_scene_profile = nil if deactivated
         persist_config!(updated)
         object({"message" => "scene profile deleted: #{profile.name}", "deactivated" => deactivated})
@@ -340,27 +340,18 @@ module Obsctl
           raise Domain::ConfigInvalid.new("scene profile already exists: #{name}")
         end
 
-        return {index: replacing, renamed: !same_scene_profile_name?(config.scene_profiles[replacing].name, name)} if replacing
+        return {index: replacing, renamed: !Domain::SceneProfileNames.same?(config.scene_profiles[replacing].name, name)} if replacing
         # Replacing a profile of the same name adopts the caller's spelling,
         # but is not a rename: it is the same profile saved over.
         {index: by_name, renamed: false}
       end
 
       private def scene_profile_position(config : Config::Config, name : String) : Int32?
-        config.scene_profiles.index { |profile| same_scene_profile_name?(profile.name, name) }
+        config.scene_profiles.index { |profile| Domain::SceneProfileNames.same?(profile.name, name) }
       end
 
       private def find_scene_profile(name : String) : Config::SceneProfileConfig?
-        @config.scene_profiles.find { |profile| same_scene_profile_name?(profile.name, name) }
-      end
-
-      # Names match trimmed and case-insensitively. A name that cannot be
-      # normalized matches nothing, including another unusable name.
-      private def same_scene_profile_name?(left : String?, right : String?) : Bool
-        return false unless left && right
-
-        normalized = Domain::SceneProfileNames.normalized_name(left)
-        !normalized.nil? && normalized == Domain::SceneProfileNames.normalized_name(right)
+        @config.scene_profiles.find { |profile| Domain::SceneProfileNames.same?(profile.name, name) }
       end
 
       # How many of these scenes will really disappear, as opposed to how many

@@ -99,4 +99,19 @@ describe Obsctl::Domain::SceneProfileNames do
   it "accepts spaces, punctuation and non-ASCII, which are not the rule here" do
     Obsctl::Domain::SceneProfileNames.checked_name("Scène 4 (interim) 🎥").should eq("Scène 4 (interim) 🎥")
   end
+
+  it "matches two names trimmed and case-insensitively" do
+    names = Obsctl::Domain::SceneProfileNames
+    names.same?("Streaming", "  streaming ").should be_true
+    names.same?("Streaming", "streaming night").should be_false
+  end
+
+  it "matches nothing when either name is missing or unusable" do
+    names = Obsctl::Domain::SceneProfileNames
+    names.same?(nil, "streaming").should be_false
+    names.same?("streaming", nil).should be_false
+    # Two names that both fail `checked_name` are still not the same name:
+    # neither one identifies a profile, so neither can be the one meant.
+    names.same?("   ", "   ").should be_false
+  end
 end
