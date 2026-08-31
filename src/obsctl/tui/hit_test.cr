@@ -1,6 +1,7 @@
 require "crytui"
 require "./layout"
 require "./model"
+require "./overlay_layout"
 
 module Obsctl
   module TUI
