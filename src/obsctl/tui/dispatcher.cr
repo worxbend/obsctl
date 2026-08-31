@@ -186,9 +186,9 @@ module Obsctl
         # scenes they were on across that change -- doing it here would run
         # before the list had changed and re-seek nothing.
         profile = entry.profile
-        return send_scene_profile(IPC::CommandPayload.new(name: IPC::CommandName::SET_SCENE_PROFILE, target: profile.name)) if profile
+        return command(IPC::CommandPayload.new(name: IPC::CommandName::SET_SCENE_PROFILE, target: profile.name)) if profile
 
-        send_scene_profile(IPC::CommandPayload.new(name: IPC::CommandName::CLEAR_SCENE_PROFILE))
+        command(IPC::CommandPayload.new(name: IPC::CommandName::CLEAR_SCENE_PROFILE))
       end
 
       # Editing, creating and deleting from the list. Split from
@@ -254,7 +254,7 @@ module Obsctl
         return ActionOutcome::HANDLED unless entry && entry.profile
 
         @model.scene_profile_list.confirming = false
-        send_scene_profile(IPC::CommandPayload.new(name: IPC::CommandName::DELETE_SCENE_PROFILE, target: entry.name))
+        command(IPC::CommandPayload.new(name: IPC::CommandName::DELETE_SCENE_PROFILE, target: entry.name))
       end
 
       # The scene-profile editor: obsctl's own named sets of scenes to keep out
@@ -414,7 +414,7 @@ module Obsctl
         editor.active = false
         editor.naming = false
         editor.origin_name = name
-        send_scene_profile(IPC::CommandPayload.new(
+        command(IPC::CommandPayload.new(
           name: IPC::CommandName::SAVE_SCENE_PROFILE,
           hidden: editor.hidden.to_a.sort!,
           rename_from: renamed_from,
@@ -425,22 +425,6 @@ module Obsctl
       private def renamed_scene_profile(origin : String?, name : String) : String?
         return unless origin && origin != name
         @model.scene_profiles.index_of(origin) ? origin : nil
-      end
-
-      # Asks the daemon to make a scene-profile change, and reports what it
-      # said.
-      #
-      # The dashboard does not write the config file for this any more and does
-      # not decide which scenes are hidden: the daemon owns both, resolves the
-      # active profile into a per-scene `hidden` flag, and pushes the result to
-      # every subscriber. That is what keeps two open dashboards -- and the CLI
-      # -- agreeing about what should be on screen.
-      private def send_scene_profile(payload : IPC::CommandPayload) : ActionOutcome
-        response = @sender.call(payload)
-        message = response.result.try(&.["message"]?).try(&.as_s?)
-        return ActionOutcome.new(message: message || "ok") if response.ok
-
-        ActionOutcome.new(message: response.error.try(&.message) || "scene profile command failed")
       end
 
       # The editor's naming sub-mode, which is a one-line text field with the

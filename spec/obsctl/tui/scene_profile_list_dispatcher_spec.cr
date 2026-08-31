@@ -200,6 +200,24 @@ describe "scene profile list dispatch" do
       model.scene_profile_list.active.should be_true
       scene_profile_commands(sent).should be_empty
     end
+
+    it "reports a daemon that has gone away instead of tearing the dashboard down" do
+      # A closed socket makes the IPC client raise `ServerUnavailable`, and a
+      # daemon that stops answering makes it raise `RequestTimeout`. Neither is
+      # an `IO::Error`, so nothing above the dispatcher would catch either one
+      # -- the dashboard would exit with a backtrace mid-keypress. Every other
+      # command turns them into a status line, and so must this one.
+      model = list_model
+      set_scene_profiles(model, two_profiles)
+      dispatcher = Obsctl::TUI::Dispatcher.new(
+        model,
+        ->(_payload : Obsctl::IPC::CommandPayload) { raise Obsctl::Domain::ServerUnavailable.new }
+      )
+      act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfileList)
+      outcome = act(dispatcher, Obsctl::TUI::ActionKind::PickSceneProfile, index: 1)
+
+      outcome.message.should eq("error: obsctl server is not running")
+    end
   end
 
   describe "closing" do
