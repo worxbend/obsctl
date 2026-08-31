@@ -167,6 +167,27 @@ describe "save_scene_profile" do
     File.delete?(path.not_nil!)
   end
 
+  it "replaces a profile whose name differs only in case, adopting the new spelling" do
+    # Pinned because it is what any client saving without `rename_from` gets:
+    # names match case-insensitively here, so "Streaming" is not a second
+    # profile beside "streaming" -- it is the same one, saved over. The
+    # dashboard's own duplicate check has to ask the question the same way or
+    # it waves through a save that silently discards someone else's scenes.
+    path = profile_config_path
+    config = profile_config([profile("streaming", ["Cam"]), profile("editing")])
+
+    response = run(config, path, save_payload("Streaming", ["BRB Loop"]))
+
+    result = response.result.not_nil!
+    result["created"].as_bool.should be_false
+    result["renamed"].as_bool.should be_false
+    written = Obsctl::Config::Config.from_yaml(File.read(path))
+    written.scene_profiles.map(&.name).should eq(["Streaming", "editing"])
+    written.scene_profiles.first.hidden.should eq(["BRB Loop"])
+  ensure
+    File.delete?(path.not_nil!)
+  end
+
   it "moves the entry and carries the active pointer with it on a rename" do
     # The whole reason `rename_from` exists: a save-then-delete pair would
     # rewrite the file twice and switch filtering off on the way, because

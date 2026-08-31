@@ -1,4 +1,5 @@
 require "../domain/command_parser"
+require "../domain/scene_profiles"
 require "../ipc/command_name"
 require "./completion"
 require "./input"
@@ -455,7 +456,12 @@ module Obsctl
           # overwrites by name, and the only evidence would have been someone
           # else's hidden set quietly becoming this draft's. Saving over the
           # profile this draft came from is still allowed -- that is editing it.
-          if @model.scene_profiles.index_of(name) && name != editor.origin_name
+          #
+          # Both halves ask about identity, so both match the way `index_of`
+          # does: an exact "came from" check beside a case-insensitive lookup
+          # would refuse "streaming" -> "Streaming", which is a recapitalization
+          # of the draft's own profile and not a collision with anything.
+          if @model.scene_profiles.index_of(name) && !Domain::SceneProfileNames.same?(name, editor.origin_name)
             return ActionOutcome.new(message: "a scene profile named '#{name}' already exists; open it from <leader>p to edit it")
           end
 

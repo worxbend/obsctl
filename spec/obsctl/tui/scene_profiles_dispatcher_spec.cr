@@ -394,6 +394,46 @@ describe "scene profile editor dispatch" do
       model.scene_profiles.profiles.last.hidden.should eq(["Cam"].to_set)
     end
 
+    it "refuses a name that differs from another profile's only in case" do
+      # The daemon matches profile names case-insensitively, so saving this
+      # draft as "Editing" would land on "editing" and replace its hidden
+      # scenes. Refusing here is what stops that: the dashboard has to answer
+      # "does this name already belong to something" the same way the daemon
+      # will, or its guard is decoration.
+      model = profile_model
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam"]}).activate("streaming"))
+      sent, dispatcher = profile_dispatcher(model)
+      act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
+      act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesBeginNaming)
+      "Editing".each_char { |char| act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesNameCharacter, character: char) }
+      outcome = act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesNameSubmit)
+
+      outcome.message.should eq("a scene profile named 'Editing' already exists; open it from <leader>p to edit it")
+      model.scene_profile_editor.naming.should be_true
+      model.scene_profile_editor.name_input.should eq("Editing")
+      sent.should be_empty
+    end
+
+    it "allows recapitalizing the draft's own profile" do
+      # The other side of the same coin: "Streaming" collides with "streaming"
+      # only when the draft came from somewhere else. Here it came from that
+      # very profile, so this is a rename of it and the daemon takes the new
+      # spelling.
+      model = profile_model
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}).activate("streaming"))
+      sent, dispatcher = profile_dispatcher(model)
+      act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
+      act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesBeginNaming)
+      "Streaming".each_char { |char| act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesNameCharacter, character: char) }
+      named = act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesNameSubmit)
+      act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesSave)
+
+      named.message.should eq("scene profile named: Streaming; press enter to save")
+      command = sent.first
+      command.target.should eq("Streaming")
+      command.rename_from.should eq("streaming")
+    end
+
     it "allows confirming the name the draft already came from" do
       # Retyping a profile's own name is editing it, not colliding with it, so
       # the guard has to let this through or the editor could never be saved

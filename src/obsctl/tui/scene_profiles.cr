@@ -1,3 +1,5 @@
+require "../domain/scene_profiles"
+
 module Obsctl
   module TUI
     # A named set of scenes the dashboard keeps out of its scene list.
@@ -44,8 +46,18 @@ module Obsctl
         active_profile.try(&.hidden) || Set(String).new
       end
 
+      # The position of the profile this name refers to, matched the way the
+      # daemon matches it -- trimmed and case-insensitively -- rather than by
+      # exact spelling.
+      #
+      # Exact spelling was a data-loss bug. The editor refuses to save a draft
+      # over a profile it did not come from, but with an exact check a draft
+      # named "Streaming" saw no existing "streaming", passed the refusal, and
+      # the daemon then matched the two names and overwrote the saved
+      # profile's hidden scenes with the draft's. The dashboard has to ask the
+      # same question the daemon will answer.
       def index_of(name : String) : Int32?
-        @profiles.index { |profile| profile.name == name }
+        @profiles.index { |profile| Domain::SceneProfileNames.same?(profile.name, name) }
       end
 
       # Replaces the profile with this name, or appends it when it is new, so
