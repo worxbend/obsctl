@@ -22,6 +22,14 @@ private DIRECT_OBS_CLIENT_PATTERNS = [
   {name: "OBS transport reference", regex: /\b(?:Obsctl::)?OBS::Transport\b/},
 ]
 
+private INNER_LAYER_GLOBS = [
+  "src/obsctl/domain/**/*.cr",
+  "src/obsctl/config/**/*.cr",
+  "src/obsctl/ipc/**/*.cr",
+  "src/obsctl/obs/**/*.cr",
+  "src/obsctl/runtime/**/*.cr",
+]
+
 private def src_files(glob : String) : Array(String)
   Dir.glob(File.join(ROOT, glob)).sort
 end
@@ -147,6 +155,21 @@ describe "daemon-first architecture boundary" do
     # The executor resolves a *candidate* list to count what a profile would
     # hide; nothing else may.
     resolvers.should eq(["src/obsctl/server/command_executor.cr"])
+  end
+
+  it "keeps inner layers off the delivery and daemon layers" do
+    # The rules, the config shapes, the wire protocol and the OBS adapter all
+    # have to be reachable without dragging a terminal or a daemon in behind
+    # them -- that is what lets them be read, tested and changed on their own.
+    # Nothing enforced the direction, so `src/obsctl/domain/` requiring
+    # `../tui/model` would have compiled and nothing would have said a word.
+    inward = pattern_usages(
+      src_files(INNER_LAYER_GLOBS),
+      /require\s+"(?:\.\.\/)+(?:tui|server|cli)\/|require\s+"crytui"/,
+      "require into a delivery or daemon layer"
+    )
+
+    inward.should eq([] of String)
   end
 
   it "keeps crytui a separate shard obsctl only consumes" do
