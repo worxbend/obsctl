@@ -41,11 +41,6 @@ module Obsctl
         @profiles.find { |profile| profile.name == name }
       end
 
-      # The scene names the active profile hides, empty when none is active.
-      def hidden_names : Set(String)
-        active_profile.try(&.hidden) || Set(String).new
-      end
-
       # The position of the profile this name refers to, matched the way the
       # daemon matches it -- trimmed and case-insensitively -- rather than by
       # exact spelling.
@@ -82,21 +77,6 @@ module Obsctl
       def delete(name : String) : self
         updated = @profiles.reject { |profile| profile.name == name }
         SceneProfiles.new(updated, @active == name ? nil : @active)
-      end
-
-      # Gives a profile a different name, in place.
-      #
-      # In place, rather than delete-then-append, so renaming does not move a
-      # profile to the end of the list the user is looking at -- and `active`
-      # follows the rename, because renaming the profile in effect must not
-      # silently turn filtering off.
-      def rename(from : String, to : String) : self
-        index = index_of(from)
-        return self unless index
-
-        updated = @profiles.dup
-        updated[index] = SceneProfile.new(to, updated[index].hidden.dup)
-        SceneProfiles.new(updated, @active == from ? to : @active)
       end
 
       def activate(name : String?) : self
