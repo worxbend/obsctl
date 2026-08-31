@@ -183,19 +183,6 @@ module Obsctl
 
     # Parsed obsctl configuration with canonical top-level server and reconnect sections.
     class Config
-      ALLOWED_TOP_LEVEL_KEYS = Set{
-        "version",
-        "server",
-        "connection",
-        "reconnect",
-        "scenes",
-        "scene_profiles",
-        "active_scene_profile",
-        "audio",
-        "ui",
-        "keymap",
-      }
-
       # The document exactly as it appears on disk.
       #
       # Kept separate from `Config` because the two differ in one place: on
@@ -214,7 +201,38 @@ module Obsctl
         getter audio : AudioConfig = AudioConfig.new
         getter ui : UiConfig = UiConfig.new
         getter keymap : KeymapConfig = KeymapConfig.new
+
+        # The names of the fields above, read off the struct itself at compile
+        # time rather than typed out again.
+        #
+        # These names are the YAML keys: `YAML::Serializable` maps a key to the
+        # instance variable of the same name, none of the fields above renames
+        # itself with `@[YAML::Field(key: ...)]`, and the struct does not
+        # include `YAML::Serializable::Unmapped`, which would add an instance
+        # variable that is no key at all. Doing either of those things breaks
+        # the equivalence, so teach this method about it first.
+        #
+        # `instance_vars` is only readable from inside a method body, which is
+        # why this is a method and not a constant; `@type` in a class method is
+        # the metaclass, hence `.instance`.
+        def self.field_names : Array(String)
+          {% begin %}
+            {{ @type.instance.instance_vars.map(&.name.stringify) }}
+          {% end %}
+        end
       end
+
+      # The top-level keys a config file may contain, derived from the document
+      # rather than typed out a second time.
+      #
+      # `reject_unknown_top_level_keys!` refuses a file carrying anything not in
+      # here, so the two lists drifting apart fails in whichever direction the
+      # drift went and neither way says so: a key added to `Document` but
+      # forgotten here makes a perfectly valid file be rejected, while a key
+      # here that `Document` does not read is accepted and then silently
+      # dropped the next time the file is written back out. Deriving the set
+      # means there is only one list to keep right.
+      ALLOWED_TOP_LEVEL_KEYS = Set.new(Document.field_names)
 
       property version : Int32
       property server : ServerConfig
