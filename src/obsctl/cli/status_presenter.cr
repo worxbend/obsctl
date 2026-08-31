@@ -1,4 +1,5 @@
 require "json"
+require "../ipc/server_status_codec"
 require "./color"
 
 module Obsctl
@@ -10,10 +11,13 @@ module Obsctl
     # and how status looks in a terminal. Nothing here talks to the daemon; it
     # takes the decoded result of a command and returns the text for it.
     #
-    # Everything reads defensively (`try(&.as_s?) || "-"`) because the payload
-    # is whatever the daemon sent. A field the running daemon does not publish —
-    # an older build, a newer one — renders as a dash rather than crashing the
-    # client.
+    # Everything reads defensively because the payload is whatever the daemon
+    # sent. A field the running daemon does not publish — an older build, a
+    # newer one — renders as a dash rather than crashing the client. For the
+    # two payloads with a fixed field list, `server-status` and `record-status`,
+    # that leniency lives in `ipc/server_status_codec.cr` alongside the daemon's
+    # encoders, so the key names cannot drift apart; the OBS sections below
+    # still read `JSON::Any` directly.
     class StatusPresenter
       VOLUME_BAR_SEGMENTS = 10
 
@@ -52,40 +56,33 @@ module Obsctl
       end
 
       def server_status(result : JSON::Any) : String
+        status = IPC::ServerStatus.decode(result)
         [
-          "pid: #{result["pid"]?.try(&.as_i?) || "-"}",
-          "uptime_seconds: #{result["uptime_seconds"]?.try(&.as_i?) || "-"}",
-          "socket_path: #{result["socket_path"]?.try(&.as_s?) || "-"}",
-          "client_count: #{result["client_count"]?.try(&.as_i?) || 0}",
-          "dropped_reconnect_diagnostic_logs: #{optional_integer_text(result["dropped_reconnect_diagnostic_logs"]?)}",
-          "obs_connected: #{result["obs_connected"]?.try(&.as_bool?) || false}",
-          "reconnecting: #{result["reconnecting"]?.try(&.as_bool?) || false}",
-          "last_connected_at: #{timestamp_text(result["last_connected_at"]?)}",
-          "last_disconnected_at: #{timestamp_text(result["last_disconnected_at"]?)}",
-          "last_reconnect_attempt_at: #{timestamp_text(result["last_reconnect_attempt_at"]?)}",
-          "last_connection_failed_at: #{timestamp_text(result["last_connection_failed_at"]?)}",
-          "last_error: #{result["last_error"]?.try(&.as_s?) || "-"}",
+          "pid: #{text(status.pid)}",
+          "uptime_seconds: #{text(status.uptime_seconds)}",
+          "socket_path: #{text(status.socket_path)}",
+          "client_count: #{status.client_count || 0}",
+          "dropped_reconnect_diagnostic_logs: #{text(status.dropped_reconnect_diagnostic_logs)}",
+          "obs_connected: #{status.obs_connected || false}",
+          "reconnecting: #{status.reconnecting || false}",
+          "last_connected_at: #{text(status.last_connected_at)}",
+          "last_disconnected_at: #{text(status.last_disconnected_at)}",
+          "last_reconnect_attempt_at: #{text(status.last_reconnect_attempt_at)}",
+          "last_connection_failed_at: #{text(status.last_connection_failed_at)}",
+          "last_error: #{text(status.last_error)}",
         ].join('\n')
       end
 
       def record_status(result : JSON::Any) : String
+        status = IPC::RecordStatusCodec.decode(result)
         [
-          "recording: #{record_state_label(result)}",
-          "timecode: #{result["timecode"]?.try(&.as_s?) || "-"}",
-          "duration_ms: #{result["duration_ms"]?.try(&.as_i64?) || "-"}",
-          "bytes: #{result["bytes"]?.try(&.as_i64?) || "-"}",
+          # A dash is this surface's word for "OBS has not said yet"; the
+          # daemon's own one-line summary words the same case differently.
+          "recording: #{status.state("-")}",
+          "timecode: #{text(status.timecode)}",
+          "duration_ms: #{text(status.duration_ms)}",
+          "bytes: #{text(status.bytes)}",
         ].join("\n")
-      end
-
-      # Three states, not two: OBS reports "recording" and "paused"
-      # independently, and a daemon that has not heard from OBS yet knows
-      # neither. A dash says "unknown" rather than claiming "stopped".
-      private def record_state_label(result : JSON::Any) : String
-        case result["active"]?.try(&.as_bool?)
-        when true  then result["paused"]?.try(&.as_bool?) == true ? "paused" : "active"
-        when false then "stopped"
-        else            "-"
-        end
       end
 
       private def connection_line(result : JSON::Any) : String
@@ -125,12 +122,8 @@ module Obsctl
         text.lines.map { |line| "  #{line}" }.join('\n')
       end
 
-      private def timestamp_text(value : JSON::Any?) : String
-        value.try(&.as_s?) || "-"
-      end
-
-      private def optional_integer_text(value : JSON::Any?) : String
-        value.try(&.as_i64?).try(&.to_s) || "-"
+      private def text(value : (String | Int32 | Int64)?) : String
+        value.nil? ? "-" : value.to_s
       end
     end
   end

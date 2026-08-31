@@ -9,6 +9,7 @@ require "../domain/scene_profiles"
 require "../domain/volume"
 require "../domain/errors"
 require "../ipc/command_name"
+require "../ipc/server_status_codec"
 require "../ipc/state_snapshot_codec"
 require "../ipc/request"
 require "../ipc/response"
@@ -211,7 +212,7 @@ module Obsctl
       end
 
       protected def record_status : JSON::Any
-        record_status_payload(@supervisor.with_client(&.record_status))
+        IPC::RecordStatusCodec.encode(@supervisor.with_client(&.record_status))
       end
 
       protected def validate_config : JSON::Any
@@ -366,28 +367,6 @@ module Obsctl
         active.nil? ? "toggled" : (active ? "started" : "stopped")
       end
 
-      # Carries the structured record fields plus a one-line `message`, so the
-      # TUI and any generic consumer can render it the same way as every other
-      # command result without special-casing.
-      private def record_status_payload(status : OBS::State::RecordStatus) : JSON::Any
-        object({
-          "message"     => "recording #{record_state_label(status)}",
-          "active"      => status.active,
-          "paused"      => status.paused,
-          "timecode"    => status.timecode,
-          "duration_ms" => status.duration_ms,
-          "bytes"       => status.bytes,
-        })
-      end
-
-      private def record_state_label(status : OBS::State::RecordStatus) : String
-        case status.active
-        when true  then status.paused == true ? "paused" : "active"
-        when false then "stopped"
-        else            "state unknown"
-        end
-      end
-
       protected def server_status : JSON::Any
         server_status_for(@state.snapshot)
       end
@@ -402,20 +381,20 @@ module Obsctl
 
       private def server_status_for(snapshot : OBS::State::ObsSnapshot) : JSON::Any
         telemetry = @state.telemetry
-        object({
-          "pid"                               => Process.pid,
-          "uptime_seconds"                    => (Time.utc - @started_at).total_seconds.to_i64,
-          "socket_path"                       => @socket_path,
-          "client_count"                      => @client_count.try(&.call) || 0,
-          "dropped_reconnect_diagnostic_logs" => dropped_reconnect_diagnostic_logs,
-          "obs_connected"                     => snapshot.connected,
-          "reconnecting"                      => telemetry.reconnecting,
-          "last_connected_at"                 => timestamp(telemetry.last_connected_at),
-          "last_disconnected_at"              => timestamp(telemetry.last_disconnected_at),
-          "last_reconnect_attempt_at"         => timestamp(telemetry.last_reconnect_attempt_at),
-          "last_connection_failed_at"         => timestamp(telemetry.last_connection_failed_at),
-          "last_error"                        => snapshot.last_error,
-        })
+        IPC::ServerStatus.new(
+          pid: Process.pid,
+          uptime_seconds: (Time.utc - @started_at).total_seconds.to_i64,
+          socket_path: @socket_path,
+          client_count: @client_count.try(&.call) || 0,
+          dropped_reconnect_diagnostic_logs: dropped_reconnect_diagnostic_logs,
+          obs_connected: snapshot.connected,
+          reconnecting: telemetry.reconnecting,
+          last_connected_at: timestamp(telemetry.last_connected_at),
+          last_disconnected_at: timestamp(telemetry.last_disconnected_at),
+          last_reconnect_attempt_at: timestamp(telemetry.last_reconnect_attempt_at),
+          last_connection_failed_at: timestamp(telemetry.last_connection_failed_at),
+          last_error: snapshot.last_error
+        ).encode
       end
 
       private def dropped_reconnect_diagnostic_logs : Int64
