@@ -1,6 +1,6 @@
 require "../keymap"
 require "../layout"
-require "./chrome"
+require "./overlay"
 
 module Obsctl
   module TUI
@@ -20,7 +20,7 @@ module Obsctl
           return if rect.empty?
 
           theme = model.theme
-          clear(rect, buffer, theme)
+          Overlay.clear(rect, buffer, theme)
           block = CryTUI::Widgets::Block.new(
             title: " #{model.symbol("⌨", "keys")} #{Keymap.title(model.pending_sequence)} ",
             style: CryTUI::Style.new(background: theme.background, foreground: theme.foreground),
@@ -37,12 +37,6 @@ module Obsctl
             ])
           end
           CryTUI::Widgets::StyledText.new(lines, block: block).render(rect, buffer)
-        end
-
-        private def clear(rect : CryTUI::Rect, buffer : CryTUI::Buffer, theme : Theme)
-          style = CryTUI::Style.new(background: theme.background, foreground: theme.foreground)
-          blank = " " * rect.width
-          (rect.y...rect.bottom).each { |row| buffer.set_string(rect.x, row, blank, style) }
         end
 
         # Split so the spans concatenate back to `WhichKeyLayout.entry_text`,

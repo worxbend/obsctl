@@ -1,7 +1,7 @@
 require "../layout"
 require "../overlay_layout"
 require "../scene_profiles"
-require "./chrome"
+require "./overlay"
 
 module Obsctl
   module TUI
@@ -27,20 +27,15 @@ module Obsctl
           return if rect.empty?
 
           theme = model.theme
-          clear(rect, buffer, theme)
+          Overlay.clear(rect, buffer, theme)
           frame = block(model, rect)
           frame.render(rect, buffer)
           items = scenes.map { |scene| item(scene, model) }
           state = CryTUI::Widgets::ListState.new(selected: model.scene_profile_editor.cursor)
-          highlight = CryTUI::Style.new(
-            foreground: theme.highlight_foreground,
-            background: theme.highlight_background,
-            modifiers: CryTUI::Modifier::Bold
-          )
           # The block is drawn here rather than handed to the list, because the
           # list gets only the rows above the hint row and the border is around
           # both of them.
-          CryTUI::Widgets::List.new(items, highlight_style: highlight)
+          CryTUI::Widgets::List.new(items, highlight_style: Overlay.highlight_style(theme))
             .render(frame.inner(SceneProfilesLayout.list_area(rect)), buffer, state)
           render_hints(rect, frame.inner(rect), buffer, model)
         end
@@ -50,16 +45,9 @@ module Obsctl
         # length would push them off the end of the line -- taking the way out
         # of the modal with them.
         private def render_hints(rect : CryTUI::Rect, inner : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
-          return if inner.height <= 0
-
-          style = CryTUI::Style.new(foreground: model.theme.muted, background: model.theme.background)
-          text = CryTUI::TextWidth.truncate(SceneProfilesLayout.hint_text(model, rect.width), inner.width, model.symbol("…", "~"))
-          buffer.set_string(inner.x, SceneProfilesLayout.hint_row(rect), text, style, inner.width)
+          Overlay.hint_line(buffer, inner, SceneProfilesLayout.hint_row(rect), SceneProfilesLayout.hint_text(model, rect.width), model.theme.muted, model)
         end
 
-        # Built here rather than through `Chrome.panel` because a dashboard
-        # panel is transparent and an overlay must not be: the box needs an
-        # opaque `style` so the dashboard does not show through its padding.
         private def block(model : Model, rect : CryTUI::Rect) : CryTUI::Widgets::Block
           theme = model.theme
           # Through the shared layout, and against the width the box actually
@@ -69,18 +57,7 @@ module Obsctl
             CryTUI::Span.new(heading, CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold)),
             CryTUI::Span.new(name, CryTUI::Style.new(foreground: theme.badge_foreground, background: theme.badge_background, modifiers: CryTUI::Modifier::Bold)),
           ])
-          CryTUI::Widgets::Block.new(
-            title: title,
-            style: CryTUI::Style.new(background: theme.background, foreground: theme.foreground),
-            border_style: CryTUI::Style.new(foreground: theme.border_focus),
-            border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
-          )
-        end
-
-        private def clear(rect : CryTUI::Rect, buffer : CryTUI::Buffer, theme : Theme)
-          style = CryTUI::Style.new(background: theme.background, foreground: theme.foreground)
-          blank = " " * rect.width
-          (rect.y...rect.bottom).each { |row| buffer.set_string(rect.x, row, blank, style) }
+          Overlay.block(model, title)
         end
 
         # Split so the spans concatenate back to `SceneProfilesLayout.row_text`,
