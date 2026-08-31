@@ -15,6 +15,11 @@ private DIRECT_OBS_CLIENT_PATTERNS = [
   {name: "OBS connection require", regex: /require\s+"(?:\.\.\/)+obs\/connection"/},
   {name: "OBS client instantiation", regex: /\b(?:Obsctl::)?OBS::Client\.new\b/},
   {name: "OBS connection reference", regex: /\b(?:Obsctl::)?OBS::Connection\b/},
+  # `Transport` opens the websocket itself and hands out `request`/`events`, so
+  # reaching for it is the same breach as reaching for `Client` -- one level
+  # lower down, where the four rules above do not look.
+  {name: "OBS transport require", regex: /require\s+"(?:\.\.\/)+obs\/transport"/},
+  {name: "OBS transport reference", regex: /\b(?:Obsctl::)?OBS::Transport\b/},
 ]
 
 private def src_files(glob : String) : Array(String)
