@@ -39,21 +39,29 @@ module Obsctl
       end
 
       # Argument candidates for a command, driven by the kind its spec declares.
+      #
+      # Exhaustive (`in`, not `when`) over `ArgumentKind`, so a kind added to
+      # the registry stops the build here instead of leaving the palette
+      # silently completing nothing for it -- the same guarantee
+      # `ArgumentKind#placeholder` carries on the help side. `None` and
+      # `Percent` answer nil deliberately: neither names anything the dashboard
+      # could list, so there is nothing to offer.
       private def candidates_for(command : String, model : Model) : Array(String)?
         spec = Domain::CommandRegistry[command]?
         return unless spec
 
-        case spec.arguments.first?
-        when Domain::ArgumentKind::Scene
-          model.scenes.flat_map { |scene| [scene.name, scene.alias].compact }
-        when Domain::ArgumentKind::Profile
-          model.profiles
-        when Domain::ArgumentKind::SceneCollection
-          model.scene_collections
-        when Domain::ArgumentKind::AudioInput
-          model.audio_inputs.flat_map { |input_state| [input_state.name, input_state.alias].compact }
-        when Domain::ArgumentKind::RecordAction
-          RECORD_ACTIONS
+        kind = spec.arguments.first?
+        return unless kind
+
+        case kind
+        in .none?             then nil
+        in .scene?            then model.scenes.flat_map { |scene| [scene.name, scene.alias].compact }
+        in .profile?          then model.profiles
+        in .scene_profile?    then model.scene_profiles.profiles.map(&.name)
+        in .scene_collection? then model.scene_collections
+        in .audio_input?      then model.audio_inputs.flat_map { |input_state| [input_state.name, input_state.alias].compact }
+        in .percent?          then nil
+        in .record_action?    then RECORD_ACTIONS
         end
       end
 

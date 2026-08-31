@@ -1,4 +1,5 @@
 require "../../spec_helper"
+require "../../../src/obsctl/cli/completions"
 require "../../../src/obsctl/tui/completion"
 
 private def completion_model
@@ -19,7 +20,11 @@ private def completion_model
   )
   model.snapshot = model.snapshot.not_nil!.copy_with(
     profiles: ["Default", "Streaming"],
-    scene_collections: ["Podcast", "Gaming"]
+    scene_collections: ["Podcast", "Gaming"],
+    scene_profiles: [
+      Obsctl::OBS::State::SceneProfileState.new("Solo", ["Media"]),
+      Obsctl::OBS::State::SceneProfileState.new("brb", ["Main"]),
+    ]
   )
   model
 end
@@ -50,8 +55,36 @@ describe Obsctl::TUI::Completion do
     Obsctl::TUI::Completion.compute("/collection g", completion_model).should eq(["/collection Gaming"])
   end
 
+  it "completes saved scene-profile names" do
+    model = completion_model
+    Obsctl::TUI::Completion.compute("/scene-profile ", model).should eq([
+      "/scene-profile brb", "/scene-profile Solo",
+    ])
+    Obsctl::TUI::Completion.compute("/scene-profile-delete s", model).should eq(["/scene-profile-delete Solo"])
+  end
+
   it "returns no argument completions for unrelated commands" do
     Obsctl::TUI::Completion.compute("/stream something", completion_model).should be_empty
+  end
+
+  # The shell scripts and the palette both read the argument kind off the same
+  # command registry, so a kind the shell completes from live daemon state has
+  # to be one the palette completes too. `/scene-profile <TAB>` offering
+  # nothing while `obsctl scene-profile <TAB>` worked is the exact drift this
+  # pins, and a missing arm in the palette's dispatch is how it happened.
+  it "completes in the palette every kind the shell completions call live" do
+    model = completion_model
+    palette_specs = Obsctl::Domain::CommandRegistry.for_surface(Obsctl::Domain::CommandSurface::Palette)
+
+    not_completed = Obsctl::CLI::Completions::SOURCES.keys.select do |kind|
+      spec = palette_specs.find { |candidate| candidate.arguments.first? == kind }
+      # A kind no palette command takes is not the palette's business.
+      next false unless spec
+
+      Obsctl::TUI::Completion.compute("/#{spec.name} ", model).empty?
+    end
+
+    not_completed.should be_empty
   end
 end
 
