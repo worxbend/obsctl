@@ -86,7 +86,7 @@ describe Obsctl::TUI::Model do
     ])
     set_scene_profiles(
       model,
-      Obsctl::TUI::SceneProfiles.empty.upsert("streaming", Set{"Cam"}).activate("streaming"),
+      scene_profiles_fixture([{"streaming", ["Cam"]}], active: "streaming"),
       baseline_hidden: ["Utility"]
     )
 
@@ -104,7 +104,7 @@ describe Obsctl::TUI::Model do
       Obsctl::OBS::State::SceneState.new("Main", active: true),
       Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
     ])
-    set_scene_profiles(model, Obsctl::TUI::SceneProfiles.empty.activate("missing"), baseline_hidden: ["Utility"])
+    set_scene_profiles(model, scene_profiles_fixture(active: "missing"), baseline_hidden: ["Utility"])
 
     model.scenes.map(&.name).should eq(["Main"])
   end
@@ -125,7 +125,7 @@ describe Obsctl::TUI::Model do
   it "puts show-every-scene first and marks it current while no profile is active" do
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot
-    set_scene_profiles(model, Obsctl::TUI::SceneProfiles.empty.upsert("streaming", Set{"Cam"}).upsert("editing", Set(String).new))
+    set_scene_profiles(model, scene_profiles_fixture([{"streaming", ["Cam"]}, {"editing", [] of String}]))
 
     entries = model.scene_profile_list_entries
 
@@ -140,7 +140,7 @@ describe Obsctl::TUI::Model do
   it "marks the saved profile that is in effect rather than the first row" do
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot
-    set_scene_profiles(model, Obsctl::TUI::SceneProfiles.empty.upsert("streaming", Set{"Cam"}).upsert("editing", Set(String).new).activate("editing"))
+    set_scene_profiles(model, scene_profiles_fixture([{"streaming", ["Cam"]}, {"editing", [] of String}], active: "editing"))
 
     entries = model.scene_profile_list_entries
 
@@ -150,7 +150,7 @@ describe Obsctl::TUI::Model do
 
   it "labels rows by their own number and leaves a tenth profile unlabelled" do
     profiles = Obsctl::TUI::SceneProfiles.empty
-    10.times { |index| profiles = profiles.upsert("profile #{index}", Set(String).new) }
+    10.times { |index| profiles = with_profile(profiles, "profile #{index}") }
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot
     set_scene_profiles(model, profiles)
@@ -168,10 +168,10 @@ describe Obsctl::TUI::Model do
   it "clamps the scene profile list cursor after profiles are removed" do
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot
-    set_scene_profiles(model, Obsctl::TUI::SceneProfiles.empty.upsert("streaming", Set{"Cam"}).upsert("editing", Set(String).new))
+    set_scene_profiles(model, scene_profiles_fixture([{"streaming", ["Cam"]}, {"editing", [] of String}]))
     model.scene_profile_list.cursor = 2
 
-    set_scene_profiles(model, model.scene_profiles.delete("editing"))
+    set_scene_profiles(model, without_profile(model.scene_profiles, "editing"))
     model.clamp_cursors
 
     # One row per profile plus the show-every-scene row, so two rows and a

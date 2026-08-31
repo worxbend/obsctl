@@ -14,12 +14,15 @@ module Obsctl
 
     # Every profile the dashboard knows about, plus which one is in effect.
     #
-    # Deliberately free of any `config` dependency so `model.cr` can require it
-    # without dragging the config layer into the model. Translating to and from
-    # the on-disk shape is `SceneProfilePersistence`'s job.
+    # A read model, not an editable collection. The daemon owns every write:
+    # the dashboard is not allowed to touch the config file at all, so saving,
+    # deleting and activating a profile each go out as an IPC command and come
+    # back as a fresh snapshot, out of which `Model#scene_profiles` builds this
+    # struct anew. Nothing survives from one call to the next, which is why the
+    # only members here are the questions the widgets ask.
     #
-    # Every operation returns a new value instead of mutating, so applying an
-    # edit is one assignment on the model.
+    # Deliberately free of any `config` dependency so `model.cr` can require it
+    # without dragging the config layer into the model.
     struct SceneProfiles
       getter profiles : Array(SceneProfile)
       # The profile in effect, or nil for "filter nothing here".
@@ -53,34 +56,6 @@ module Obsctl
       # same question the daemon will answer.
       def index_of(name : String) : Int32?
         @profiles.index { |profile| Domain::SceneProfileNames.same?(profile.name, name) }
-      end
-
-      # Replaces the profile with this name, or appends it when it is new, so
-      # "save" is one operation whether the user is editing or creating.
-      def upsert(name : String, hidden : Set(String)) : self
-        profile = SceneProfile.new(name, hidden.dup)
-        updated = @profiles.dup
-        if index = index_of(name)
-          updated[index] = profile
-        else
-          updated << profile
-        end
-        SceneProfiles.new(updated, @active)
-      end
-
-      # Removes a profile, and stops pointing at it if it was the active one.
-      #
-      # Clearing `active` here rather than leaving it dangling: the config
-      # schema treats an `active` naming no profile as a warning and the
-      # dashboard degrades it to "every scene visible", so a delete that left
-      # the name behind would write a file that warns about itself.
-      def delete(name : String) : self
-        updated = @profiles.reject { |profile| profile.name == name }
-        SceneProfiles.new(updated, @active == name ? nil : @active)
-      end
-
-      def activate(name : String?) : self
-        SceneProfiles.new(@profiles, name)
       end
     end
   end

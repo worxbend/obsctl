@@ -87,3 +87,51 @@ def scene_profile_spec_snapshot(scene_names = ["Main", "Cam", "Utility Cam", "BR
     audio_inputs: [] of Obsctl::OBS::State::AudioState
   )
 end
+
+# Builds a `SceneProfiles` value straight from the finished list.
+#
+# `TUI::SceneProfiles` is a read model with no `upsert`, `delete` or `activate`
+# on it -- the daemon owns every write -- so a spec states the list it wants
+# rather than replaying the sequence of edits that would have produced it,
+# which is also how the dashboard receives it: as a finished snapshot. Each
+# entry is a profile name and the scenes it hides; `active` names the profile
+# in effect and defaults to none.
+def scene_profiles_fixture(
+  entries : Array(Tuple(String, Array(String))) = [] of Tuple(String, Array(String)),
+  active : String? = nil,
+) : Obsctl::TUI::SceneProfiles
+  Obsctl::TUI::SceneProfiles.new(
+    entries.map { |(name, hidden)| Obsctl::TUI::SceneProfile.new(name, hidden.to_set) },
+    active
+  )
+end
+
+# The same list with one profile added (or replaced, when the name is already
+# there) and the same list with one profile taken out.
+#
+# For the specs that are *about* a list changing -- a cursor that has to be
+# pulled back in after a profile is deleted, for instance -- where restating
+# the shorter list would hide the very thing under test. `without_profile`
+# drops the `active` pointer along with the profile it named, the way the
+# daemon does, so it never leaves the config naming a profile that is gone.
+def with_profile(
+  profiles : Obsctl::TUI::SceneProfiles,
+  name : String,
+  hidden : Enumerable(String) = [] of String,
+) : Obsctl::TUI::SceneProfiles
+  updated = profiles.profiles.dup
+  profile = Obsctl::TUI::SceneProfile.new(name, hidden.to_set)
+  if index = profiles.index_of(name)
+    updated[index] = profile
+  else
+    updated << profile
+  end
+  Obsctl::TUI::SceneProfiles.new(updated, profiles.active)
+end
+
+def without_profile(profiles : Obsctl::TUI::SceneProfiles, name : String) : Obsctl::TUI::SceneProfiles
+  Obsctl::TUI::SceneProfiles.new(
+    profiles.profiles.reject { |profile| profile.name == name },
+    profiles.active == name ? nil : profiles.active
+  )
+end

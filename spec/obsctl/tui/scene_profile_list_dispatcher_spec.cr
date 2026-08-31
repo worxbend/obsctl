@@ -33,12 +33,12 @@ private def act(dispatcher, kind : Obsctl::TUI::ActionKind, index : Int32? = nil
   dispatcher.handle(Obsctl::TUI::Action.new(kind, index: index))
 end
 
-private def saved_profiles(*entries : Tuple(String, Array(String)))
-  Obsctl::TUI::SceneProfiles.new(entries.to_a.map { |(name, hidden)| Obsctl::TUI::SceneProfile.new(name, hidden.to_set) })
+private def saved_profiles(*entries : Tuple(String, Array(String)), active : String? = nil)
+  scene_profiles_fixture(entries.to_a, active)
 end
 
-private def two_profiles
-  saved_profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam", "BRB Loop"]})
+private def two_profiles(active : String? = nil)
+  saved_profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam", "BRB Loop"]}, active: active)
 end
 
 # The scene-profile commands the dispatcher put on the wire, in order. The
@@ -52,7 +52,7 @@ describe "scene profile list dispatch" do
   describe "opening" do
     it "starts the cursor on the profile that is in effect" do
       model = list_model
-      set_scene_profiles(model, two_profiles.activate("editing"))
+      set_scene_profiles(model, two_profiles(active: "editing"))
       _, dispatcher = list_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfileList)
 
@@ -120,7 +120,7 @@ describe "scene profile list dispatch" do
 
       model.scenes.map(&.name).should eq(LIST_SCENES)
 
-      set_scene_profiles(model, two_profiles.activate("editing"))
+      set_scene_profiles(model, two_profiles(active: "editing"))
 
       model.scene_profiles.active.should eq("editing")
       model.scenes.map(&.name).should eq(["Main", "Utility Cam"])
@@ -128,7 +128,7 @@ describe "scene profile list dispatch" do
 
     it "clears from row 0 without forgetting the saved profiles" do
       model = list_model
-      set_scene_profiles(model, two_profiles.activate("editing"))
+      set_scene_profiles(model, two_profiles(active: "editing"))
       sent, dispatcher = list_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfileList)
       act(dispatcher, Obsctl::TUI::ActionKind::PickSceneProfile, index: 0)
@@ -150,7 +150,7 @@ describe "scene profile list dispatch" do
       _, dispatcher = list_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfileList)
       act(dispatcher, Obsctl::TUI::ActionKind::PickSceneProfile, index: 2)
-      set_scene_profiles(model, two_profiles.activate("editing"))
+      set_scene_profiles(model, two_profiles(active: "editing"))
       model.clamp_cursors
 
       model.scenes.size.should eq(2)
@@ -178,7 +178,7 @@ describe "scene profile list dispatch" do
       # malformed payload and a sentinel name would collide with a profile a
       # user is entitled to create.
       model = list_model
-      set_scene_profiles(model, two_profiles.activate("streaming"))
+      set_scene_profiles(model, two_profiles(active: "streaming"))
       sent, dispatcher = list_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfileList)
       act(dispatcher, Obsctl::TUI::ActionKind::PickSceneProfile, index: 0)
@@ -223,7 +223,7 @@ describe "scene profile list dispatch" do
   describe "closing" do
     it "leaves the profiles alone and disarms a pending delete" do
       model = list_model
-      set_scene_profiles(model, two_profiles.activate("streaming"))
+      set_scene_profiles(model, two_profiles(active: "streaming"))
       _, dispatcher = list_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfileList)
       act(dispatcher, Obsctl::TUI::ActionKind::SceneProfileListDeletePrompt)
@@ -282,7 +282,7 @@ describe "scene profile list dispatch" do
       # Creating a second profile used to begin by overwriting the active one,
       # because the editor always seeded itself from it.
       model = list_model
-      set_scene_profiles(model, two_profiles.activate("streaming"))
+      set_scene_profiles(model, two_profiles(active: "streaming"))
       _, dispatcher = list_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfileList)
       outcome = act(dispatcher, Obsctl::TUI::ActionKind::SceneProfileListNew)
@@ -311,7 +311,7 @@ describe "scene profile list dispatch" do
   describe "deleting" do
     it "asks the daemon to delete on the second `d`, and only then" do
       model = list_model
-      set_scene_profiles(model, two_profiles.activate("streaming"))
+      set_scene_profiles(model, two_profiles(active: "streaming"))
       sent, dispatcher = list_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfileList)
       armed = act(dispatcher, Obsctl::TUI::ActionKind::SceneProfileListDeletePrompt)
@@ -401,7 +401,7 @@ describe "scene profile activation and the scene cursors" do
     act(dispatcher, Obsctl::TUI::ActionKind::PickSceneProfile, index: 1)
     # The daemon's answer: the scene list shortens here, which is the moment
     # the cursors have to be re-seeked.
-    set_scene_profiles(model, saved_profiles({"streaming", ["Main"]}).activate("streaming"))
+    set_scene_profiles(model, saved_profiles({"streaming", ["Main"]}, active: "streaming"))
 
     model.scene_profiles.active.should eq("streaming")
     model.scenes.map(&.name).should eq(["Cam", "Utility Cam", "BRB Loop"])
@@ -417,7 +417,7 @@ describe "scene profile activation and the scene cursors" do
 
     act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfileList)
     act(dispatcher, Obsctl::TUI::ActionKind::PickSceneProfile, index: 1)
-    set_scene_profiles(model, saved_profiles({"solo", ["Cam", "Utility Cam", "BRB Loop"]}).activate("solo"))
+    set_scene_profiles(model, saved_profiles({"solo", ["Cam", "Utility Cam", "BRB Loop"]}, active: "solo"))
 
     model.scenes.map(&.name).should eq(["Main"])
     model.focused_scene.try(&.name).should eq("Main")
@@ -425,7 +425,7 @@ describe "scene profile activation and the scene cursors" do
 
   it "restores the highlight by name when deleting the active profile grows the list back" do
     model = list_model
-    set_scene_profiles(model, saved_profiles({"streaming", ["Main"]}).activate("streaming"))
+    set_scene_profiles(model, saved_profiles({"streaming", ["Main"]}, active: "streaming"))
     model.set_cursor(Obsctl::TUI::FocusPanel::Scenes, 0) # "Cam" while filtered
     _, dispatcher = list_dispatcher(model)
 

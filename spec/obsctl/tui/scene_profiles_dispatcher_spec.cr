@@ -33,8 +33,8 @@ private def act(dispatcher, kind : Obsctl::TUI::ActionKind, index : Int32? = nil
   dispatcher.handle(Obsctl::TUI::Action.new(kind, character: character, index: index))
 end
 
-private def profiles(*entries : Tuple(String, Array(String)))
-  Obsctl::TUI::SceneProfiles.new(entries.to_a.map { |(name, hidden)| Obsctl::TUI::SceneProfile.new(name, hidden.to_set) })
+private def profiles(*entries : Tuple(String, Array(String)), active : String? = nil)
+  scene_profiles_fixture(entries.to_a, active)
 end
 
 describe "scene profile editor dispatch" do
@@ -59,7 +59,7 @@ describe "scene profile editor dispatch" do
 
     it "seeds the draft from the active profile when there is one" do
       model = profile_model
-      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}).activate("streaming"))
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, active: "streaming"))
       _, dispatcher = profile_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
 
@@ -230,7 +230,7 @@ describe "scene profile editor dispatch" do
 
     it "saves under the existing name, which is what makes the daemon replace it" do
       model = profile_model
-      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", [] of String}).activate("streaming"))
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", [] of String}, active: "streaming"))
       sent, dispatcher = profile_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
       act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesToggleScene, index: 1)
@@ -258,7 +258,7 @@ describe "scene profile editor dispatch" do
       act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesSave)
       # The list shortens when the daemon pushes the saved profile back as the
       # active one, which is also when the cursors are re-seeked.
-      set_scene_profiles(model, profiles({"solo", ["Main", "Cam", "BRB Loop"]}).activate("solo"))
+      set_scene_profiles(model, profiles({"solo", ["Main", "Cam", "BRB Loop"]}, active: "solo"))
 
       model.scenes.map(&.name).should eq(["Utility Cam"])
       model.scene_cursor.should eq(0)
@@ -333,7 +333,7 @@ describe "scene profile editor dispatch" do
   describe "renaming" do
     it "renames the profile the draft came from instead of leaving a copy beside it" do
       model = profile_model
-      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam"]}).activate("streaming"))
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam"]}, active: "streaming"))
       sent, dispatcher = profile_dispatcher(model)
       # Opening on the active profile is what records where the draft came from.
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
@@ -357,7 +357,7 @@ describe "scene profile editor dispatch" do
 
     it "renames the profile Tab loaded, not the one that happened to be active" do
       model = profile_model
-      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam"]}).activate("streaming"))
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam"]}, active: "streaming"))
       sent, dispatcher = profile_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
       # One step off `streaming` lands on `editing`, so the draft's origin has
@@ -376,7 +376,7 @@ describe "scene profile editor dispatch" do
 
     it "refuses a name that belongs to a different saved profile" do
       model = profile_model
-      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam"]}).activate("streaming"))
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam"]}, active: "streaming"))
       _, dispatcher = profile_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
       act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesBeginNaming)
@@ -401,7 +401,7 @@ describe "scene profile editor dispatch" do
       # "does this name already belong to something" the same way the daemon
       # will, or its guard is decoration.
       model = profile_model
-      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam"]}).activate("streaming"))
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, {"editing", ["Cam"]}, active: "streaming"))
       sent, dispatcher = profile_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
       act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesBeginNaming)
@@ -420,7 +420,7 @@ describe "scene profile editor dispatch" do
       # very profile, so this is a rename of it and the daemon takes the new
       # spelling.
       model = profile_model
-      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}).activate("streaming"))
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, active: "streaming"))
       sent, dispatcher = profile_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
       act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesBeginNaming)
@@ -439,7 +439,7 @@ describe "scene profile editor dispatch" do
       # the guard has to let this through or the editor could never be saved
       # after a Ctrl-U.
       model = profile_model
-      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}).activate("streaming"))
+      set_scene_profiles(model, profiles({"streaming", ["BRB Loop"]}, active: "streaming"))
       sent, dispatcher = profile_dispatcher(model)
       act(dispatcher, Obsctl::TUI::ActionKind::OpenSceneProfiles)
       act(dispatcher, Obsctl::TUI::ActionKind::SceneProfilesToggleScene, index: 1)
