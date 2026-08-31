@@ -188,10 +188,15 @@ module Obsctl
         end
       end
 
-      # Naming a profile uses the same keys the palette line does, so the
-      # editing muscle memory carries over. Esc backs out to the list rather
-      # than closing the editor: the draft is still there to save under another
-      # name.
+      # Naming a profile borrows four of the palette line's editing keys, so
+      # that much muscle memory carries over: Esc or Ctrl-C to back out, Enter
+      # to submit, Backspace, and Ctrl-U to clear the line. It stops there --
+      # the palette's completion keys have nothing to complete in a name the
+      # reader is inventing, and its Ctrl-W (delete the last word) is not bound
+      # here.
+      #
+      # Esc backs out to the list rather than closing the editor: the draft is
+      # still there to save under another name.
       private def scene_profiles_name_key(key : CryTUI::KeyEvent) : Action?
         character = key.character
         control = key.modifiers.control?
@@ -439,6 +444,10 @@ module Obsctl
         nil
       end
 
+      # Esc, F2 and `q` close the appearance lab. Ctrl-C, which every modal
+      # above takes as a second way out, is not one of them: `handle_key`
+      # returns whatever this gives back, so while the lab is open Ctrl-C
+      # neither closes it nor reaches the dashboard's Quit binding.
       private def settings_key(key : CryTUI::KeyEvent) : Action?
         character = key.character
         return action(ActionKind::CloseSettings) if key.code.escape? || function?(key, 2) || character == 'q'
