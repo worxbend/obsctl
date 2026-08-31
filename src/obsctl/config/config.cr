@@ -1,4 +1,5 @@
 require "yaml"
+require "../domain/aliases"
 require "../domain/errors"
 require "../domain/scene_profiles"
 require "./config_value"
@@ -93,6 +94,14 @@ module Obsctl
         stale : Bool = false,
         hidden : Bool = false,
       )
+
+      # The three fields `Domain::Aliases` matches a user's target against.
+      #
+      # Translating here rather than in the resolver keeps the knowledge of
+      # this on-disk shape in the layer that already owns it.
+      def to_target_entry : Domain::TargetEntry
+        Domain::TargetEntry.new(name: @name, alias: @alias, shortcut: @shortcut)
+      end
     end
 
     # User configuration for one OBS audio input and its local aliases.
@@ -104,6 +113,12 @@ module Obsctl
         kind : String = "input",
         stale : Bool = false,
       )
+
+      # See `SceneConfig#to_target_entry` -- an audio input is resolved by the
+      # same three fields a scene is.
+      def to_target_entry : Domain::TargetEntry
+        Domain::TargetEntry.new(name: @name, alias: @alias, shortcut: @shortcut)
+      end
     end
 
     # Collection of configured OBS audio inputs.

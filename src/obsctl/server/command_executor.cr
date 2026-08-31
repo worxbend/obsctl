@@ -131,7 +131,7 @@ module Obsctl
       protected def set_scene(command : IPC::CommandPayload) : JSON::Any
         target = required_target(command)
         live_names = @state.snapshot.scenes.map(&.name)
-        scene = Domain::Aliases.resolve_scene(@config, target, live_names)
+        scene = Domain::Aliases.resolve_scene(@config.scenes.map(&.to_target_entry), target, live_names)
         @supervisor.with_client(&.set_scene(scene.name))
         refresh_snapshot
         object({"message" => "scene set: #{scene.name}"})
@@ -338,9 +338,9 @@ module Obsctl
         object({"message" => "#{muted ? "muted" : "unmuted"}: #{input.name}"})
       end
 
-      private def resolve_audio(target : String) : Config::AudioInputConfig
+      private def resolve_audio(target : String) : Domain::TargetEntry
         live_names = @state.snapshot.audio_inputs.map(&.name)
-        Domain::Aliases.resolve_audio(@config, target, live_names)
+        Domain::Aliases.resolve_audio(@config.audio.inputs.map(&.to_target_entry), target, live_names)
       end
 
       # Re-reads OBS state after a command that changed it.

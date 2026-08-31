@@ -1,29 +1,37 @@
-require "../config/config"
 require "./errors"
 
 module Obsctl
   module Domain
+    # The three fields target resolution matches on, and nothing else.
+    #
+    # Scenes and audio inputs are stored on disk as `Config::SceneConfig` and
+    # `Config::AudioInputConfig`, which also carry things resolution has no
+    # opinion about (a scene's group, an input's kind, the stale flag). This
+    # record is the explicit spelling of what `Aliases` actually reads, so the
+    # rule can live in `domain/` without the domain layer depending on the
+    # persistence shapes: the config layer converts into it (`to_target_entry`)
+    # rather than the resolver reaching into the config.
+    record TargetEntry, name : String, alias : String? = nil, shortcut : String? = nil
+
     # Resolves user targets against configured aliases, shortcuts, and OBS names.
     module Aliases
       # Resolves a scene target against the configured scenes, optionally also
       # accepting scene names discovered from the current OBS snapshot.
       def self.resolve_scene(
-        config : Config::Config,
+        entries : Array(TargetEntry),
         target : String,
         live_names : Array(String) = [] of String,
-      ) : Config::SceneConfig
-        entries = with_live_names(config.scenes, live_names) { |name| Config::SceneConfig.new(name) }
-        resolve(entries, target, TargetKind::Scene)
+      ) : TargetEntry
+        resolve(with_live_names(entries, live_names), target, TargetKind::Scene)
       end
 
       # Resolves an audio target using the same priority as scene resolution.
       def self.resolve_audio(
-        config : Config::Config,
+        entries : Array(TargetEntry),
         target : String,
         live_names : Array(String) = [] of String,
-      ) : Config::AudioInputConfig
-        entries = with_live_names(config.audio.inputs, live_names) { |name| Config::AudioInputConfig.new(name) }
-        resolve(entries, target, TargetKind::AudioInput)
+      ) : TargetEntry
+        resolve(with_live_names(entries, live_names), target, TargetKind::AudioInput)
       end
 
       # Returns the configured entries plus a bare entry for every live name
@@ -34,10 +42,10 @@ module Obsctl
       # legal target under its own name. Matching is exact — a configured
       # entry differing only in case does not suppress the live name, because
       # `resolve` is what decides how case-insensitive matches are ranked.
-      private def self.with_live_names(entries : Array(T), live_names : Array(String), & : String -> T) : Array(T) forall T
+      private def self.with_live_names(entries : Array(TargetEntry), live_names : Array(String)) : Array(TargetEntry)
         result = entries.dup
         live_names.each do |name|
-          result << yield name unless result.any? { |entry| entry.name == name }
+          result << TargetEntry.new(name) unless result.any? { |entry| entry.name == name }
         end
         result
       end
@@ -68,13 +76,9 @@ module Obsctl
       # compared case-insensitively. An exact match anywhere outranks every
       # case-insensitive one, which is why the two are collected separately
       # rather than resolved as they are found.
-      #
-      # `T` is instantiated per entry type, so reading the three members off
-      # the entry works for both `Config::SceneConfig` and
-      # `Config::AudioInputConfig` without either side describing its own key.
-      private def self.resolve(entries : Array(T), target : String, kind : TargetKind) : T forall T
-        exact = [] of T
-        insensitive = [] of T
+      private def self.resolve(entries : Array(TargetEntry), target : String, kind : TargetKind) : TargetEntry
+        exact = [] of TargetEntry
+        insensitive = [] of TargetEntry
 
         entries.each do |entry|
           if entry.shortcut == target || entry.alias == target || entry.name == target
