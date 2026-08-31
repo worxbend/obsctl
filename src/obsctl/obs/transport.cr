@@ -2,6 +2,7 @@ require "http/web_socket"
 require "json"
 require "./auth"
 require "./connection"
+require "./protocol/close_code"
 require "./protocol/request_id"
 require "./protocol/opcode"
 require "./protocol/json_value"
@@ -358,27 +359,7 @@ module Obsctl
       end
 
       private def websocket_close_message(code : HTTP::WebSocket::CloseCode, reason : String) : String
-        explanation = case code.value
-                      when 1000 then "normal closure requested by OBS"
-                      when 1001 then "OBS is going away or shutting down"
-                      when 1002 then "WebSocket protocol error"
-                      when 1005 then "OBS closed without a close status"
-                      when 1006 then "connection ended without a close frame"
-                      when 1011 then "OBS encountered an internal error"
-                      when 1012 then "OBS is restarting"
-                      when 1013 then "OBS asked the client to retry later"
-                      when 4000 then "OBS reported an unknown reason"
-                      when 4001 then "OBS could not decode a client message"
-                      when 4002 then "OBS received an unknown message type"
-                      when 4003 then "client sent a request before Identify completed"
-                      when 4004 then "client attempted to Identify more than once"
-                      when 4005 then "OBS authentication failed"
-                      when 4006 then "OBS does not support the requested RPC version"
-                      when 4007 then "OBS invalidated the session"
-                      when 4008 then "OBS does not support a requested feature"
-                      when 4009 then "an OBS request was missing its request type"
-                      else           "peer closed the WebSocket"
-                      end
+        explanation = Protocol::CloseCode.explanation(code.value)
         suffix = reason.empty? ? explanation : "#{explanation}; reason: #{reason}"
         "OBS WebSocket disconnected (close code #{code.value}: #{suffix})"
       end
