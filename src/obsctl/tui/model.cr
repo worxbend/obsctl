@@ -97,6 +97,50 @@ module Obsctl
       end
     end
 
+    # Moving a cursor through a list, and pulling it back inside one.
+    #
+    # The three modal cursors -- the scene picker, the scene-profile list and
+    # the scene-profile editor -- each wrote the move out longhand,
+    # `{cursor - 1, 0}.max` one way and `{cursor + 1, {count - 1, 0}.max}.min`
+    # the other, and `Model#clamp_cursors` wrote the clamp out four times over.
+    # Named once here, each site says which list it is moving through instead
+    # of restating what moving through a list means.
+    #
+    # `moved` is deliberately asymmetric: going up stops at zero without
+    # consulting `count`, while going down stops at the last row. A cursor
+    # sitting past the end -- which is what a list that has just shrunk leaves
+    # behind, until the next `clamp_cursors` -- therefore keeps its place when
+    # the user moves up, exactly as it did before. Folding the two directions
+    # into one `clamp` would read more tidily and would quietly change that.
+    #
+    # The dashboard panels' own `move_to` is a different rule and stays where
+    # it is: it clamps both directions, because `G` and a half-page jump have
+    # to land on the last row rather than past it.
+    module ListCursor
+      def self.moved(cursor : Int32, delta : Int32, count : Int32) : Int32
+        return {cursor + delta, 0}.max if delta < 0
+
+        {cursor + delta, {count - 1, 0}.max}.min
+      end
+
+      # `count - 1` floored at zero, so an empty list parks the cursor on row
+      # zero instead of on -1.
+      def self.clamped(cursor : Int32, count : Int32) : Int32
+        cursor.clamp(0, {count - 1, 0}.max)
+      end
+
+      # Mixed into the two modal states below, which each hold their cursor as
+      # `@cursor`. The cursors that are plain properties on `Model` reach the
+      # same rule through `ListCursor.moved` and `.clamped` instead.
+      def move(delta : Int32, count : Int32) : Nil
+        @cursor = ListCursor.moved(@cursor, delta, count)
+      end
+
+      def clamp(count : Int32) : Nil
+        @cursor = ListCursor.clamped(@cursor, count)
+      end
+    end
+
     # What the scene-profile editor is holding while it is open.
     #
     # The draft is deliberately separate from `Model#scene_profiles`: toggling a
@@ -105,6 +149,8 @@ module Obsctl
     # draft away. `name` is empty for a draft nobody has named yet, which is
     # what turns Enter into a prompt instead of a save.
     class SceneProfileEditorState
+      include ListCursor
+
       property active : Bool
       property cursor : Int32
       property name : String
@@ -135,6 +181,8 @@ module Obsctl
     # different things -- the same reason `SceneProfileEditorState` carries
     # `naming` rather than inferring it.
     class SceneProfileListState
+      include ListCursor
+
       property active : Bool
       property cursor : Int32
       # True after the first `d`, while a delete waits for the second press.
@@ -535,17 +583,24 @@ module Obsctl
       # scene deleted in OBS cannot leave a cursor pointing past the end.
       def clamp_cursors
         @cursors.each_key do |panel|
-          @cursors[panel] = @cursors[panel].clamp(0, {item_count(panel) - 1, 0}.max)
+          @cursors[panel] = ListCursor.clamped(@cursors[panel], item_count(panel))
         end
-        @scene_picker_cursor = @scene_picker_cursor.clamp(0, {scenes.size - 1, 0}.max)
+        @scene_picker_cursor = ListCursor.clamped(@scene_picker_cursor, scenes.size)
         # Against `all_scenes`, not `scenes`: the editor is the one surface
         # that lists hidden scenes too, so clamping it to the visible list
         # would put its cursor out of reach of exactly the rows it exists to
         # unhide.
-        @scene_profile_editor.cursor = @scene_profile_editor.cursor.clamp(0, {all_scenes.size - 1, 0}.max)
+        @scene_profile_editor.clamp(all_scenes.size)
         # Against the row count, which is one more than the number of profiles:
         # the "show every scene" row is a row like any other here.
-        @scene_profile_list.cursor = @scene_profile_list.cursor.clamp(0, {scene_profile_list_entries.size - 1, 0}.max)
+        @scene_profile_list.clamp(scene_profile_list_entries.size)
+      end
+
+      # Moves the scene picker's cursor. The picker keeps its cursor as a plain
+      # property rather than in a state object of its own -- it has no sub-mode
+      # to carry -- so this is where it reaches the shared rule.
+      def move_scene_picker_cursor(delta : Int32) : Nil
+        @scene_picker_cursor = ListCursor.moved(@scene_picker_cursor, delta, scenes.size)
       end
 
       # Re-seeks the two scene cursors onto the named scenes, and clamps

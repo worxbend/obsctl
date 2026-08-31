@@ -102,10 +102,10 @@ module Obsctl
           @model.scene_picker_active = false
           ActionOutcome::HANDLED
         when .scene_picker_navigate_up?
-          @model.scene_picker_cursor = {@model.scene_picker_cursor - 1, 0}.max
+          @model.move_scene_picker_cursor(-1)
           ActionOutcome::HANDLED
         when .scene_picker_navigate_down?
-          @model.scene_picker_cursor = {@model.scene_picker_cursor + 1, {@model.scenes.size - 1, 0}.max}.min
+          @model.move_scene_picker_cursor(1)
           ActionOutcome::HANDLED
         when .scene_picker_activate?
           switch_scene(@model.scene_picker_cursor)
@@ -153,10 +153,10 @@ module Obsctl
           list.confirming = false
           ActionOutcome::HANDLED
         when .scene_profile_list_navigate_up?
-          list.cursor = {list.cursor - 1, 0}.max
+          list.move(-1, @model.scene_profile_list_entries.size)
           ActionOutcome::HANDLED
         when .scene_profile_list_navigate_down?
-          list.cursor = {list.cursor + 1, {@model.scene_profile_list_entries.size - 1, 0}.max}.min
+          list.move(1, @model.scene_profile_list_entries.size)
           ActionOutcome::HANDLED
         when .scene_profile_list_activate?
           activate_scene_profile(list.cursor)
@@ -285,10 +285,10 @@ module Obsctl
           # evidence otherwise would be the scene list not changing.
           ActionOutcome.new(message: "scene profile editing cancelled")
         when .scene_profiles_navigate_up?
-          editor.cursor = {editor.cursor - 1, 0}.max
+          editor.move(-1, @model.all_scenes.size)
           ActionOutcome::HANDLED
         when .scene_profiles_navigate_down?
-          editor.cursor = {editor.cursor + 1, {@model.all_scenes.size - 1, 0}.max}.min
+          editor.move(1, @model.all_scenes.size)
           ActionOutcome::HANDLED
         when .scene_profiles_toggle_scene?
           toggle_scene_profile_scene(action.index)
