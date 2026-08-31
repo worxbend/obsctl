@@ -281,6 +281,36 @@ module CryTUI
         offset
       end
 
+      # The item drawn on `row` of `content`, or nil when that row holds no
+      # item -- it is outside the content box, or past the last item drawn.
+      # `content` is the box `render` fills, so a caller with a block passes
+      # what `Block#inner` gave it rather than the whole area.
+      #
+      # This is the inverse of the walk `render` performs, and the two only
+      # stay in agreement while they are read together, so it lives here
+      # rather than beside whichever caller needs to invert it.
+      def self.row_at(heights : Array(Int32), selected : Int32?, content : Rect, row : Int32) : Int32?
+        return if heights.empty? || content.height <= 0
+        return unless row >= content.y && row < content.bottom
+
+        offset = visible_offset(heights, selected, content.height)
+        y = content.y
+        (offset...heights.size).each do |index|
+          height = heights[index]
+          return index if row < y + height
+          y += height
+          break if y >= content.bottom
+        end
+        nil
+      end
+
+      # The same question for a list of `count` single-line items, which is
+      # every list that has not opted into taller rows and spares each caller
+      # spelling out an array of ones.
+      def self.row_at(count : Int32, selected : Int32?, content : Rect, row : Int32) : Int32?
+        row_at(Array.new({count, 0}.max, 1), selected, content, row)
+      end
+
       private def self.rows(heights : Array(Int32), from : Int32, through : Int32) : Int32
         return 0 if from > through
         heights[from..through].sum

@@ -49,7 +49,7 @@ module Obsctl
         themes = SettingsLayout.compute(area).themes
         return unless contains?(themes, column, row)
 
-        item_at(themes, Array.new(Theme::ALL.size, 1), model.settings_cursor, row)
+        item_at(themes, Theme::ALL.size, model.settings_cursor, row)
       end
 
       # The panel the command palette is drawn in, so a click outside it can be
@@ -77,7 +77,7 @@ module Obsctl
         rect = ScenePickerLayout.compute(area, model)
         return unless contains?(rect, column, row)
 
-        item_at(rect, Array.new(model.scene_picker_entries.size, 1), model.scene_picker_cursor, row)
+        item_at(rect, model.scene_picker_entries.size, model.scene_picker_cursor, row)
       end
 
       # The scene under the pointer in the scene-profile editor, or nil for a
@@ -95,7 +95,7 @@ module Obsctl
         # Against the list's own box, not the whole modal: the last row inside
         # the border belongs to the hints, and a click on it is a click on the
         # chrome rather than on the scene that would otherwise line up with it.
-        item_at(SceneProfilesLayout.list_area(rect), Array.new(model.all_scenes.size, 1), model.scene_profile_editor.cursor, row)
+        item_at(SceneProfilesLayout.list_area(rect), model.all_scenes.size, model.scene_profile_editor.cursor, row)
       end
 
       # The profile row under the pointer in the scene-profile list, or nil for a
@@ -110,7 +110,7 @@ module Obsctl
         # Against the list's own box, not the whole modal: the last row inside
         # the border belongs to the hints, and a click on it is a click on the
         # chrome rather than on the profile that would otherwise line up with it.
-        item_at(SceneProfileListLayout.list_area(rect), Array.new(model.scene_profile_list_entries.size, 1), model.scene_profile_list.cursor, row)
+        item_at(SceneProfileListLayout.list_area(rect), model.scene_profile_list_entries.size, model.scene_profile_list.cursor, row)
       end
 
       # Where the which-key menu is drawn for the sequence being typed.
@@ -130,7 +130,7 @@ module Obsctl
 
       private def list_target(panel : FocusPanel, area : CryTUI::Rect, model : Model, column : Int32, row : Int32) : PointerTarget?
         return unless contains?(area, column, row)
-        index = item_at(area, Array.new(model.item_count(panel), 1), model.cursor(panel), row)
+        index = item_at(area, model.item_count(panel), model.cursor(panel), row)
         PointerTarget.new(panel, index)
       end
 
@@ -147,21 +147,11 @@ module Obsctl
       end
 
       # The item occupying `row`, or nil when the pointer is on the chrome or
-      # past the last item.
-      private def item_at(area : CryTUI::Rect, heights : Array(Int32), cursor : Int32, row : Int32) : Int32?
-        inner = inner_area(area)
-        return if heights.empty? || inner.height <= 0
-        return unless row >= inner.y && row < inner.bottom
-
-        offset = CryTUI::Widgets::List.visible_offset(heights, cursor, inner.height)
-        y = inner.y
-        (offset...heights.size).each do |index|
-          height = heights[index]
-          return index if row < y + height
-          y += height
-          break if y >= inner.bottom
-        end
-        nil
+      # past the last item. Which row an item landed on is the list widget's
+      # own rule, so the walk lives there; all this adds is the border
+      # subtraction that turns a panel into the box the list was drawn in.
+      private def item_at(area : CryTUI::Rect, count : Int32, cursor : Int32, row : Int32) : Int32?
+        CryTUI::Widgets::List.row_at(count, cursor, inner_area(area), row)
       end
 
       private def inner_area(area : CryTUI::Rect) : CryTUI::Rect
