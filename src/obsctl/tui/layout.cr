@@ -264,6 +264,33 @@ module Obsctl
     module CenteredModal
       extend self
 
+      # One modal's sizing limits, carried together rather than passed as four
+      # loose numbers: `center` takes three same-typed `Int32` floors and
+      # ceilings in a row, so a transposed pair compiles either way and is
+      # found only by looking at the box on screen.
+      record Bounds,
+        min_width : Int32,
+        max_width : Int32,
+        min_height : Int32,
+        chrome_height : Int32
+
+      # The rectangle a modal gets: wide enough for everything it draws, then
+      # clamped and centred.
+      #
+      # `texts` is every string the box must not cut off -- its rows, and
+      # whatever else has to fit, such as the title or a row of key hints.
+      # Each gets `+ 2` for the border cell either side, which is the space
+      # the block takes before any of its content is drawn.
+      #
+      # A modal with no rows has nothing to show, so the empty rectangle is
+      # returned and the dashboard is left alone.
+      def measure(area : CryTUI::Rect, texts : Array(String), row_count : Int32, bounds : Bounds) : CryTUI::Rect
+        return CryTUI::Rect.new(area.x, area.y, 0, 0) if row_count.zero?
+
+        wanted = (texts.map { |text| CryTUI::TextWidth.width(text) + 2 } << bounds.min_width).max
+        center(area, wanted, row_count, bounds.chrome_height, bounds.min_width, bounds.max_width, bounds.min_height)
+      end
+
       # Clamps a modal's wanted size to the modal's own bounds and to the
       # terminal, then centres the box.
       #

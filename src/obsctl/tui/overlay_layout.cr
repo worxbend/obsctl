@@ -28,22 +28,19 @@ module Obsctl
       # leaving the dashboard alone and saying nothing.
       MIN_HEIGHT = 5
 
+      BOUNDS = CenteredModal::Bounds.new(MIN_WIDTH, MAX_WIDTH, MIN_HEIGHT, CHROME_HEIGHT)
+
       # Takes the model rather than a scene list so the title it measures is
       # built by the same code the widget draws, which is what stops the box
       # from being sized to something other than what it renders.
       def compute(area : CryTUI::Rect, model : Model) : CryTUI::Rect
         entries = model.scene_picker_entries
-        return CryTUI::Rect.new(area.x, area.y, 0, 0) if entries.empty?
-
-        widest = entries.max_of { |entry| CryTUI::TextWidth.width(row_text(entry)) }
+        texts = entries.map { |entry| row_text(entry) }
         # Widened to the title as well as to the rows: a picker whose scene
         # names are all short would otherwise be too narrow to print its own
         # "esc close" hint, which is the only way out of a modal.
-        # Both get `+ 2` for the border cell either side, which is the space
-        # the block takes before any of its content is drawn.
-        title = CryTUI::TextWidth.width(title_parts(model, entries.size).join)
-        wanted = {widest + 2, title + 2, MIN_WIDTH}.max
-        CenteredModal.center(area, wanted, entries.size, CHROME_HEIGHT, MIN_WIDTH, MAX_WIDTH, MIN_HEIGHT)
+        texts << title_parts(model, entries.size).join
+        CenteredModal.measure(area, texts, entries.size, BOUNDS)
       end
 
       # The title in the three pieces the widget styles separately: heading,
@@ -93,26 +90,24 @@ module Obsctl
       # leaving the dashboard alone and saying nothing.
       MIN_HEIGHT = 6
 
+      BOUNDS = CenteredModal::Bounds.new(MIN_WIDTH, MAX_WIDTH, MIN_HEIGHT, CHROME_HEIGHT)
+
       # Takes the model rather than a scene list so the title it measures is
       # built by the same code the widget draws, which is what stops the box
       # from being sized to something other than what it renders.
       def compute(area : CryTUI::Rect, model : Model) : CryTUI::Rect
         scenes = model.all_scenes
-        return CryTUI::Rect.new(area.x, area.y, 0, 0) if scenes.empty?
-
-        widest = scenes.max_of { |scene| CryTUI::TextWidth.width(row_text(model, scene)) }
+        texts = scenes.map { |scene| row_text(model, scene) }
         # Widened to the title and to the hint row as well as to the rows, so a
         # profile whose scene names are all short still has room for the keys
-        # that are the only way out of a modal. Each gets `+ 2` for the border
-        # cell either side.
+        # that are the only way out of a modal.
         #
         # The title is measured at the widest the box may end up, because that
         # is the most room the name it carries can be given; a narrower box
         # fits the name to what it actually has (see `title_parts`).
-        title = CryTUI::TextWidth.width(title_parts(model).join)
-        hints = CryTUI::TextWidth.width(hint_text(model))
-        wanted = {widest + 2, title + 2, hints + 2, MIN_WIDTH}.max
-        CenteredModal.center(area, wanted, scenes.size, CHROME_HEIGHT, MIN_WIDTH, MAX_WIDTH, MIN_HEIGHT)
+        texts << title_parts(model).join
+        texts << hint_text(model)
+        CenteredModal.measure(area, texts, scenes.size, BOUNDS)
       end
 
       # Shared with the list modal next door; see `CenteredModal` for why
@@ -249,27 +244,24 @@ module Obsctl
       # saying nothing.
       MIN_HEIGHT = 6
 
+      BOUNDS = CenteredModal::Bounds.new(MIN_WIDTH, MAX_WIDTH, MIN_HEIGHT, CHROME_HEIGHT)
+
       # Takes the model rather than an entry list so the title it measures is
       # built by the same code the widget draws, which is what stops the box
       # from being sized to something other than what it renders.
       def compute(area : CryTUI::Rect, model : Model) : CryTUI::Rect
         entries = model.scene_profile_list_entries
-        return CryTUI::Rect.new(area.x, area.y, 0, 0) if entries.empty?
-
-        widest = entries.max_of { |entry| CryTUI::TextWidth.width(row_text(model, entry)) }
+        texts = entries.map { |entry| row_text(model, entry) }
         # Widened to the title and to the hint row as well as to the rows, so a
         # list whose profile names are all short still has room for the keys
-        # that are the only way out of a modal. Each gets `+ 2` for the border
-        # cell either side, which is the space the block takes before any of
-        # its content is drawn.
+        # that are the only way out of a modal.
         #
         # Measured against the browsing hints even while a delete is armed:
         # arming one must not resize the box, or the row the reader is about to
         # press a second time moves out from under the pointer.
-        title = CryTUI::TextWidth.width(title_parts(model, entries.size).join)
-        hints = CryTUI::TextWidth.width(browsing_hint_text(model, MAX_WIDTH))
-        wanted = {widest + 2, title + 2, hints + 2, MIN_WIDTH}.max
-        CenteredModal.center(area, wanted, entries.size, CHROME_HEIGHT, MIN_WIDTH, MAX_WIDTH, MIN_HEIGHT)
+        texts << title_parts(model, entries.size).join
+        texts << browsing_hint_text(model, MAX_WIDTH)
+        CenteredModal.measure(area, texts, entries.size, BOUNDS)
       end
 
       # Shared with the editor modal next door; see `CenteredModal` for why
