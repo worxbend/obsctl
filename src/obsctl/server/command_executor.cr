@@ -241,12 +241,16 @@ module Obsctl
       # list change without a round trip to OBS -- and what keeps every client
       # agreeing about which scenes are hidden, since they all read the answer
       # the daemon resolved rather than resolving it themselves.
+      #
+      # The four that edit do it on `@config.copy` and never on `@config`
+      # itself: the shared object is adopted only once the file write succeeded,
+      # so a command that fails partway leaves the daemon on the config it had.
       protected def set_scene_profile(command : IPC::CommandPayload) : JSON::Any
         name = scene_profile_name(required_target(command), "target")
         profile = find_scene_profile(name)
         raise Domain::ConfigInvalid.new("scene profile not found: #{name}") unless profile
 
-        updated = config_copy
+        updated = @config.copy
         # The stored spelling, not the caller's: the config is the record of
         # what this profile is called, and a lookup that ignored case must not
         # rewrite the name on every use.
@@ -261,7 +265,7 @@ module Obsctl
       end
 
       protected def clear_scene_profile : JSON::Any
-        updated = config_copy
+        updated = @config.copy
         updated.active_scene_profile = nil
         persist_config!(updated)
         # Not an error when nothing was active: "stop filtering" is a statement
@@ -274,7 +278,7 @@ module Obsctl
         hidden = scene_profile_hidden(command)
         rename_from = command.rename_from.try { |value| scene_profile_name(value, "rename_from") }
 
-        updated = config_copy
+        updated = @config.copy
         placement = place_scene_profile(updated, name, rename_from)
         profile = Config::SceneProfileConfig.new(name: name, hidden: hidden)
         if index = placement[:index]
@@ -306,7 +310,7 @@ module Obsctl
         profile = find_scene_profile(name)
         raise Domain::ConfigInvalid.new("scene profile not found: #{name}") unless profile
 
-        updated = config_copy
+        updated = @config.copy
         updated.scene_profiles = updated.scene_profiles.reject { |entry| Domain::SceneProfileNames.same?(entry.name, profile.name) }
         # Deleting the profile in effect switches filtering off rather than
         # leaving `active_scene_profile` naming something that is gone.
@@ -396,15 +400,6 @@ module Obsctl
           normalized = Domain::SceneProfileNames.normalized_name(name)
           name if normalized && seen.add?(normalized)
         end
-      end
-
-      # A copy to edit, so a command that fails partway leaves the shared config
-      # object untouched -- `@config` is only replaced once the write succeeded.
-      private def config_copy : Config::Config
-        copy = Config::Config.new
-        copy.replace_with(@config)
-        copy.scene_profiles = @config.scene_profiles.dup
-        copy
       end
 
       # Writes the edited config, then adopts it in place and republishes the

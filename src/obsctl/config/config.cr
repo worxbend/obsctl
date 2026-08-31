@@ -315,6 +315,43 @@ module Obsctl
         @keymap = other.keymap
       end
 
+      # A copy safe to edit, so an operation that fails partway leaves the
+      # shared config object untouched.
+      #
+      # `replace_with` alone does not give that. It assigns every field by
+      # reference, so a config built that way still shares `scenes`,
+      # `scene_profiles`, `audio.inputs` and the keymap's key lists with the
+      # live object the supervisor, the command executor and the OBS client are
+      # all reading. Appending to any one of those would be visible daemon-wide
+      # before a single byte reached disk. Each of those collections is
+      # therefore given a copy of its own below.
+      #
+      # The copy is one level deep, which is what the callers need: an edit may
+      # add, remove, reorder or wholesale-replace entries in these collections,
+      # but must not reach inside an entry and mutate a collection the entry
+      # itself holds -- a scene profile's `hidden` list being the only one.
+      #
+      # Named `copy` rather than `dup` deliberately: Crystal's `Object#dup` is
+      # shallow by contract, and callers already rely on `Config#dup` being
+      # exactly that.
+      #
+      # Every field carrying a collection is listed deliberately, for the same
+      # reason `replace_with` lists every field: an omission here is silent.
+      def copy : self
+        copy = Config.new
+        copy.replace_with(self)
+        copy.scenes = @scenes.dup
+        copy.scene_profiles = @scene_profiles.dup
+        copy.audio = @audio.copy_with(inputs: @audio.inputs.dup)
+        copy.keymap = @keymap.copy_with(
+          quit: @keymap.quit.dup,
+          command_palette: @keymap.command_palette.dup,
+          reload_config: @keymap.reload_config.dup,
+          dump_config: @keymap.dump_config.dup,
+        )
+        copy
+      end
+
       # Parses YAML into the typed config model and rejects unsupported top-level
       # keys so writes cannot silently discard user data.
       def self.from_yaml(yaml : String) : self

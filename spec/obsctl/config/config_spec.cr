@@ -260,4 +260,59 @@ describe Obsctl::Config::Config do
     reparsed = Obsctl::Config::Config.from_yaml(config.to_yaml)
     reparsed.ui.should eq(config.ui)
   end
+
+  # `CommandExecutor` edits a copy and only adopts it once the write to disk
+  # succeeded. That promise is worth nothing if the copy shares its collections
+  # with the live object, so every collection is pinned here rather than only
+  # the ones today's handlers happen to touch.
+  it "detaches every mutable collection when copying a config" do
+    config = Obsctl::Config::Config.new(
+      scenes: [Obsctl::Config::SceneConfig.new(name: "Main")],
+      scene_profiles: [Obsctl::Config::SceneProfileConfig.new(name: "streaming")],
+      audio: Obsctl::Config::AudioConfig.new(
+        inputs: [Obsctl::Config::AudioInputConfig.new(name: "Mic/Aux")]
+      ),
+    )
+
+    copy = config.copy
+    copy.scenes << Obsctl::Config::SceneConfig.new(name: "Cam 2")
+    copy.scene_profiles << Obsctl::Config::SceneProfileConfig.new(name: "recording")
+    copy.audio.inputs << Obsctl::Config::AudioInputConfig.new(name: "Desktop Audio")
+    copy.keymap.quit << "ctrl+d"
+
+    config.scenes.map(&.name).should eq(["Main"])
+    config.scene_profiles.map(&.name).should eq(["streaming"])
+    config.audio.inputs.map(&.name).should eq(["Mic/Aux"])
+    config.keymap.quit.should eq(["q", "ctrl+c"])
+  end
+
+  it "carries every setting across a copy" do
+    original = Obsctl::Config::Config.from_yaml(<<-YAML)
+      version: 1
+      server:
+        pid_file: "/run/obsctl.pid"
+      connection:
+        host: "10.0.0.2"
+        password_env: ""
+      reconnect:
+        initial_delay_ms: 900
+      scenes:
+        - name: "Main"
+          hidden: true
+      scene_profiles:
+        - name: "streaming"
+          hidden: ["Main"]
+      active_scene_profile: "streaming"
+      audio:
+        inputs:
+          - name: "Mic/Aux"
+            alias: "mic"
+      ui:
+        theme: "custom"
+      keymap:
+        quit: ["Q"]
+      YAML
+
+    original.copy.to_yaml.should eq(original.to_yaml)
+  end
 end
