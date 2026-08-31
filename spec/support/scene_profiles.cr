@@ -9,7 +9,7 @@ require "../../src/obsctl/tui/model"
 # A spec that only set `snapshot.scene_profiles` would therefore see an
 # unfiltered scene list and prove nothing, so this helper does both halves --
 # it lists the profiles *and* re-resolves `hidden` -- which is exactly the pair
-# `OBS::Client#scene_snapshot` and `#scene_profile_snapshot` produce together.
+# `Server::SnapshotAssembler.scenes` and `.scene_profiles` produce together.
 #
 # Kept in one place because getting only half of it right is the failure mode
 # that would make these specs pass against a dashboard that had gone back to

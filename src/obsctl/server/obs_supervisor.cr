@@ -8,6 +8,7 @@ require "../runtime/logger"
 require "../runtime/reconnect_policy"
 require "./log_payload"
 require "./reconnect_signal"
+require "./snapshot_assembler"
 require "./state_store"
 
 module Obsctl
@@ -162,7 +163,7 @@ module Obsctl
             client.connect
             break unless claim_client(generation, client)
 
-            @state.mark_connected(client.snapshot)
+            @state.mark_connected(SnapshotAssembler.compose(client, @config))
             publish_log("info", "obs_connected", "Connected to OBS WebSocket")
             attempt = 0
 
@@ -378,16 +379,19 @@ module Obsctl
         when OBS::Protocol::ObsEvent::InputVolumeChanged
           @state.update_input_volume(translated.input_name, translated.volume_mul, translated.volume_db)
         when OBS::Protocol::ObsEvent::SceneListChanged
-          refresh = client.scene_snapshot
-          @state.update_scenes(refresh[:current_scene], refresh[:scenes])
+          refresh = client.scene_readings
+          @state.update_scenes(
+            refresh[:current_scene],
+            SnapshotAssembler.scenes(@config, refresh[:scene_names], refresh[:current_scene])
+          )
         when OBS::Protocol::ObsEvent::InputListChanged
-          @state.update_audio_inputs(client.audio_snapshot)
+          @state.update_audio_inputs(SnapshotAssembler.audio_inputs(client, @config))
         when OBS::Protocol::ObsEvent::StreamStateChanged
           @state.update_output(streaming: translated.active)
         when OBS::Protocol::ObsEvent::RecordStateChanged
           @state.update_output(recording: translated.active)
         when OBS::Protocol::ObsEvent::StudioContextChanged
-          @state.update(client.snapshot)
+          @state.update(SnapshotAssembler.compose(client, @config))
         end
       rescue ex : Domain::ObsctlError
         report_event_refresh_failure(ex)

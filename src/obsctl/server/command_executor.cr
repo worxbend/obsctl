@@ -15,6 +15,7 @@ require "../ipc/response"
 require "./log_payload"
 require "./obs_supervisor"
 require "./scene_profile_store"
+require "./snapshot_assembler"
 require "./state_store"
 
 module Obsctl
@@ -352,7 +353,7 @@ module Obsctl
       # `rescue` with an empty body, so the one path where the daemon knowingly
       # serves stale state was also the one path it said nothing about.
       private def refresh_snapshot : Nil
-        @supervisor.with_client { |client| @state.update(client.snapshot) }
+        @supervisor.with_client { |client| @state.update(SnapshotAssembler.compose(client, @config)) }
       rescue ex : Domain::ObsctlError
         publish_log(
           "debug",

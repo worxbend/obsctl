@@ -9,7 +9,8 @@ require "./requests/scenes"
 require "./requests/audio"
 require "./requests/outputs"
 require "./requests/studio"
-require "./state/obs_snapshot"
+require "./state/obs_stats"
+require "./state/output_state"
 require "./state/record_status"
 require "../config/config"
 require "../domain/errors"
@@ -235,48 +236,13 @@ module Obsctl
         )
       end
 
-      # Fetches only the scene list and current scene for targeted state updates.
-      def scene_snapshot : {current_scene: String?, scenes: Array(State::SceneState)}
-        current = current_scene
-        # Resolved once for the whole list rather than per scene, and read from
-        # here rather than from `configured.hidden`: an active scene profile
-        # replaces the per-scene flags outright, so this is the single point at
-        # which hidden-ness enters a snapshot. Every client reads the answer
-        # rather than working it out again.
-        visibility = @config.scene_visibility
-        scenes = scene_names.map do |name|
-          configured = @config.scenes.find { |scene| scene.name == name }
-          State::SceneState.new(
-            name: name,
-            alias: configured.try(&.alias),
-            shortcut: configured.try(&.shortcut),
-            group: configured.try(&.group),
-            active: current == name,
-            hidden: visibility.hidden?(name)
-          )
-        end
-        {current_scene: current, scenes: scenes}
+      # Reads the scene list and the current scene together, which is what a
+      # snapshot needs and what `SceneListChanged` invalidates in one go.
+      def scene_readings : {current_scene: String?, scene_names: Array(String)}
+        {current_scene: current_scene, scene_names: scene_names}
       end
 
-      # obsctl's own scene profiles, as clients see them. Read straight from the
-      # config: they are obsctl state, not OBS state, so nothing is asked of OBS
-      # here and they stay reportable while the connection is down.
-      def scene_profile_snapshot : {profiles: Array(State::SceneProfileState), active: String?}
-        profiles = @config.scene_profiles.map do |profile|
-          State::SceneProfileState.new(profile.name, profile.hidden)
-        end
-        # The stored spelling, and `nil` when the config names a profile that no
-        # longer exists: the snapshot must never advertise an active profile
-        # that is missing from the list beside it.
-        {profiles: profiles, active: @config.active_scene_profile_config.try(&.name)}
-      end
-
-      # Fetches only the audio input list for targeted state updates.
-      def audio_snapshot : Array(State::AudioState)
-        input_names.compact_map { |name| audio_state_for(name) }
-      end
-
-      # Reads one input's audio state, or nil when OBS will not report it.
+      # Reads one input's mute and volume, or nil when OBS will not report them.
       #
       # `GetInputList` returns every input, not only the audible ones: image,
       # color, and silent browser sources are all in there, and OBS answers a
@@ -289,53 +255,15 @@ module Obsctl
       # Any per-input read failure is treated the same way. An input OBS will
       # not describe is one obsctl cannot control, and dropping it from the
       # audio matrix is always better than dropping the OBS connection.
-      private def audio_state_for(name : String) : State::AudioState?
-        configured = @config.audio.inputs.find { |input| input.name == name }
-        muted = input_muted(name)
-        volume = input_volume(name)
-        State::AudioState.new(
-          name: name,
-          alias: configured.try(&.alias),
-          shortcut: configured.try(&.shortcut),
-          muted: muted,
-          volume_mul: volume[:mul],
-          volume_db: volume[:db],
-          volume_percent: volume[:percent]
-        )
+      def audio_readings(name : String) : NamedTuple(muted: Bool?, volume: NamedTuple(mul: Float64?, db: Float64?, percent: Int32?))?
+        {muted: input_muted(name), volume: input_volume(name)}
       rescue Domain::ObsRequestFailed
         nil
       end
 
-      # Fetches a full state snapshot for publication to local IPC clients.
-      def snapshot : State::ObsSnapshot
-        version_data = version
-        scene_data = scene_snapshot
-        audio = audio_snapshot
-        profile_data = profiles
-        collection_data = scene_collections
-        scene_profile_data = scene_profile_snapshot
-        output = output_details
-        State::ObsSnapshot.new(
-          connected: true,
-          obs_studio_version: version_data["obsVersion"]?.try(&.as_s),
-          obs_websocket_version: version_data["obsWebSocketVersion"]?.try(&.as_s),
-          current_scene: scene_data[:current_scene],
-          scenes: scene_data[:scenes],
-          audio_inputs: audio,
-          output: output[:state],
-          profiles: profile_data[:names],
-          current_profile: profile_data[:current],
-          scene_collections: collection_data[:names],
-          current_scene_collection: collection_data[:current],
-          scene_profiles: scene_profile_data[:profiles],
-          active_scene_profile: scene_profile_data[:active],
-          stats: stats,
-          stream_duration_ms: output[:stream_duration_ms],
-          record_duration_ms: output[:record_duration_ms]
-        )
-      end
-
-      private def output_details
+      # Reads stream and record status in one pass, since the two output flags
+      # and the two durations all come from the same pair of requests.
+      def output_details
         stream = response_data(Requests::Outputs::GET_STREAM_STATUS)
         record = response_data(Requests::Outputs::GET_RECORD_STATUS)
         {
