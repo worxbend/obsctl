@@ -13,15 +13,17 @@ module Obsctl
     class Codec
       # Encodes a single IPC message and appends the frame delimiter.
       def encode(message : Message) : String
-        message.to_json + "\n"
+        String.build do |io|
+          message.to_json(io)
+          io << '\n'
+        end
       end
 
       # Decodes a single IPC frame into a typed message.
       def decode(line : String) : Message
-        payload = line.strip
-        raise Domain::IpcProtocolError.new("empty IPC frame") if payload.empty?
+        raise Domain::IpcProtocolError.new("empty IPC frame") if blank_frame?(line)
 
-        root = JSON.parse(payload)
+        root = JSON.parse(line)
         type = string_field(root, "type")
 
         case type
@@ -125,6 +127,13 @@ module Obsctl
 
       private def bool_field(root : JSON::Any, key : String) : Bool
         root[key].as_bool
+      end
+
+      private def blank_frame?(line : String) : Bool
+        line.each_char do |char|
+          return false unless char.whitespace?
+        end
+        true
       end
     end
   end

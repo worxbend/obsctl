@@ -76,19 +76,34 @@ module CryTUI
     # Every cell paired with its screen position, for the full-redraw path
     # that cannot rely on a diff against the previous frame.
     def all_cells : Array(Tuple(Int32, Int32, Cell))
-      @cells.map_with_index do |cell, index|
-        x, y = position(index)
-        {x, y, cell}
+      changes = Array(Tuple(Int32, Int32, Cell)).new(@cells.size)
+      x = @area.x
+      y = @area.y
+      @cells.each do |cell|
+        changes << {x, y, cell}
+        x += 1
+        if x == @area.right
+          x = @area.x
+          y += 1
+        end
       end
+      changes
     end
 
     def diff(other : Buffer) : Array(Tuple(Int32, Int32, Cell))
       raise ArgumentError.new("buffer areas differ") unless @area == other.area
       changes = [] of Tuple(Int32, Int32, Cell)
+      x = @area.x
+      y = @area.y
       @cells.each_with_index do |cell, index|
-        unless rendered_identically?(cell, other.cells[index])
-          x, y = position(index)
-          changes << {x, y, other.cells[index]}
+        other_cell = other.cells[index]
+        unless rendered_identically?(cell, other_cell)
+          changes << {x, y, other_cell}
+        end
+        x += 1
+        if x == @area.right
+          x = @area.x
+          y += 1
         end
       end
       changes
@@ -128,11 +143,6 @@ module CryTUI
 
     private def rendered_identically?(cell : Cell, other : Cell) : Bool
       cell.symbol == other.symbol && cell.style == other.style && cell.continuation? == other.continuation?
-    end
-
-    # The inverse of `index`: where the cell at a row-major offset sits.
-    private def position(index : Int32) : Tuple(Int32, Int32)
-      {@area.x + index % @area.width, @area.y + index // @area.width}
     end
 
     private def index(x : Int, y : Int) : Int32

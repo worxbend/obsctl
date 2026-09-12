@@ -14,17 +14,23 @@ module Obsctl
 
         # Builds payload for requests that target one input by OBS name.
         def self.input_name(name : String) : JSON::Any
-          JSON.parse({"inputName" => name}.to_json)
+          JSON::Any.new({"inputName" => JSON::Any.new(name)} of String => JSON::Any)
         end
 
         # Builds payload for SetInputMute.
         def self.set_mute(name : String, muted : Bool) : JSON::Any
-          JSON.parse({"inputName" => name, "inputMuted" => muted}.to_json)
+          JSON::Any.new({
+            "inputName"  => JSON::Any.new(name),
+            "inputMuted" => JSON::Any.new(muted),
+          } of String => JSON::Any)
         end
 
         # Builds payload for SetInputVolume using obs-websocket multiplier units.
         def self.set_volume(name : String, multiplier : Float64) : JSON::Any
-          JSON.parse({"inputName" => name, "inputVolumeMul" => multiplier}.to_json)
+          JSON::Any.new({
+            "inputName"      => JSON::Any.new(name),
+            "inputVolumeMul" => JSON::Any.new(multiplier),
+          } of String => JSON::Any)
         end
       end
     end

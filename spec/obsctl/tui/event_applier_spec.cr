@@ -96,8 +96,16 @@ describe Obsctl::TUI::EventApplier do
   it "ignores malformed snapshots without losing the previous state" do
     model = Obsctl::TUI::Model.new
     Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("state", state_payload))
-    Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("state", JSON.parse(%({"broken":true}))))
+    Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("state", JSON.parse(%({"broken":true})))).should be_false
     model.current_scene.should eq("Main")
+  end
+
+  it "skips repaint requests for no-op pushed events" do
+    model = Obsctl::TUI::Model.new
+
+    Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("events", JSON.parse(%({"type":"SceneSwitched"})))).should be_false
+    Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("logs", JSON.parse(%({"level":"info"})))).should be_false
+    Obsctl::TUI::EventApplier.apply(model, Obsctl::IPC::Event.new("mystery", JSON.parse(%({"ok":true})))).should be_false
   end
 
   # The daemon pushes snapshots on its own schedule, and one can land while a

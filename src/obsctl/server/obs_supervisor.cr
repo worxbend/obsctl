@@ -402,10 +402,11 @@ module Obsctl
       end
 
       private def publish_event(event : OBS::Protocol::Event) : Nil
-        @event_broadcast.try(&.call(JSON.parse({
-          event_type: event.event_type,
-          event_data: event.event_data,
-        }.to_json)))
+        event_data = event.event_data || JSON::Any.new(nil)
+        @event_broadcast.try(&.call(JSON::Any.new({
+          "event_type" => JSON::Any.new(event.event_type),
+          "event_data" => event_data,
+        })))
       end
 
       private def publish_log(level : String, code : String, message : String) : Nil

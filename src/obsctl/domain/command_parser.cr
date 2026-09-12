@@ -22,12 +22,26 @@ module Obsctl
       # Shell words arrive with their quoting already resolved, so nothing here
       # is treated as quoted.
       def parse(argv : Array(String)) : Command
-        parse_tokens(argv.map { |value| Token.new(value) })
+        raise CommandParseError.new("empty command") if argv.empty?
+
+        name = sanitize_token(argv[0], "command")
+        spec = CommandRegistry[name]?
+        raise CommandParseError.new("unknown command: #{CommandRegistry.normalize(name)}") unless spec
+
+        arguments = argv[1..]
+        spec.validate_arity!(arguments.size)
+
+        sanitized_arguments = Array(String).new(arguments.size)
+        arguments.each do |value|
+          sanitized_arguments << sanitize_token(value.strip, "target")
+        end
+
+        spec.build.call(sanitized_arguments)
       end
 
       # Parses one command line, including quoted arguments.
       def parse(input : String) : Command
-        parse_tokens(tokenize(input.strip))
+        parse_tokens(tokenize(input))
       end
 
       private def parse_tokens(tokens : Array(Token)) : Command
@@ -38,10 +52,15 @@ module Obsctl
         raise CommandParseError.new("unknown command: #{CommandRegistry.normalize(name)}") unless spec
 
         arguments = tokens[1..]
-        spec.validate_arity!(arguments.map(&.value))
+        spec.validate_arity!(arguments.size)
         reject_quoted_numerics!(spec, arguments)
 
-        spec.build.call(arguments.map { |token| sanitize_token(token.value.strip, "target") })
+        sanitized_arguments = Array(String).new(arguments.size)
+        arguments.each do |token|
+          sanitized_arguments << sanitize_token(token.value.strip, "target")
+        end
+
+        spec.build.call(sanitized_arguments)
       end
 
       # A percentage is a number, not a name, so quoting one is a mistake worth

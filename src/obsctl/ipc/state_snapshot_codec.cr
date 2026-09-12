@@ -26,79 +26,80 @@ module Obsctl
     module StateSnapshotCodec
       # Converts a snapshot into the stable IPC state-event JSON shape.
       def self.encode(snapshot : OBS::State::ObsSnapshot) : JSON::Any
-        JSON.parse({
-          connected:                snapshot.connected,
-          obs_studio_version:       snapshot.obs_studio_version,
-          obs_websocket_version:    snapshot.obs_websocket_version,
-          current_scene:            snapshot.current_scene,
-          scenes:                   snapshot.scenes.map { |scene| encode_scene(scene) },
-          audio_inputs:             snapshot.audio_inputs.map { |input| encode_audio_input(input) },
-          output:                   encode_output(snapshot.output),
-          profiles:                 snapshot.profiles,
-          current_profile:          snapshot.current_profile,
-          scene_collections:        snapshot.scene_collections,
-          current_scene_collection: snapshot.current_scene_collection,
-          scene_profiles:           snapshot.scene_profiles.map { |profile| encode_scene_profile(profile) },
-          active_scene_profile:     snapshot.active_scene_profile,
-          stats:                    stats_json(snapshot.stats),
-          stream_bitrate_kbps:      snapshot.stream_bitrate_kbps,
-          stream_duration_ms:       snapshot.stream_duration_ms,
-          record_duration_ms:       snapshot.record_duration_ms,
-          last_error:               snapshot.last_error,
-          updated_at:               snapshot.updated_at.to_rfc3339,
-        }.to_json)
+        JSON::Any.new({
+          "connected"                => json_any(snapshot.connected),
+          "obs_studio_version"       => json_any(snapshot.obs_studio_version),
+          "obs_websocket_version"    => json_any(snapshot.obs_websocket_version),
+          "current_scene"            => json_any(snapshot.current_scene),
+          "scenes"                   => json_any(snapshot.scenes.map { |scene| encode_scene(scene) }),
+          "audio_inputs"             => json_any(snapshot.audio_inputs.map { |input| encode_audio_input(input) }),
+          "output"                   => encode_output(snapshot.output),
+          "profiles"                 => json_any(snapshot.profiles),
+          "current_profile"          => json_any(snapshot.current_profile),
+          "scene_collections"        => json_any(snapshot.scene_collections),
+          "current_scene_collection" => json_any(snapshot.current_scene_collection),
+          "scene_profiles"           => json_any(snapshot.scene_profiles.map { |profile| encode_scene_profile(profile) }),
+          "active_scene_profile"     => json_any(snapshot.active_scene_profile),
+          "stats"                    => encode_stats(snapshot.stats),
+          "stream_bitrate_kbps"      => json_any(snapshot.stream_bitrate_kbps),
+          "stream_duration_ms"       => json_any(snapshot.stream_duration_ms),
+          "record_duration_ms"       => json_any(snapshot.record_duration_ms),
+          "last_error"               => json_any(snapshot.last_error),
+          "updated_at"               => json_any(snapshot.updated_at.to_rfc3339),
+        } of String => JSON::Any)
       end
 
-      private def self.stats_json(stats : OBS::State::ObsStats?)
-        return unless stats
-        {
-          cpu_usage_percent:            stats.cpu_usage_percent,
-          memory_usage_mb:              stats.memory_usage_mb,
-          available_disk_space_mb:      stats.available_disk_space_mb,
-          active_fps:                   stats.active_fps,
-          average_frame_render_time_ms: stats.average_frame_render_time_ms,
-          render_skipped_frames:        stats.render_skipped_frames,
-          render_total_frames:          stats.render_total_frames,
-          output_skipped_frames:        stats.output_skipped_frames,
-          output_total_frames:          stats.output_total_frames,
-        }
+      private def self.encode_stats(stats : OBS::State::ObsStats?) : JSON::Any
+        return json_any(nil) unless stats
+
+        JSON::Any.new({
+          "cpu_usage_percent"            => json_any(stats.cpu_usage_percent),
+          "memory_usage_mb"              => json_any(stats.memory_usage_mb),
+          "available_disk_space_mb"      => json_any(stats.available_disk_space_mb),
+          "active_fps"                   => json_any(stats.active_fps),
+          "average_frame_render_time_ms" => json_any(stats.average_frame_render_time_ms),
+          "render_skipped_frames"        => json_any(stats.render_skipped_frames),
+          "render_total_frames"          => json_any(stats.render_total_frames),
+          "output_skipped_frames"        => json_any(stats.output_skipped_frames),
+          "output_total_frames"          => json_any(stats.output_total_frames),
+        } of String => JSON::Any)
       end
 
-      private def self.encode_scene(scene : OBS::State::SceneState)
-        {
-          name:     scene.name,
-          alias:    scene.alias,
-          shortcut: scene.shortcut,
-          group:    scene.group,
-          active:   scene.active,
-          hidden:   scene.hidden,
-        }
+      private def self.encode_scene(scene : OBS::State::SceneState) : JSON::Any
+        JSON::Any.new({
+          "name"     => json_any(scene.name),
+          "alias"    => json_any(scene.alias),
+          "shortcut" => json_any(scene.shortcut),
+          "group"    => json_any(scene.group),
+          "active"   => json_any(scene.active),
+          "hidden"   => json_any(scene.hidden),
+        } of String => JSON::Any)
       end
 
-      private def self.encode_audio_input(input : OBS::State::AudioState)
-        {
-          name:           input.name,
-          alias:          input.alias,
-          shortcut:       input.shortcut,
-          muted:          input.muted,
-          volume_mul:     input.volume_mul,
-          volume_db:      input.volume_db,
-          volume_percent: input.volume_percent,
-        }
+      private def self.encode_audio_input(input : OBS::State::AudioState) : JSON::Any
+        JSON::Any.new({
+          "name"           => json_any(input.name),
+          "alias"          => json_any(input.alias),
+          "shortcut"       => json_any(input.shortcut),
+          "muted"          => json_any(input.muted),
+          "volume_mul"     => json_any(input.volume_mul),
+          "volume_db"      => json_any(input.volume_db),
+          "volume_percent" => json_any(input.volume_percent),
+        } of String => JSON::Any)
       end
 
-      private def self.encode_output(output : OBS::State::OutputState)
-        {
-          streaming: output.streaming,
-          recording: output.recording,
-        }
+      private def self.encode_output(output : OBS::State::OutputState) : JSON::Any
+        JSON::Any.new({
+          "streaming" => json_any(output.streaming),
+          "recording" => json_any(output.recording),
+        } of String => JSON::Any)
       end
 
-      private def self.encode_scene_profile(profile : OBS::State::SceneProfileState)
-        {
-          name:   profile.name,
-          hidden: profile.hidden,
-        }
+      private def self.encode_scene_profile(profile : OBS::State::SceneProfileState) : JSON::Any
+        JSON::Any.new({
+          "name"   => json_any(profile.name),
+          "hidden" => json_any(profile.hidden),
+        } of String => JSON::Any)
       end
 
       def self.decode(data : JSON::Any) : OBS::State::ObsSnapshot?
@@ -218,6 +219,18 @@ module Obsctl
 
       private def self.parsed_time(value : String?) : Time
         value ? Time.parse_rfc3339(value) : Time.utc
+      end
+
+      private def self.json_any(value : (Bool | Float64 | Int32 | Int64 | String)?) : JSON::Any
+        JSON::Any.new(value)
+      end
+
+      private def self.json_any(value : Array(String)) : JSON::Any
+        JSON::Any.new(value.map { |entry| JSON::Any.new(entry) })
+      end
+
+      private def self.json_any(value : Array(JSON::Any)) : JSON::Any
+        JSON::Any.new(value)
       end
     end
   end

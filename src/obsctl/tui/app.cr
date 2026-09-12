@@ -149,23 +149,24 @@ module Obsctl
       # meters arrive tens of times a second and are content to be picked up by
       # the next refresh tick rather than forcing a frame each.
       def process(message : AppMessage, dispatcher : Dispatcher) : Bool
-        @needs_render = true unless message.is_a?(SubscriptionMessage)
         case message
         when CryTUI::KeyEvent
           handle_input_action(Input.handle_key(@model, message), dispatcher)
         when CryTUI::MouseEvent
           handle_input_action(Input.handle_mouse(@model, message, @area), dispatcher)
         when CryTUI::PasteEvent
-          dispatcher.paste(message.text)
+          @needs_render = true if dispatcher.paste(message.text)
           false
         when SubscriptionMessage
           handle_subscription_message(message)
         when DeferredOutcome
+          @needs_render = true
           apply_outcome(message.outcome)
         when InputClosed
           @exit_code = 1
           true
         when ResizeDetected
+          @needs_render = true
           false
         else
           false
@@ -210,7 +211,10 @@ module Obsctl
       end
 
       private def handle_input_action(action : Action?, dispatcher : Dispatcher) : Bool
-        action ? apply_outcome(dispatcher.handle(action)) : false
+        return false unless action
+
+        @needs_render = true
+        apply_outcome(dispatcher.handle(action))
       end
 
       private def handle_subscription_message(message : SubscriptionMessage) : Bool

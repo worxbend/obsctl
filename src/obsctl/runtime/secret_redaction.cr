@@ -27,12 +27,17 @@ module Obsctl
       private COLON_RULE          = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*:\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1: [redacted]"}
       private QUOTED_RULE         = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(\"[^\"]*\"|'[^']*')"), "\\1 [redacted]"}
       private COPULA_RULE         = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(is|was|equals|set to|configured as|provided as)\\s+#{SENSITIVE_VALUE_PATTERN}"), "\\1 \\2 [redacted]"}
+      private REDACTION_TRIGGER   = Regex.new("(?i)(?:#{URL_CREDENTIAL_PATTERN}|\\b#{SENSITIVE_KEY_PATTERN}\\b)")
 
       # Order matters: each rule is applied to the output of the previous one.
       private REDACTION_RULES = [URL_CREDENTIAL_RULE, ASSIGNMENT_RULE, COLON_RULE, QUOTED_RULE, COPULA_RULE]
 
       # Redacts secret-like values from a human-readable message.
       def self.redact(message : String) : String
+        # Most lines contain no secret markers; skip the full ruleset unless a
+        # coarse pass says one of the credential shapes is even possible.
+        return message unless REDACTION_TRIGGER.matches?(message)
+
         REDACTION_RULES.reduce(message) do |text, (pattern, replacement)|
           text.gsub(pattern, replacement)
         end

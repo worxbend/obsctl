@@ -20,6 +20,7 @@ module Obsctl
     module ConfigInspector
       # Stand-in printed instead of a secret's real value.
       REDACTED = "[redacted]"
+      @@default_flattened : Hash(String, String)?
 
       # Leaf key names whose value is a credential rather than a setting.
       #
@@ -79,8 +80,9 @@ module Obsctl
 
       # Returns every effective setting with the source that supplied it.
       def self.explain(path : String) : Array(Entry)
-        effective = flatten(ConfigLoader.new.load(path).to_yaml)
-        from_file = flatten(File.read(path)).keys
+        yaml = File.read(path)
+        effective = flatten(load_config(yaml).to_yaml)
+        from_file = flatten(yaml).keys
 
         effective.map do |key, value|
           Entry.new(key, redact(key, value), from_file.includes?(key) ? Source::File : Source::Default)
@@ -92,8 +94,8 @@ module Obsctl
       # A key present in only one side is still a change: `default` or
       # `current` is null to say which side lacks it.
       def self.diff(path : String) : Array(Change)
-        defaults = flatten(Config.default.to_yaml)
-        current = flatten(ConfigLoader.new.load(path).to_yaml)
+        defaults = default_flattened
+        current = flatten(load_config(File.read(path)).to_yaml)
 
         (defaults.keys | current.keys).sort!.compact_map do |key|
           default_value = defaults[key]?
@@ -154,7 +156,7 @@ module Obsctl
       # `connection.password` must not travel with it.
       private def self.redact(key : String, value : String?) : String?
         return value if value.nil?
-        SENSITIVE_LEAF_KEY.matches?(key.split('.').last) ? REDACTED : value
+        SENSITIVE_LEAF_KEY.matches?(leaf_key(key)) ? REDACTED : value
       end
 
       # Flattens a YAML document into dotted key paths.
@@ -192,6 +194,20 @@ module Obsctl
         raw = node.raw
         return "null" if raw.nil?
         raw.to_s
+      end
+
+      private def self.load_config(yaml : String) : Config
+        config = Config.from_yaml(yaml)
+        ConfigSchema.validate!(config)
+        config
+      end
+
+      private def self.default_flattened : Hash(String, String)
+        @@default_flattened ||= flatten(Config.default.to_yaml)
+      end
+
+      private def self.leaf_key(key : String) : String
+        key.byte_slice((key.rindex('.') || -1) + 1, key.bytesize) || key
       end
     end
   end

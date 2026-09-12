@@ -60,20 +60,24 @@ module Obsctl
       # Writes the frozen wire shape: all twelve keys, in this order, with an
       # absent value spelled `null` rather than omitted.
       def encode : JSON::Any
-        JSON.parse({
-          pid:                               pid,
-          uptime_seconds:                    uptime_seconds,
-          socket_path:                       socket_path,
-          client_count:                      client_count,
-          dropped_reconnect_diagnostic_logs: dropped_reconnect_diagnostic_logs,
-          obs_connected:                     obs_connected,
-          reconnecting:                      reconnecting,
-          last_connected_at:                 last_connected_at,
-          last_disconnected_at:              last_disconnected_at,
-          last_reconnect_attempt_at:         last_reconnect_attempt_at,
-          last_connection_failed_at:         last_connection_failed_at,
-          last_error:                        last_error,
-        }.to_json)
+        JSON::Any.new({
+          "pid"                               => json_any(pid),
+          "uptime_seconds"                    => json_any(uptime_seconds),
+          "socket_path"                       => json_any(socket_path),
+          "client_count"                      => json_any(client_count),
+          "dropped_reconnect_diagnostic_logs" => json_any(dropped_reconnect_diagnostic_logs),
+          "obs_connected"                     => json_any(obs_connected),
+          "reconnecting"                      => json_any(reconnecting),
+          "last_connected_at"                 => json_any(last_connected_at),
+          "last_disconnected_at"              => json_any(last_disconnected_at),
+          "last_reconnect_attempt_at"         => json_any(last_reconnect_attempt_at),
+          "last_connection_failed_at"         => json_any(last_connection_failed_at),
+          "last_error"                        => json_any(last_error),
+        } of String => JSON::Any)
+      end
+
+      private def json_any(value : (Bool | Int32 | Int64 | String)?) : JSON::Any
+        JSON::Any.new(value)
       end
     end
 
@@ -92,14 +96,14 @@ module Obsctl
       # shipping one alongside the structured fields means the TUI and any
       # generic client render this command like all the others.
       def self.encode(status : OBS::State::RecordStatus) : JSON::Any
-        JSON.parse({
-          message:     "recording #{status.state("state unknown")}",
-          active:      status.active,
-          paused:      status.paused,
-          timecode:    status.timecode,
-          duration_ms: status.duration_ms,
-          bytes:       status.bytes,
-        }.to_json)
+        JSON::Any.new({
+          "message"     => JSON::Any.new("recording #{status.state("state unknown")}"),
+          "active"      => JSON::Any.new(status.active),
+          "paused"      => JSON::Any.new(status.paused),
+          "timecode"    => JSON::Any.new(status.timecode),
+          "duration_ms" => JSON::Any.new(status.duration_ms),
+          "bytes"       => JSON::Any.new(status.bytes),
+        } of String => JSON::Any)
       end
 
       # Reads the structured fields back, leniently; `message` is not read

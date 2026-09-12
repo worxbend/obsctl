@@ -276,7 +276,9 @@ module CryTUI
         return offset.clamp(0, {heights.size - 1, 0}.max) unless selected
         selected = selected.clamp(0, heights.size - 1)
         offset = {offset, selected}.min.clamp(0, Int32::MAX)
-        while rows(heights, offset, selected) > height
+        rows = rows(heights, offset, selected)
+        while rows > height
+          rows -= heights[offset]
           offset += 1
         end
         offset
@@ -319,7 +321,10 @@ module CryTUI
 
       private def self.rows(heights : Array(Int32), from : Int32, through : Int32) : Int32
         return 0 if from > through
-        heights[from..through].sum
+
+        total = 0
+        (from..through).each { |index| total += heights[index] }
+        total
       end
 
       private def self.visible_offset(count : Int32, selected : Int32?, height : Int32, offset : Int32 = 0) : Int32

@@ -43,9 +43,14 @@ module Obsctl
       # entry differing only in case does not suppress the live name, because
       # `resolve` is what decides how case-insensitive matches are ranked.
       private def self.with_live_names(entries : Array(TargetEntry), live_names : Array(String)) : Array(TargetEntry)
+        claimed_names = {} of String => Bool
         result = entries.dup
+        entries.each { |entry| claimed_names[entry.name] = true }
         live_names.each do |name|
-          result << TargetEntry.new(name) unless result.any? { |entry| entry.name == name }
+          next if claimed_names.has_key?(name)
+
+          claimed_names[name] = true
+          result << TargetEntry.new(name)
         end
         result
       end

@@ -112,6 +112,19 @@ describe Obsctl::TUI::App do
     app.process(Obsctl::TUI::ResizeDetected.new, dispatcher).should be_false
   end
 
+  it "skips repainting ignored input that changed nothing" do
+    model = Obsctl::TUI::Model.new
+    app = Obsctl::TUI::App.new(model: model)
+    sender = ->(_payload : Obsctl::IPC::CommandPayload) { Obsctl::IPC::Response.new("test", true) }
+    dispatcher = Obsctl::TUI::Dispatcher.new(model, sender)
+
+    app.process(CryTUI::KeyEvent.character('z'), dispatcher).should be_false
+    app.needs_render?.should be_false
+
+    app.process(CryTUI::PasteEvent.new("ignored"), dispatcher).should be_false
+    app.needs_render?.should be_false
+  end
+
   it "renders unavailable, dashboard, and settings views through CryTUI" do
     model = Obsctl::TUI::Model.new(advanced_ui: false)
     app = Obsctl::TUI::App.new(model: model)

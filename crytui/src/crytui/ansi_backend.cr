@@ -62,50 +62,82 @@ module CryTUI
     end
 
     def draw(changes : Array(Tuple(Int32, Int32, Cell))) : Nil
-      changes.each do |x, y, cell|
-        next if cell.continuation?
-        @io << "\e[#{y + 1};#{x + 1}H"
-        write_style(cell.style) unless cell.style == @last_style
-        @io << cell.symbol
+      return if changes.empty?
+
+      rendered = String.build do |output|
+        changes.each do |x, y, cell|
+          next if cell.continuation?
+          output << "\e[" << y + 1 << ';' << x + 1 << 'H'
+          write_style(output, cell.style) unless cell.style == @last_style
+          output << cell.symbol
+        end
       end
+      @io << rendered
       @io.flush
     end
 
-    private def write_style(style : Style)
-      @io << "\e[0m"
-      codes = [] of String
+    # One buffered escape stream avoids per-cell writes to the terminal, which
+    # otherwise turn a large frame diff into hundreds of syscalls.
+    private def write_style(output : IO, style : Style)
+      output << "\e[0m"
+      wrote_code = false
       modifiers = style.modifiers
-      codes << "1" if modifiers.bold?
-      codes << "2" if modifiers.dim?
-      codes << "3" if modifiers.italic?
-      codes << "4" if modifiers.underlined?
-      codes << "7" if modifiers.reversed?
-      codes << "8" if modifiers.hidden?
-      codes << "9" if modifiers.crossed_out?
-      append_color(codes, style.foreground, true)
-      append_color(codes, style.background, false)
-      @io << "\e[#{codes.join(';')}m" unless codes.empty?
+      wrote_code = write_code(output, wrote_code, 1) if modifiers.bold?
+      wrote_code = write_code(output, wrote_code, 2) if modifiers.dim?
+      wrote_code = write_code(output, wrote_code, 3) if modifiers.italic?
+      wrote_code = write_code(output, wrote_code, 4) if modifiers.underlined?
+      wrote_code = write_code(output, wrote_code, 7) if modifiers.reversed?
+      wrote_code = write_code(output, wrote_code, 8) if modifiers.hidden?
+      wrote_code = write_code(output, wrote_code, 9) if modifiers.crossed_out?
+      wrote_code = append_color(output, wrote_code, style.foreground, true)
+      wrote_code = append_color(output, wrote_code, style.background, false)
+      output << 'm' if wrote_code
       @last_style = style
     end
 
-    private def append_color(codes : Array(String), color : Color?, foreground : Bool)
-      return unless color
+    private def append_color(output : IO, wrote_code : Bool, color : Color?, foreground : Bool) : Bool
+      return wrote_code unless color
+
       prefix = foreground ? 38 : 48
-      case color.kind
-      when .reset?
-        codes << (foreground ? "39" : "49")
-      when .indexed?
-        index = color.index
-        if index < 8
-          codes << ((foreground ? 30 : 40) + index).to_s
-        elsif index < 16
-          codes << ((foreground ? 90 : 100) + index - 8).to_s
-        else
-          codes << "#{prefix};5;#{index}"
-        end
-      when .rgb?
-        codes << "#{prefix};2;#{color.red};#{color.green};#{color.blue}"
-      end
+      result = case color.kind
+               when .reset?
+                 write_code(output, wrote_code, foreground ? 39 : 49)
+               when .indexed?
+                 index = color.index
+                 if index < 8
+                   write_code(output, wrote_code, (foreground ? 30 : 40) + index)
+                 elsif index < 16
+                   write_code(output, wrote_code, (foreground ? 90 : 100) + index - 8)
+                 else
+                   write_color_triplet(output, wrote_code, prefix, 5, index)
+                 end
+               when .rgb?
+                 write_rgb(output, wrote_code, prefix, color)
+               else
+                 wrote_code
+               end
+      result
+    end
+
+    private def write_code(output : IO, wrote_code : Bool, code : Int) : Bool
+      output << "\e[" unless wrote_code
+      output << ';' if wrote_code
+      output << code
+      true
+    end
+
+    private def write_color_triplet(output : IO, wrote_code : Bool, prefix : Int32, mode : Int32, value : UInt8) : Bool
+      output << "\e[" unless wrote_code
+      output << ';' if wrote_code
+      output << prefix << ';' << mode << ';' << value
+      true
+    end
+
+    private def write_rgb(output : IO, wrote_code : Bool, prefix : Int32, color : Color) : Bool
+      output << "\e[" unless wrote_code
+      output << ';' if wrote_code
+      output << prefix << ";2;" << color.red << ';' << color.green << ';' << color.blue
+      true
     end
   end
 end

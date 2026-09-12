@@ -63,7 +63,13 @@ module Obsctl
       def write(level : LogLevel, message : String) : Nil
         return if level.value < @level.value
 
-        line = "#{Time.utc.to_rfc3339} level=#{label_for(level)} #{self.class.redact_secrets(message)}"
+        line = String.build do |io|
+          io << Time.utc.to_rfc3339
+          io << " level="
+          io << label_for(level)
+          io << ' '
+          io << self.class.redact_secrets(message)
+        end
         write_file(line)
         write_output(line)
       end
@@ -96,7 +102,12 @@ module Obsctl
       end
 
       private def label_for(level : LogLevel) : String
-        level.to_s.downcase
+        case level
+        in .debug? then "debug"
+        in .info?  then "info"
+        in .warn?  then "warn"
+        in .error? then "error"
+        end
       end
     end
   end

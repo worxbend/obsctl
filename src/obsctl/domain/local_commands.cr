@@ -43,6 +43,8 @@ module Obsctl
     module LocalCommands
       extend self
 
+      EMPTY_SUBCOMMANDS = [] of String
+
       SPECS = [
         LocalCommandSpec.new(
           name: "init", summary: "Write a default config file"),
@@ -77,42 +79,67 @@ module Obsctl
       # listing it here would document and complete it twice.
       LOCALLY_ANSWERED_DAEMON_COMMANDS = ["validate-config"]
 
-      def []?(name : String) : LocalCommandSpec?
-        SPECS.find { |spec| spec.name == name }
+      BY_NAME = begin
+        table = {} of String => LocalCommandSpec
+        SPECS.each { |spec| table[spec.name] = spec }
+        table
       end
 
-      def names : Array(String)
-        SPECS.map(&.name)
-      end
+      NAMES = SPECS.map(&.name)
 
-      # Every word the shell should offer in the command position, including
-      # `help`, which `OptionParser` answers rather than `dispatch`.
-      def completion_names : Array(String)
-        names + ["help"]
-      end
+      COMPLETION_NAMES = NAMES + ["help"]
 
-      # The fixed subcommands one command takes, or an empty list.
-      def subcommands_for(name : String) : Array(String)
-        self[name]?.try(&.subcommands) || [] of String
-      end
-
-      # Fixed subcommands, keyed by the command that takes them.
-      def subcommands : Hash(String, Array(String))
+      SUBCOMMANDS = begin
         table = {} of String => Array(String)
         SPECS.each { |spec| table[spec.name] = spec.subcommands unless spec.subcommands.empty? }
         table
       end
 
+      JSON_NAMES = begin
+        table = {} of String => Bool
+        SPECS.each { |spec| table[spec.name] = true if spec.json? }
+        LOCALLY_ANSWERED_DAEMON_COMMANDS.each { |name| table[name] = true }
+        table
+      end
+
+      HELP_LINES = begin
+        usages = SPECS.map(&.usage)
+        width = usages.max_of?(&.size) || 0
+        SPECS.zip(usages).map { |spec, usage| "#{usage.ljust(width)}  #{spec.summary}" }
+      end
+
+      def []?(name : String) : LocalCommandSpec?
+        BY_NAME[name]?
+      end
+
+      def names : Array(String)
+        NAMES
+      end
+
+      # Every word the shell should offer in the command position, including
+      # `help`, which `OptionParser` answers rather than `dispatch`.
+      def completion_names : Array(String)
+        COMPLETION_NAMES
+      end
+
+      # The fixed subcommands one command takes, or an empty list.
+      def subcommands_for(name : String) : Array(String)
+        SUBCOMMANDS[name]? || EMPTY_SUBCOMMANDS
+      end
+
+      # Fixed subcommands, keyed by the command that takes them.
+      def subcommands : Hash(String, Array(String))
+        SUBCOMMANDS
+      end
+
       # True when this command can render a `--json` envelope.
       def json?(name : String) : Bool
-        self[name]?.try(&.json?) || LOCALLY_ANSWERED_DAEMON_COMMANDS.includes?(name)
+        JSON_NAMES.has_key?(name)
       end
 
       # One line per command, aligned on the usage column.
       def help_lines : Array(String)
-        usages = SPECS.map(&.usage)
-        width = usages.max_of?(&.size) || 0
-        SPECS.zip(usages).map { |spec, usage| "#{usage.ljust(width)}  #{spec.summary}" }
+        HELP_LINES
       end
     end
   end

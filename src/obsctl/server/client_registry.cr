@@ -3,6 +3,18 @@ require "../ipc/event"
 require "../domain/errors"
 
 module Obsctl
+  class IPC::ClientSession
+    # Writes a pre-encoded frame while sharing the same per-session write lock
+    # as ordinary message writes, so broadcasts can serialize once without
+    # risking interleaved bytes when a command reply is written concurrently.
+    def write_encoded_message(encoded_message : String) : Nil
+      @write_lock.synchronize do
+        socket << encoded_message
+        socket.flush
+      end
+    end
+  end
+
   module Server
     # Tracks IPC clients subscribed to pushed state, event, and log topics.
     class ClientRegistry
@@ -27,6 +39,7 @@ module Obsctl
       # Creates an empty registry.
       def initialize
         @subscriptions = {} of UInt64 => Subscription
+        @subscriptions_by_topic = {} of String => Array(Subscription)
         @lock = Mutex.new
       end
 
@@ -54,7 +67,11 @@ module Obsctl
         topic_set = validate_topics(topics)
         session.write_timeout = BROADCAST_WRITE_TIMEOUT
         @lock.synchronize do
-          @subscriptions[session.object_id] = Subscription.new(session, topic_set)
+          detach(@subscriptions[session.object_id]?) if @subscriptions.has_key?(session.object_id)
+
+          subscription = Subscription.new(session, topic_set)
+          @subscriptions[session.object_id] = subscription
+          attach(subscription)
           yield
         end
       end
@@ -67,7 +84,7 @@ module Obsctl
       # Removes a client session from the registry.
       def remove(session : IPC::ClientSession) : Nil
         @lock.synchronize do
-          @subscriptions.delete(session.object_id)
+          detach(@subscriptions.delete(session.object_id))
         end
       end
 
@@ -78,11 +95,11 @@ module Obsctl
 
       # Broadcasts a topic event to all matching subscribers.
       def broadcast(topic : String, data : JSON::Any? = nil) : Nil
-        event = IPC::Event.new(topic, data)
+        encoded_event = encode_event(topic, data)
         dead_sessions = [] of IPC::ClientSession
 
         subscriptions_for(topic).each do |subscription|
-          subscription.session.write_message(event)
+          subscription.session.write_encoded_message(encoded_event)
         rescue IO::Error
           # Covers both a closed peer and `IO::TimeoutError` from a peer that
           # stopped reading. A timed-out write may have left a partial line on
@@ -112,8 +129,33 @@ module Obsctl
       end
 
       private def subscriptions_for(topic : String) : Array(Subscription)
-        @lock.synchronize do
-          @subscriptions.values.select(&.topics.includes?(topic))
+        @lock.synchronize { @subscriptions_by_topic[topic]?.try(&.dup) || [] of Subscription }
+      end
+
+      private def encode_event(topic : String, data : JSON::Any?) : String
+        IPC::Event.new(topic, data).to_json + "\n"
+      end
+
+      private def attach(subscription : Subscription) : Nil
+        subscription.topics.each do |topic|
+          topic_subscriptions = @subscriptions_by_topic[topic]? || begin
+            created = [] of Subscription
+            @subscriptions_by_topic[topic] = created
+            created
+          end
+          topic_subscriptions << subscription
+        end
+      end
+
+      private def detach(subscription : Subscription?) : Nil
+        return unless subscription
+
+        subscription.topics.each do |topic|
+          topic_subscriptions = @subscriptions_by_topic[topic]?
+          next unless topic_subscriptions
+
+          topic_subscriptions.reject! { |entry| entry.session == subscription.session }
+          @subscriptions_by_topic.delete(topic) if topic_subscriptions.empty?
         end
       end
     end

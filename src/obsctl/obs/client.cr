@@ -37,6 +37,7 @@ module Obsctl
       # Kept as a class constant because it is part of this class's documented
       # behaviour; `Transport` owns the buffer itself.
       EVENT_BUFFER_SIZE = Transport::EVENT_BUFFER_SIZE
+      private EMPTY_OBJECT      = JSON::Any.new({} of String => JSON::Any)
 
       def initialize(
         @config : Config::Config,
@@ -281,7 +282,7 @@ module Obsctl
       # and get nil for what is not there, instead of each one guarding
       # against a missing body first.
       private def response_data(request_type : String, data : JSON::Any? = nil) : JSON::Any
-        request(request_type, data).response_data || JSON.parse("{}")
+        request(request_type, data).response_data || EMPTY_OBJECT
       end
 
       private def number(data : JSON::Any, key : String) : Float64?

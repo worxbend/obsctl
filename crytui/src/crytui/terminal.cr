@@ -63,6 +63,7 @@ module CryTUI
 
     def initialize(@backend : Backend)
       @previous = Buffer.new(@backend.size)
+      @current = Buffer.new(@backend.size)
       @active = false
       @force_full_redraw = false
     end
@@ -102,12 +103,13 @@ module CryTUI
 
     def draw(& : Frame ->) : Nil
       refresh_size
-      area = @backend.size
-      current = Buffer.new(area)
+      area = @current.area
+      current = @current
+      current.reset
       yield Frame.new(area, current)
       changes = @force_full_redraw ? current.all_cells : @previous.diff(current)
       @backend.draw(changes)
-      @previous = current
+      @previous, @current = current, @previous
       @force_full_redraw = false
     end
 
@@ -117,6 +119,7 @@ module CryTUI
 
       @backend.clear
       @previous = Buffer.new(area)
+      @current = Buffer.new(area)
       @force_full_redraw = true
     end
   end

@@ -8,8 +8,15 @@ module Obsctl
       # Returns the authentication response for the given password, salt, and
       # challenge. Callers must not log the returned value.
       def self.authentication(password : String, salt : String, challenge : String) : String
-        secret = Base64.strict_encode(OpenSSL::Digest.new("SHA256").update(password + salt).final)
-        Base64.strict_encode(OpenSSL::Digest.new("SHA256").update(secret + challenge).final)
+        secret = sha256_base64(password, salt)
+        sha256_base64(secret, challenge)
+      end
+
+      private def self.sha256_base64(left : String, right : String) : String
+        digest = OpenSSL::Digest.new("SHA256")
+        digest.update(left)
+        digest.update(right)
+        Base64.strict_encode(digest.final)
       end
     end
   end

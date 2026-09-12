@@ -368,19 +368,22 @@ module Obsctl
       end
 
       protected def server_status : JSON::Any
-        server_status_for(@state.snapshot)
+        snapshot, telemetry = @state.snapshot_with_telemetry
+        server_status_for(snapshot, telemetry)
       end
 
       protected def combined_status : JSON::Any
-        snapshot = @state.snapshot
+        snapshot, telemetry = @state.snapshot_with_telemetry
         object({
-          "server" => server_status_for(snapshot),
+          "server" => server_status_for(snapshot, telemetry),
           "obs"    => IPC::StateSnapshotCodec.encode(snapshot),
         })
       end
 
-      private def server_status_for(snapshot : OBS::State::ObsSnapshot) : JSON::Any
-        telemetry = @state.telemetry
+      private def server_status_for(
+        snapshot : OBS::State::ObsSnapshot,
+        telemetry : ServerTelemetry,
+      ) : JSON::Any
         IPC::ServerStatus.new(
           pid: Process.pid,
           uptime_seconds: (Time.utc - @started_at).total_seconds.to_i64,

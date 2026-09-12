@@ -11,11 +11,11 @@ module Obsctl
         GET_STATS                 = "GetStats"
 
         def self.profile(name : String) : JSON::Any
-          JSON.parse({"profileName" => name}.to_json)
+          JSON::Any.new({"profileName" => JSON::Any.new(name)} of String => JSON::Any)
         end
 
         def self.scene_collection(name : String) : JSON::Any
-          JSON.parse({"sceneCollectionName" => name}.to_json)
+          JSON::Any.new({"sceneCollectionName" => JSON::Any.new(name)} of String => JSON::Any)
         end
       end
     end

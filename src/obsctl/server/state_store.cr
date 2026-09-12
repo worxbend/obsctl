@@ -35,6 +35,12 @@ module Obsctl
         @lock.synchronize { @telemetry }
       end
 
+      # Returns the cached snapshot and reconnect telemetry from one critical
+      # section, so readers that need both do not queue for the mutex twice.
+      def snapshot_with_telemetry : {OBS::State::ObsSnapshot, ServerTelemetry}
+        @lock.synchronize { {@snapshot, @telemetry} }
+      end
+
       # Replaces the cached snapshot and publishes it to subscribers.
       def update(snapshot : OBS::State::ObsSnapshot) : Nil
         @lock.synchronize do

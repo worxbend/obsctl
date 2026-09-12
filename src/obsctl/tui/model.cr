@@ -244,6 +244,14 @@ module Obsctl
       # "the daemon has not been told yet", instead of relying on the push
       # happening to miss the debounce window.
       @pending_volumes : Hash(String, Int32)
+      # Derived collections are cached until the snapshot or pending preview
+      # they depend on changes, so the render loop can ask for them many times
+      # per frame without rebuilding the same arrays each time.
+      @audio_inputs_cache : Array(OBS::State::AudioState)?
+      @scenes_cache : Array(OBS::State::SceneState)?
+      @scene_profiles_cache : SceneProfiles?
+      @scene_picker_entries_cache : Array(ScenePicker::Entry)?
+      @scene_profile_list_entries_cache : Array(SceneProfileList::Entry)?
       property meter_levels : Hash(String, Float64)
       # The highest point each meter has reached and the frame it reached it
       # on. Storing the frame rather than decaying the value every tick keeps
@@ -287,6 +295,11 @@ module Obsctl
         @focus = FocusPanel::Scenes
         @cursors = FocusPanel.values.to_h { |panel| {panel, 0} }
         @pending_volumes = {} of String => Int32
+        @audio_inputs_cache = nil
+        @scenes_cache = nil
+        @scene_profiles_cache = nil
+        @scene_picker_entries_cache = nil
+        @scene_profile_list_entries_cache = nil
         @meter_levels = {} of String => Float64
         @meter_peaks = {} of String => Tuple(Float64, UInt64)
         @cpu_history = [] of Float64
@@ -304,21 +317,21 @@ module Obsctl
         @scene_profile_list = SceneProfileListState.new
       end
 
-      # The scene picker's rows, rebuilt from the current scenes on every call
-      # rather than stored.
+      # The scene picker's rows, cached until the snapshot changes.
       #
-      # Input resolution, the widget and the hit test all ask for them; a
-      # stored copy could disagree with the scene list after an OBS event lands
-      # mid-frame, which would point a label at the wrong scene.
+      # Input resolution, the widget and the hit test all ask for them during
+      # one frame, so caching keeps that frame from rebuilding the same labels
+      # several times while still invalidating before the next snapshot can
+      # change which scene a label points at.
       def scene_picker_entries : Array(ScenePicker::Entry)
-        ScenePicker.entries(scenes)
+        @scene_picker_entries_cache ||= ScenePicker.entries(scenes)
       end
 
-      # The scene-profile list's rows, rebuilt on every call rather than stored,
-      # for the same reason `scene_picker_entries` is: input resolution, the
-      # widget and the hit test all have to get the same answer.
+      # Cached for the same reason `scene_picker_entries` is: several callers
+      # need one frame-stable answer, and only a fresh snapshot can make that
+      # answer stale.
       def scene_profile_list_entries : Array(SceneProfileList::Entry)
-        SceneProfileList.entries(scene_profiles)
+        @scene_profile_list_entries_cache ||= SceneProfileList.entries(scene_profiles)
       end
 
       def rich_ui? : Bool
@@ -344,7 +357,7 @@ module Obsctl
       # same question again is exactly how a client ends up disagreeing with
       # the daemon about what should be on screen.
       def scenes : Array(OBS::State::SceneState)
-        all_scenes.reject(&.hidden)
+        @scenes_cache ||= all_scenes.reject(&.hidden)
       end
 
       # The saved scene profiles the daemon reported, and which one is in
@@ -352,17 +365,26 @@ module Obsctl
       # the dashboard, the CLI and a second dashboard all see one answer, and so
       # that a profile saved anywhere shows up here without a reload.
       def scene_profiles : SceneProfiles
-        snapshot = @snapshot
-        return SceneProfiles.empty unless snapshot
-
-        SceneProfiles.new(
-          snapshot.scene_profiles.map { |profile| SceneProfile.new(profile.name, profile.hidden.to_set) },
-          snapshot.active_scene_profile
-        )
+        @scene_profiles_cache ||= begin
+          if snapshot = @snapshot
+            SceneProfiles.new(
+              snapshot.scene_profiles.map { |profile| SceneProfile.new(profile.name, profile.hidden.to_set) },
+              snapshot.active_scene_profile
+            )
+          else
+            SceneProfiles.empty
+          end
+        end
       end
 
       def audio_inputs : Array(OBS::State::AudioState)
-        @snapshot.try(&.audio_inputs) || [] of OBS::State::AudioState
+        @audio_inputs_cache ||= begin
+          if snapshot = @snapshot
+            with_pending_volumes(snapshot.audio_inputs)
+          else
+            [] of OBS::State::AudioState
+          end
+        end
       end
 
       def profiles : Array(String)
@@ -443,19 +465,20 @@ module Obsctl
       # Applies an optimistic volume value so rapid keyboard changes render
       # immediately while the debounced OBS command is still pending.
       def preview_audio_volume(input_name : String, percent : Int32) : Nil
-        snapshot = @snapshot
-        return unless snapshot
+        return unless @snapshot
 
         bounded = percent.clamp(0, 100)
         @pending_volumes[input_name] = bounded
-        @snapshot = with_pending_volumes(snapshot)
+        invalidate_audio_cache
       end
 
       # Forgets the optimistic value for one input, because the command that
       # carried it has finished and the daemon's own snapshots are now the
       # better answer.
       def settle_volume(input_name : String) : Nil
-        @pending_volumes.delete(input_name)
+        return unless @pending_volumes.delete(input_name)
+
+        invalidate_audio_cache
       end
 
       # The single place a snapshot is stored, so the pending-edit rule cannot
@@ -478,23 +501,39 @@ module Obsctl
       def snapshot=(snapshot : OBS::State::ObsSnapshot?) : OBS::State::ObsSnapshot?
         focused = focused_scene.try(&.name)
         picked = scenes[@scene_picker_cursor]?.try(&.name)
-        @snapshot = snapshot.try { |value| with_pending_volumes(value) }
+        @snapshot = snapshot
+        invalidate_snapshot_caches
         retarget_scene_cursors(focused, picked)
         @snapshot
       end
 
-      private def with_pending_volumes(snapshot : OBS::State::ObsSnapshot) : OBS::State::ObsSnapshot
-        return snapshot if @pending_volumes.empty?
+      private def with_pending_volumes(inputs : Array(OBS::State::AudioState)) : Array(OBS::State::AudioState)
+        return inputs if @pending_volumes.empty?
 
-        inputs = snapshot.audio_inputs.map do |input|
+        updated = inputs.dup
+        changed = false
+        updated.each_with_index do |input, index|
           percent = @pending_volumes[input.name]?
-          next input unless percent
-          input.copy_with(
+          next unless percent
+          changed = true
+          updated[index] = input.copy_with(
             volume_mul: Domain::Volume.percent_to_mul(percent),
             volume_percent: percent
           )
         end
-        snapshot.copy_with(audio_inputs: inputs)
+        changed ? updated : inputs
+      end
+
+      private def invalidate_snapshot_caches : Nil
+        @audio_inputs_cache = nil
+        @scenes_cache = nil
+        @scene_profiles_cache = nil
+        @scene_picker_entries_cache = nil
+        @scene_profile_list_entries_cache = nil
+      end
+
+      private def invalidate_audio_cache : Nil
+        @audio_inputs_cache = nil
       end
 
       # Records a meter reading and raises the peak hold when the reading beats

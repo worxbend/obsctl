@@ -20,12 +20,12 @@ module Obsctl
       # that writes the daemon's own file — is the last point at which a
       # credential that leaked into an exception message can still be caught.
       def self.build(level : String, code : String, message : String, at : Time = Time.utc) : JSON::Any
-        JSON.parse({
-          level:      level,
-          code:       code,
-          message:    Runtime::Logger.redact_secrets(message),
-          created_at: at.to_rfc3339,
-        }.to_json)
+        JSON::Any.new({
+          "level"      => JSON::Any.new(level),
+          "code"       => JSON::Any.new(code),
+          "message"    => JSON::Any.new(Runtime::Logger.redact_secrets(message)),
+          "created_at" => JSON::Any.new(at.to_rfc3339),
+        })
       end
     end
   end

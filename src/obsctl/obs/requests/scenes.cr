@@ -11,7 +11,7 @@ module Obsctl
 
         # Builds payload for SetCurrentProgramScene.
         def self.set_current_program_scene(name : String) : JSON::Any
-          JSON.parse({"sceneName" => name}.to_json)
+          JSON::Any.new({"sceneName" => JSON::Any.new(name)} of String => JSON::Any)
         end
       end
     end

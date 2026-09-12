@@ -92,6 +92,14 @@ module CryTUI
   end
 
   class Layout
+    private record SolveCacheKey,
+      total : Int32,
+      spacing : Int32,
+      constraints : Array(Constraint)
+
+    private MAX_SOLVE_CACHE = 128
+    @@solve_cache = {} of SolveCacheKey => Array(Tuple(Int32, Int32))
+
     property direction : Direction
     property constraints : Array(Constraint)
     property spacing : Int32
@@ -113,46 +121,60 @@ module CryTUI
     private WEAK     = Kiwi::Strength::WEAK
 
     private def solve(total : Int32) : Array(Tuple(Int32, Int32))
-      if shortcut = closed_form(total)
-        return shortcut
+      key = SolveCacheKey.new(total, @spacing, @constraints.dup)
+      if cached = @@solve_cache[key]?
+        return cached
       end
 
-      precision = 100.0
-      scaled_total = total * precision
-      count = @constraints.size
-      variables = Array.new(count * 2 + 2) { |index| Kiwi::Variable.new("layout_#{index}") }
-      solver = Kiwi::Solver.new
-      constrain(solver, variables.first == 0, REQUIRED)
-      constrain(solver, variables.last == scaled_total, REQUIRED)
-      area_size = variables.last - variables.first
-      variables.each do |variable|
-        constrain(solver, variable >= variables.first, REQUIRED)
-        constrain(solver, variable <= variables.last, REQUIRED)
-      end
-      # Ratatui only requires each segment to have a non-negative size.
-      # Spacers are constrained separately and may be negative for overlap.
-      variables.skip(1).each_slice(2) do |pair|
-        constrain(solver, pair[0] <= pair[1], REQUIRED) if pair.size == 2
-      end
+      result = if shortcut = closed_form(total)
+                 shortcut
+               else
+                 precision = 100.0
+                 scaled_total = total * precision
+                 count = @constraints.size
+                 variables = Array.new(count * 2 + 2) { |index| Kiwi::Variable.new("layout_#{index}") }
+                 solver = Kiwi::Solver.new
+                 constrain(solver, variables.first == 0, REQUIRED)
+                 constrain(solver, variables.last == scaled_total, REQUIRED)
+                 area_size = variables.last - variables.first
+                 variables.each do |variable|
+                   constrain(solver, variable >= variables.first, REQUIRED)
+                   constrain(solver, variable <= variables.last, REQUIRED)
+                 end
+                 # Ratatui only requires each segment to have a non-negative size.
+                 # Spacers are constrained separately and may be negative for overlap.
+                 variables.skip(1).each_slice(2) do |pair|
+                   constrain(solver, pair[0] <= pair[1], REQUIRED) if pair.size == 2
+                 end
 
-      # Ratatui 0.29 defaults to Flex::Start: its leading spacer is empty,
-      # internal spacers have the requested size, and unused room trails.
-      constrain(solver, variables[1] == variables[0], REQUIRED - 1.0)
-      (1...count).each do |index|
-        constrain(solver, variables[index * 2 + 1] - variables[index * 2] == @spacing * precision, REQUIRED / 10.0)
-      end
-      constrain(solver, variables.last - variables[-2] == area_size, MEDIUM / 10.0)
+                 # Ratatui 0.29 defaults to Flex::Start: its leading spacer is empty,
+                 # internal spacers have the requested size, and unused room trails.
+                 constrain(solver, variables[1] == variables[0], REQUIRED - 1.0)
+                 (1...count).each do |index|
+                   constrain(solver, variables[index * 2 + 1] - variables[index * 2] == @spacing * precision, REQUIRED / 10.0)
+                 end
+                 constrain(solver, variables.last - variables[-2] == area_size, MEDIUM / 10.0)
 
-      segments = @constraints.map_with_index { |_, index| {variables[index * 2 + 1], variables[index * 2 + 2]} }
-      @constraints.each_with_index do |constraint, index|
-        start, finish = segments[index]
-        apply_constraint(solver, constraint, finish - start, area_size, precision)
-      end
+                 segments = @constraints.map_with_index { |_, index| {variables[index * 2 + 1], variables[index * 2 + 2]} }
+                 @constraints.each_with_index do |constraint, index|
+                   start, finish = segments[index]
+                   apply_constraint(solver, constraint, finish - start, area_size, precision)
+                 end
 
-      apply_proportionality(solver, segments)
+                 apply_proportionality(solver, segments)
 
-      solver.update_variables
-      to_ranges(segments, precision)
+                 solver.update_variables
+                 to_ranges(segments, precision)
+               end
+      cache_solution(key, result)
+    end
+
+    # The same dashboard layouts are solved frame after frame; a small exact
+    # cache skips rebuilding identical Kiwi systems without letting memory grow.
+    private def cache_solution(key : SolveCacheKey, ranges : Array(Tuple(Int32, Int32))) : Array(Tuple(Int32, Int32))
+      @@solve_cache.clear if @@solve_cache.size >= MAX_SOLVE_CACHE
+      @@solve_cache[key] = ranges
+      ranges
     end
 
     # The three layouts whose sizes follow from arithmetic alone, so the

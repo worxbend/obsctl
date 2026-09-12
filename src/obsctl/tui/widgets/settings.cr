@@ -8,6 +8,10 @@ module Obsctl
       module Settings
         extend self
 
+        @@theme_list_items = {} of Bool => Array(CryTUI::Widgets::ListItem)
+        @@ascii_preview_lines = {} of String => Array(CryTUI::Line)
+        @@rich_preview_tail = {} of String => Array(CryTUI::Line)
+
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           theme = model.theme
           buffer.set_style(area, CryTUI::Style.new(background: theme.background, foreground: theme.foreground))
@@ -31,17 +35,6 @@ module Obsctl
 
         private def render_theme_list(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           theme = model.theme
-          cell = model.advanced_ui ? "██" : "##"
-          items = Theme::ALL.map do |candidate|
-            line = CryTUI::Line.new([
-              CryTUI::Span.new(cell, CryTUI::Style.new(foreground: candidate.accent)),
-              CryTUI::Span.new(cell, CryTUI::Style.new(foreground: candidate.success)),
-              CryTUI::Span.new(cell, CryTUI::Style.new(foreground: candidate.warning)),
-              CryTUI::Span.new(cell, CryTUI::Style.new(foreground: candidate.danger)),
-              CryTUI::Span.new("  #{candidate.label}"),
-            ])
-            CryTUI::Widgets::ListItem.new([line])
-          end
           block = CryTUI::Widgets::Block.new(
             title: " Themes // #{Theme::ALL.size.to_s.rjust(2, '0')} palettes ",
             border_style: CryTUI::Style.new(foreground: theme.border),
@@ -49,7 +42,7 @@ module Obsctl
           )
           state = CryTUI::Widgets::ListState.new(selected: model.settings_cursor)
           highlight = CryTUI::Style.new(foreground: theme.highlight_foreground, background: theme.highlight_background, modifiers: CryTUI::Modifier::Bold)
-          CryTUI::Widgets::List.new(items, highlight_style: highlight, block: block).render(area, buffer, state)
+          CryTUI::Widgets::List.new(theme_list_items(model.advanced_ui), highlight_style: highlight, block: block).render(area, buffer, state)
         end
 
         private def render_preview(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
@@ -65,8 +58,41 @@ module Obsctl
 
         private def rich_preview(model : Model) : Array(CryTUI::Line)
           theme = model.theme
+          lines = [Anim.gradient_line("◈ OBSCTL // THEME PREVIEW", theme.accent, theme.accent_alt, model.anim.frame, true)]
+          lines.concat(rich_preview_tail(theme))
+          lines
+        end
+
+        private def ascii_preview(model : Model) : Array(CryTUI::Line)
+          @@ascii_preview_lines[model.theme.id] ||= build_ascii_preview(model.theme)
+        end
+
+        # These rows are static for a given palette, so caching them keeps the
+        # settings overlay from rebuilding the same 41 swatches every frame.
+        private def theme_list_items(advanced_ui : Bool) : Array(CryTUI::Widgets::ListItem)
+          @@theme_list_items[advanced_ui] ||= build_theme_list_items(advanced_ui)
+        end
+
+        private def build_theme_list_items(advanced_ui : Bool) : Array(CryTUI::Widgets::ListItem)
+          cell = advanced_ui ? "██" : "##"
+          Theme::ALL.map do |candidate|
+            line = CryTUI::Line.new([
+              CryTUI::Span.new(cell, CryTUI::Style.new(foreground: candidate.accent)),
+              CryTUI::Span.new(cell, CryTUI::Style.new(foreground: candidate.success)),
+              CryTUI::Span.new(cell, CryTUI::Style.new(foreground: candidate.warning)),
+              CryTUI::Span.new(cell, CryTUI::Style.new(foreground: candidate.danger)),
+              CryTUI::Span.new("  #{candidate.label}"),
+            ])
+            CryTUI::Widgets::ListItem.new([line])
+          end
+        end
+
+        private def rich_preview_tail(theme : Theme) : Array(CryTUI::Line)
+          @@rich_preview_tail[theme.id] ||= build_rich_preview_tail(theme)
+        end
+
+        private def build_rich_preview_tail(theme : Theme) : Array(CryTUI::Line)
           [
-            Anim.gradient_line("◈ OBSCTL // THEME PREVIEW", theme.accent, theme.accent_alt, model.anim.frame, true),
             line(""),
             spans([{"● LIVE", theme.danger}, {"   ◉ REC", theme.warning}, {"   ◆ SCENE ACTIVE", theme.accent}]),
             colored("✓ connected", theme.success), colored("⚠ warning", theme.warning), colored("ℹ info", theme.info),
@@ -76,8 +102,7 @@ module Obsctl
           ]
         end
 
-        private def ascii_preview(model : Model) : Array(CryTUI::Line)
-          theme = model.theme
+        private def build_ascii_preview(theme : Theme) : Array(CryTUI::Line)
           [colored("OBSCTL // THEME PREVIEW", theme.accent), line(""),
            spans([{"* LIVE", theme.danger}, {"   * REC", theme.warning}, {"   > SCENE ACTIVE", theme.accent}]),
            colored("+ connected", theme.success), colored("! warning", theme.warning), colored("i info", theme.info),

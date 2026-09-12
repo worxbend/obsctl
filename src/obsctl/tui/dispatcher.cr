@@ -23,6 +23,16 @@ module Obsctl
     class Dispatcher
       VOLUME_DEBOUNCE = 120.milliseconds
 
+      private class VolumeDebounceState
+        property percent : Int32
+        property version : UInt64
+        getter wake : Channel(Nil)
+
+        def initialize(@percent : Int32, @version : UInt64 = 1_u64)
+          @wake = Channel(Nil).new(1)
+        end
+      end
+
       alias Sender = Proc(IPC::CommandPayload, IPC::Response)
       alias ThemePersister = Proc(Theme, String)
       alias Viewport = Proc(CryTUI::Rect)
@@ -44,7 +54,7 @@ module Obsctl
         @viewport : Viewport? = nil,
         @outcomes : OutcomeSink? = nil,
       )
-        @volume_versions = Hash(String, UInt64).new(0_u64)
+        @volume_debouncers = {} of String => VolumeDebounceState
       end
 
       # Actions that only move focus or the cursor, with no daemon round trip.
@@ -765,27 +775,57 @@ module Obsctl
       end
 
       private def debounce_volume(input_name : String, percent : Int32) : Nil
-        version = @volume_versions[input_name] &+ 1
-        @volume_versions[input_name] = version
-        spawn(name: "obsctl-volume-debounce") do
-          sleep @volume_debounce
-          next unless @volume_versions[input_name] == version
-
-          begin
-            response = @sender.call(IPC::CommandPayload.new(name: IPC::CommandName::SET_VOLUME, target: input_name, percent: percent))
-            # Only failures are announced: the level the user just set is
-            # already on screen, so "ok" would say nothing they cannot see.
-            report(result_message(response)) unless response.ok
-          rescue ex : Domain::ObsctlError | IO::Error
-            report("error: #{ex.message}")
-          ensure
-            # The edit is no longer in flight however it ended, so daemon
-            # snapshots take over again. Only the fiber that survived the
-            # version check gets here, so it is always the newest edit that
-            # is being settled.
-            @model.settle_volume(input_name)
-          end
+        debouncer = @volume_debouncers[input_name]?
+        if debouncer
+          debouncer.percent = percent
+          debouncer.version = debouncer.version &+ 1
+        else
+          debouncer = VolumeDebounceState.new(percent)
+          @volume_debouncers[input_name] = debouncer
+          spawn(name: "obsctl-volume-debounce") { run_volume_debounce(input_name, debouncer) }
         end
+
+        signal_volume_debounce(debouncer)
+      end
+
+      # The buffer carries only "something changed"; the newest percent lives
+      # on the state itself, so rapid repeats collapse into one sleeping fiber
+      # per input instead of one short-lived fiber per keystroke.
+      private def signal_volume_debounce(debouncer : VolumeDebounceState) : Nil
+        select
+        when debouncer.wake.send(nil)
+        else
+        end
+      end
+
+      private def run_volume_debounce(input_name : String, debouncer : VolumeDebounceState) : Nil
+        loop do
+          debouncer.wake.receive
+          version = debouncer.version
+          quiet = true
+          select
+          when debouncer.wake.receive
+            quiet = false
+          when timeout(@volume_debounce)
+          end
+          next unless quiet
+
+          send_debounced_volume(input_name, debouncer.percent)
+          next unless debouncer.version == version
+
+          @volume_debouncers.delete(input_name)
+          @model.settle_volume(input_name)
+          return
+        end
+      end
+
+      private def send_debounced_volume(input_name : String, percent : Int32) : Nil
+        response = @sender.call(IPC::CommandPayload.new(name: IPC::CommandName::SET_VOLUME, target: input_name, percent: percent))
+        # Only failures are announced: the level the user just set is
+        # already on screen, so "ok" would say nothing they cannot see.
+        report(result_message(response)) unless response.ok
+      rescue ex : Domain::ObsctlError | IO::Error
+        report("error: #{ex.message}")
       end
 
       # Bracketed paste is not a keystroke, so `Input` has no `Action` to map it
@@ -795,22 +835,29 @@ module Obsctl
       # append lives next to the `palette_character?` branch instead of being
       # spelled out again by the caller. Control characters are stripped: a
       # pasted newline would submit a command the user never chose to run.
-      def paste(text : String) : Nil
+      def paste(text : String) : Bool
         editor = @model.scene_profile_editor
         if editor.active && editor.naming
           # The same strip for the same reason as the palette below: a pasted
           # carriage return -- what a copied line ending arrives as -- would
           # otherwise submit, here saving a profile under a name the user never
           # chose.
-          editor.name_input += sanitized_paste(text)
-          return
+          sanitized = sanitized_paste(text)
+          return false if sanitized.empty?
+
+          editor.name_input += sanitized
+          return true
         end
 
         palette = @model.command_palette
-        return unless palette.active
+        return false unless palette.active
 
-        palette.input += sanitized_paste(text)
+        sanitized = sanitized_paste(text)
+        return false if sanitized.empty?
+
+        palette.input += sanitized
         refresh_completions
+        true
       end
 
       # Per grapheme, not per byte or per codepoint: one press has to

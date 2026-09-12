@@ -89,7 +89,11 @@ module Obsctl
 
       # Validates the supplied argument count against this command's arity.
       def validate_arity!(args : Array(String)) : Nil
-        return if @required_arguments <= args.size <= @arguments.size
+        validate_arity!(args.size)
+      end
+
+      def validate_arity!(argument_count : Int32) : Nil
+        return if @required_arguments <= argument_count <= @arguments.size
 
         raise CommandParseError.new("wrong argument count for #{@name}; usage: #{usage}")
       end
@@ -238,8 +242,19 @@ module Obsctl
       end
 
       # Specs offered on the given surface, in declaration order.
+      SURFACE_SPECS = {
+        CommandSurface::Cli     => SPECS.select(&.surface.includes?(CommandSurface::Cli)),
+        CommandSurface::Palette => SPECS.select(&.surface.includes?(CommandSurface::Palette)),
+      }
+
+      CLI_NAMES = SURFACE_SPECS[CommandSurface::Cli].map(&.name)
+
+      CLI_SPELLINGS = SURFACE_SPECS[CommandSurface::Cli].flat_map(&.spellings)
+
+      PALETTE_NAMES = SURFACE_SPECS[CommandSurface::Palette].map { |spec| "/#{spec.name}" }
+
       def for_surface(surface : CommandSurface) : Array(CommandSpec)
-        SPECS.select(&.surface.includes?(surface))
+        SURFACE_SPECS[surface]
       end
 
       # True when the CLI can render this command as a JSON envelope.
@@ -254,17 +269,17 @@ module Obsctl
       # Aliases stay parseable but are left out of suggestions: offering both
       # `/collection` and `/scene-collection` for `/sc` is noise, not help.
       def palette_names : Array(String)
-        for_surface(CommandSurface::Palette).map { |spec| "/#{spec.name}" }
+        PALETTE_NAMES
       end
 
       # Canonical CLI names, for shell completion and usage errors.
       def cli_names : Array(String)
-        for_surface(CommandSurface::Cli).map(&.name)
+        CLI_NAMES
       end
 
       # Every accepted CLI spelling, aliases included.
       def cli_spellings : Array(String)
-        for_surface(CommandSurface::Cli).flat_map(&.spellings)
+        CLI_SPELLINGS
       end
 
       # One-line-per-command help, aligned on the usage column.

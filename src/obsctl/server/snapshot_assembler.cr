@@ -32,8 +32,10 @@ module Obsctl
       def compose(client : OBS::Client, config : Config::Config) : OBS::State::ObsSnapshot
         version_data = client.version
         scene_data = client.scene_readings
-        scene_states = scenes(config, scene_data[:scene_names], scene_data[:current_scene])
-        audio = audio_inputs(client, config)
+        configured_scenes = configured_scenes_by_name(config)
+        configured_audio_inputs = configured_audio_inputs_by_name(config)
+        scene_states = scenes(config, scene_data[:scene_names], scene_data[:current_scene], configured_scenes)
+        audio = audio_inputs(client, config, configured_audio_inputs)
         profile_data = client.profiles
         collection_data = client.scene_collections
         scene_profile_data = scene_profiles(config)
@@ -59,20 +61,26 @@ module Obsctl
       end
 
       # Stamps obsctl's per-scene settings onto the scene names OBS reported.
-      def scenes(config : Config::Config, scene_names : Array(String), current : String?) : Array(OBS::State::SceneState)
+      def scenes(
+        config : Config::Config,
+        scene_names : Array(String),
+        current : String?,
+        configured : Hash(String, Config::SceneConfig)? = nil,
+      ) : Array(OBS::State::SceneState)
         # Resolved once for the whole list rather than per scene, and read from
         # here rather than from `configured.hidden`: an active scene profile
         # replaces the per-scene flags outright, so this is the single point at
         # which hidden-ness enters a snapshot. Every client reads the answer
         # rather than working it out again.
         visibility = config.scene_visibility
+        configured_scenes = configured || configured_scenes_by_name(config)
         scene_names.map do |name|
-          configured = config.scenes.find { |scene| scene.name == name }
+          scene = configured_scenes[name]?
           OBS::State::SceneState.new(
             name: name,
-            alias: configured.try(&.alias),
-            shortcut: configured.try(&.shortcut),
-            group: configured.try(&.group),
+            alias: scene.try(&.alias),
+            shortcut: scene.try(&.shortcut),
+            group: scene.try(&.group),
             active: current == name,
             hidden: visibility.hidden?(name)
           )
@@ -81,10 +89,15 @@ module Obsctl
 
       # The whole audio matrix: every input OBS agrees to describe, stamped
       # with obsctl's settings for it.
-      def audio_inputs(client : OBS::Client, config : Config::Config) : Array(OBS::State::AudioState)
+      def audio_inputs(
+        client : OBS::Client,
+        config : Config::Config,
+        configured : Hash(String, Config::AudioInputConfig)? = nil,
+      ) : Array(OBS::State::AudioState)
+        configured_audio_inputs = configured || configured_audio_inputs_by_name(config)
         client.input_names.compact_map do |name|
           client.audio_readings(name).try do |reading|
-            audio_state(config, name, reading[:muted], reading[:volume])
+            audio_state(name, reading[:muted], reading[:volume], configured_audio_inputs[name]?)
           end
         end
       end
@@ -96,7 +109,16 @@ module Obsctl
         muted : Bool?,
         volume : NamedTuple(mul: Float64?, db: Float64?, percent: Int32?),
       ) : OBS::State::AudioState
-        configured = config.audio.inputs.find { |input| input.name == name }
+        audio_state(name, muted, volume, configured_audio_inputs_by_name(config)[name]?)
+      end
+
+      # Stamps obsctl's per-input settings onto one input's OBS readings.
+      def audio_state(
+        name : String,
+        muted : Bool?,
+        volume : NamedTuple(mul: Float64?, db: Float64?, percent: Int32?),
+        configured : Config::AudioInputConfig? = nil,
+      ) : OBS::State::AudioState
         OBS::State::AudioState.new(
           name: name,
           alias: configured.try(&.alias),
@@ -119,6 +141,18 @@ module Obsctl
         # longer exists: the snapshot must never advertise an active profile
         # that is missing from the list beside it.
         {profiles: profiles, active: config.active_scene_profile_config.try(&.name)}
+      end
+
+      private def configured_scenes_by_name(config : Config::Config) : Hash(String, Config::SceneConfig)
+        config.scenes.each_with_object({} of String => Config::SceneConfig) do |scene, configured|
+          configured[scene.name] = scene
+        end
+      end
+
+      private def configured_audio_inputs_by_name(config : Config::Config) : Hash(String, Config::AudioInputConfig)
+        config.audio.inputs.each_with_object({} of String => Config::AudioInputConfig) do |input, configured|
+          configured[input.name] = input
+        end
       end
     end
   end

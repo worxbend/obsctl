@@ -84,6 +84,19 @@ module Obsctl
         FlagSpec.new("--help", short: "-h", description: "Show help"),
       ]
 
+      VALUE_FLAGS = begin
+        table = {} of String => Bool
+        FLAGS.each do |flag|
+          next unless flag.takes_value?
+
+          table[flag.long] = true
+          if short = flag.short
+            table[short] = true
+          end
+        end
+        table
+      end
+
       private class GlobalOptionsState
         property config_path : String
         property log_level : String
@@ -204,11 +217,7 @@ module Obsctl
       # `--flag=value` carries its own value, so only the bare spelling of a
       # value-taking flag consumes the next token.
       private def takes_separate_value?(arg : String) : Bool
-        return false if arg.includes?('=')
-
-        FLAGS.any? do |flag|
-          flag.takes_value? && (arg == flag.long || arg == flag.short)
-        end
+        !arg.includes?('=') && VALUE_FLAGS.has_key?(arg)
       end
 
       private def option_parser(state : GlobalOptionsState) : OptionParser

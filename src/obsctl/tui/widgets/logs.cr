@@ -18,10 +18,15 @@ module Obsctl
         SUCCESS_KEYWORDS = %w[connected ready started active switched reloaded success enabled unmuted streaming recording complete]
         SUBJECT_KEYWORDS = %w[obs scene profile collection audio input source stream record config daemon server command websocket]
 
+        private record ResourceLookup,
+          ordered : Array(Tuple(String, ResourceKind)),
+          by_initial : Hash(Char, Array(Tuple(String, ResourceKind))),
+          by_name : Hash(String, ResourceKind)
+
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           visible = {area.height - 2, 0}.max
           entries = model.logs.last(visible)
-          resources = known_resources(model)
+          resources = resource_lookup(model)
           items = entries.map do |entry|
             color, marker = level_appearance(entry.level, model)
             spans = [
@@ -37,12 +42,12 @@ module Obsctl
           CryTUI::Widgets::List.new(items, block: block).render(area, buffer, CryTUI::Widgets::ListState.new)
         end
 
-        def highlight_message(message : String, model : Model, resources = known_resources(model)) : Array(CryTUI::Span)
+        def highlight_message(message : String, model : Model, resources = resource_lookup(model)) : Array(CryTUI::Span)
           spans = [] of CryTUI::Span
           cursor = 0
           while cursor < message.bytesize
             rest = message.byte_slice(cursor, message.bytesize - cursor)
-            if resource = resources.find { |name, _| resource_matches?(rest, name) }
+            if resource = matching_resource(rest, resources)
               name, kind = resource
               matched = rest.byte_slice(0, name.bytesize)
               spans << CryTUI::Span.new(matched, resource_style(kind, model))
@@ -82,6 +87,10 @@ module Obsctl
         end
 
         def known_resources(model : Model) : Array(Tuple(String, ResourceKind))
+          resource_lookup(model).ordered
+        end
+
+        private def resource_lookup(model : Model) : ResourceLookup
           resources = [] of Tuple(String, ResourceKind)
           model.snapshot.try do |snapshot|
             snapshot.scenes.each do |scene|
@@ -102,7 +111,21 @@ module Obsctl
           resources.reject! { |name, _| name.empty? }
           resources.sort_by! { |name, _| -name.bytesize }
           resources.uniq! { |name, _| name.downcase }
-          resources
+          by_initial = Hash(Char, Array(Tuple(String, ResourceKind))).new { |hash, key| hash[key] = [] of Tuple(String, ResourceKind) }
+          by_name = {} of String => ResourceKind
+          resources.each do |name, kind|
+            initial = name.each_char.first.downcase
+            by_initial[initial] << {name, kind}
+            by_name[name.downcase] = kind
+          end
+          ResourceLookup.new(resources, by_initial, by_name)
+        end
+
+        private def matching_resource(candidate : String, resources : ResourceLookup) : Tuple(String, ResourceKind)?
+          initial = candidate.each_char.first?.try(&.downcase)
+          return unless initial
+
+          resources.by_initial[initial]?.try &.find { |name, _| resource_matches?(candidate, name) }
         end
 
         # The dish turns while the daemon is feeding the panel, and stops when
@@ -134,8 +157,8 @@ module Obsctl
           next_char.nil? || !boundary_word_char?(next_char)
         end
 
-        private def exact_resource_kind(candidate : String, resources) : ResourceKind?
-          resources.find { |name, _| name.compare(candidate, case_insensitive: true) == 0 }.try(&.[1])
+        private def exact_resource_kind(candidate : String, resources : ResourceLookup) : ResourceKind?
+          resources.by_name[candidate.downcase]?
         end
 
         private def boundary_word_char?(char : Char) : Bool

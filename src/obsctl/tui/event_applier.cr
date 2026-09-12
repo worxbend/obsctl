@@ -13,16 +13,15 @@ module Obsctl
       # update can wait for the regular render tick; true requests a redraw.
       def apply(model : Model, event : IPC::Event) : Bool
         data = event.data
-        return true unless data
+        return false unless data
         case event.topic
         when "state"  then apply_state(model, data)
         when "logs"   then apply_log(model, data)
         when "events" then apply_obs_event(model, data)
-        else
-          true
+        else               false
         end
       rescue TypeCastError | KeyError | Time::Format::Error
-        true
+        false
       end
 
       private def parse_snapshot(data : JSON::Any) : OBS::State::ObsSnapshot?
@@ -31,7 +30,7 @@ module Obsctl
 
       private def apply_state(model : Model, data : JSON::Any) : Bool
         snapshot = parse_snapshot(data)
-        return true unless snapshot
+        return false unless snapshot
 
         flash_scene_change(model, snapshot.current_scene)
         model.snapshot = snapshot
@@ -49,9 +48,9 @@ module Obsctl
       end
 
       private def apply_log(model : Model, data : JSON::Any) : Bool
-        if log = parse_log(data)
-          model.push_log(log)
-        end
+        return false unless log = parse_log(data)
+
+        model.push_log(log)
         true
       end
 
@@ -78,7 +77,7 @@ module Obsctl
       end
 
       private def apply_obs_event(model : Model, data : JSON::Any) : Bool
-        return true unless meter_event?(data)
+        return false unless meter_event?(data)
 
         meter_inputs(data).each do |input|
           if reading = meter_reading(input)
