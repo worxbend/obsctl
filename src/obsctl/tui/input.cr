@@ -97,7 +97,7 @@ module Obsctl
           return Action.new(ActionKind::PointerFocus, panel: target.panel, index: nil)
         end
 
-        return unless event.kind.press? && event.button.left?
+        return unless left_press?(event)
         index = target.index
         return Action.new(ActionKind::PointerFocus, panel: target.panel) unless index
 
@@ -114,7 +114,7 @@ module Obsctl
       # runs its binding or opens its group, and a click anywhere else means
       # the same thing Esc does.
       private def which_key_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
-        return unless event.kind.press? && event.button.left?
+        return unless left_press?(event)
         entry = HitTest.which_key_entry(model, area, event.column, event.row)
         return action(ActionKind::ClearSequence) unless entry
 
@@ -133,7 +133,7 @@ module Obsctl
         character = key.character
         control = key.modifiers.control?
 
-        return action(ActionKind::CloseScenePicker) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::CloseScenePicker) if cancel_key?(key)
         return action(ActionKind::ScenePickerActivate) if key.code.enter?
         return action(ActionKind::ScenePickerNavigateUp) if key.code.up?
         return action(ActionKind::ScenePickerNavigateDown) if key.code.down?
@@ -150,11 +150,11 @@ module Obsctl
       # which-key menu does: a click on a row runs it, a click anywhere else
       # means the same thing Esc does. The wheel moves the cursor.
       private def scene_picker_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
-        if event.scroll?
-          return action(event.kind.scroll_up? ? ActionKind::ScenePickerNavigateUp : ActionKind::ScenePickerNavigateDown)
+        if action = scroll_action(event, ActionKind::ScenePickerNavigateUp, ActionKind::ScenePickerNavigateDown)
+          return action
         end
 
-        return unless event.kind.press? && event.button.left?
+        return unless left_press?(event)
         index = HitTest.scene_picker_index(model, area, event.column, event.row)
         index ? Action.new(ActionKind::PickScene, index: index) : action(ActionKind::CloseScenePicker)
       end
@@ -169,7 +169,7 @@ module Obsctl
         character = key.character
         control = key.modifiers.control?
 
-        return action(ActionKind::CloseSceneProfiles) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::CloseSceneProfiles) if cancel_key?(key)
         return action(ActionKind::SceneProfilesSave) if key.code.enter?
         return action(ActionKind::SceneProfilesNavigateUp) if key.code.up?
         return action(ActionKind::SceneProfilesNavigateDown) if key.code.down?
@@ -201,12 +201,12 @@ module Obsctl
         character = key.character
         control = key.modifiers.control?
 
-        return action(ActionKind::SceneProfilesNameCancel) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::SceneProfilesNameCancel) if cancel_key?(key)
         return action(ActionKind::SceneProfilesNameSubmit) if key.code.enter?
         return action(ActionKind::SceneProfilesNameBackspace) if key.code.backspace?
         return action(ActionKind::SceneProfilesNameClearLine) if character == 'u' && control
-        return Action.new(ActionKind::SceneProfilesNameCharacter, character) if key.code.character? && character && !control
-        nil
+
+        character_action(key, ActionKind::SceneProfilesNameCharacter)
       end
 
       # Clickable on the same rules the picker follows: a click on a row
@@ -218,11 +218,11 @@ module Obsctl
         # with the field still on screen saying nothing about it.
         return if model.scene_profile_editor.naming
 
-        if event.scroll?
-          return action(event.kind.scroll_up? ? ActionKind::SceneProfilesNavigateUp : ActionKind::SceneProfilesNavigateDown)
+        if action = scroll_action(event, ActionKind::SceneProfilesNavigateUp, ActionKind::SceneProfilesNavigateDown)
+          return action
         end
 
-        return unless event.kind.press? && event.button.left?
+        return unless left_press?(event)
         index = HitTest.scene_profiles_index(model, area, event.column, event.row)
         index ? Action.new(ActionKind::SceneProfilesToggleScene, index: index) : action(ActionKind::CloseSceneProfiles)
       end
@@ -238,7 +238,7 @@ module Obsctl
         character = key.character
         control = key.modifiers.control?
 
-        return action(ActionKind::CloseSceneProfileList) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::CloseSceneProfileList) if cancel_key?(key)
         return action(ActionKind::SceneProfileListActivate) if key.code.enter?
         return action(ActionKind::SceneProfileListNavigateUp) if key.code.up?
         return action(ActionKind::SceneProfileListNavigateDown) if key.code.down?
@@ -289,11 +289,11 @@ module Obsctl
       # while the wheel still scrolls, because browsing is not answering the
       # question.
       private def scene_profile_list_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
-        if event.scroll?
-          return action(event.kind.scroll_up? ? ActionKind::SceneProfileListNavigateUp : ActionKind::SceneProfileListNavigateDown)
+        if action = scroll_action(event, ActionKind::SceneProfileListNavigateUp, ActionKind::SceneProfileListNavigateDown)
+          return action
         end
 
-        return unless event.kind.press? && event.button.left?
+        return unless left_press?(event)
         # Only an actual button press disarms. A single click reports press and
         # release, and a mouse that moved reports a drag, so cancelling on any
         # event at all would say "delete cancelled" twice for one click.
@@ -306,11 +306,11 @@ module Obsctl
       # Clicking a theme previews it and clicking the previewed theme applies
       # it, the same click-then-confirm rule the dashboard rows follow.
       private def settings_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
-        if event.scroll?
-          return action(event.kind.scroll_up? ? ActionKind::SettingsNavigateUp : ActionKind::SettingsNavigateDown)
+        if action = scroll_action(event, ActionKind::SettingsNavigateUp, ActionKind::SettingsNavigateDown)
+          return action
         end
 
-        return unless event.kind.press? && event.button.left?
+        return unless left_press?(event)
         return unless index = HitTest.settings_index(model, area, event.column, event.row)
 
         return action(ActionKind::PointerSettingsApply) if index == model.settings_cursor
@@ -321,11 +321,11 @@ module Obsctl
       # picks the chip under the pointer. A click outside the panel closes the
       # palette, which is what clicking away from a prompt normally means.
       private def palette_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
-        if event.scroll?
-          return action(event.kind.scroll_up? ? ActionKind::CompletePrevious : ActionKind::CompleteNext)
+        if action = scroll_action(event, ActionKind::CompletePrevious, ActionKind::CompleteNext)
+          return action
         end
 
-        return unless event.kind.press? && event.button.left?
+        return unless left_press?(event)
         if index = HitTest.palette_completion(model, area, event.column, event.row)
           return Action.new(ActionKind::PointerCompletion, index: index)
         end
@@ -433,15 +433,15 @@ module Obsctl
         character = key.character
         control = key.modifiers.control?
 
-        return action(ActionKind::ClosePalette) if key.code.escape? || (character == 'c' && control)
+        return action(ActionKind::ClosePalette) if cancel_key?(key)
         return action(ActionKind::PaletteSubmit) if key.code.enter?
         return action(ActionKind::PaletteBackspace) if key.code.backspace?
         return action(ActionKind::PaletteClearLine) if character == 'u' && control
         return action(ActionKind::PaletteDeleteWord) if character == 'w' && control
         return action(ActionKind::CompleteNext) if key.code.tab? || (character == 'n' && control)
         return action(ActionKind::CompletePrevious) if key.code.back_tab? || (character == 'p' && control)
-        return Action.new(ActionKind::PaletteCharacter, character) if key.code.character? && character && !control
-        nil
+
+        character_action(key, ActionKind::PaletteCharacter)
       end
 
       # Esc, F2 and `q` close the appearance lab. Ctrl-C, which every modal
@@ -463,6 +463,28 @@ module Obsctl
 
       private def action(kind : ActionKind) : Action
         Action.new(kind)
+      end
+
+      private def cancel_key?(key : CryTUI::KeyEvent) : Bool
+        key.code.escape? || (key.character == 'c' && key.modifiers.control?)
+      end
+
+      private def scroll_action(event : CryTUI::MouseEvent, up : ActionKind, down : ActionKind) : Action?
+        return unless event.scroll?
+
+        action(event.kind.scroll_up? ? up : down)
+      end
+
+      private def left_press?(event : CryTUI::MouseEvent) : Bool
+        event.kind.press? && event.button.left?
+      end
+
+      private def character_action(key : CryTUI::KeyEvent, kind : ActionKind) : Action?
+        character = key.character
+        return if key.modifiers.control?
+        return unless key.code.character? && character
+
+        Action.new(kind, character)
       end
     end
   end

@@ -51,6 +51,11 @@ describe CryTUI::Terminal do
       "│hello     │",
       "└──────────┘",
     ])
+
+    terminal.draw(&.buffer.set_string(0, 0, "界!"))
+    backend.buffer[0, 0].symbol.should eq("界")
+    backend.buffer[1, 0].continuation?.should be_true
+    backend.buffer.lines.first.should start_with("界!")
   end
 end
 

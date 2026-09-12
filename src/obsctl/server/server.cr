@@ -15,6 +15,12 @@ module Obsctl
   module Server
     # Foreground local daemon that owns the OBS WebSocket connection and IPC socket.
     class Server
+      STATE_TOPIC                 = "state"
+      SUBSCRIBED_MESSAGE          = "subscribed"
+      EXPECTED_REQUEST_MESSAGE    = "expected IPC request"
+      UNSUPPORTED_REQUEST_MESSAGE = "unsupported request type"
+      INVALID_IPC_REQUEST_MESSAGE = "invalid IPC request"
+
       # How long a freshly accepted connection may stay silent before the
       # daemon drops it. Generous compared to any real client's first write,
       # while still bounding a stalled peer's hold on a file descriptor.
@@ -115,43 +121,67 @@ module Obsctl
         # the first line only: once a client has identified itself, a `watch`
         # subscriber is expected to sit idle for hours.
         session.read_timeout = @first_message_timeout
-        first = true
+        first_message = true
 
         while message = session.read_message
-          if first
-            session.read_timeout = nil
-            first = false
-          end
+          first_message = clear_first_message_timeout(session, first_message)
 
           request = message.as?(IPC::Request)
           unless request
-            session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, "expected IPC request")))
+            session.write_message(protocol_error_response("unknown", EXPECTED_REQUEST_MESSAGE))
             next
           end
 
-          if request.subscribe?
-            # The acknowledgement and the initial snapshot are written inside
-            # the registration so no pushed update can slip in front of them.
-            @registry.add(session, request.topics) do
-              session.write_message(IPC::Response.new(request.id, true, JSON.parse({"message" => "subscribed"}.to_json)))
-              session.write_message(IPC::Event.new("state", IPC::StateSnapshotCodec.encode(@state.snapshot))) if request.topics.includes?("state")
-            end
-          elsif request.command?
-            response = @executor.execute(request)
-            session.write_message(response)
-            schedule_shutdown if response.ok && request.command.try(&.name) == IPC::CommandName::SHUTDOWN_SERVER
-          else
-            session.write_message(IPC::Response.new(request.id, false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, "unsupported request type")))
-          end
+          handle_request(session, request)
         end
       rescue ex : Domain::IpcProtocolError
-        session.write_message(IPC::Response.new("unknown", false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, ex.message || "invalid IPC request")))
+        session.write_message(protocol_error_response("unknown", ex.message || INVALID_IPC_REQUEST_MESSAGE))
       rescue IO::TimeoutError
         # Nothing to report to a peer that never spoke; just let it go.
       rescue IO::Error
       ensure
         @registry.remove(session)
         session.close
+      end
+
+      private def clear_first_message_timeout(session : IPC::ClientSession, first_message : Bool) : Bool
+        return false unless first_message
+
+        session.read_timeout = nil
+        false
+      end
+
+      private def handle_request(session : IPC::ClientSession, request : IPC::Request) : Nil
+        if request.subscribe?
+          subscribe(session, request)
+        elsif request.command?
+          execute_command(session, request)
+        else
+          session.write_message(protocol_error_response(request.id, UNSUPPORTED_REQUEST_MESSAGE))
+        end
+      end
+
+      private def subscribe(session : IPC::ClientSession, request : IPC::Request) : Nil
+        # The acknowledgement and the initial snapshot are written inside
+        # the registration so no pushed update can slip in front of them.
+        @registry.add(session, request.topics) do
+          session.write_message(IPC::Response.new(request.id, true, JSON.parse({"message" => SUBSCRIBED_MESSAGE}.to_json)))
+          session.write_message(IPC::Event.new(STATE_TOPIC, IPC::StateSnapshotCodec.encode(@state.snapshot))) if request.topics.includes?(STATE_TOPIC)
+        end
+      end
+
+      private def execute_command(session : IPC::ClientSession, request : IPC::Request) : Nil
+        response = @executor.execute(request)
+        session.write_message(response)
+        schedule_shutdown if shutdown_requested?(request, response)
+      end
+
+      private def shutdown_requested?(request : IPC::Request, response : IPC::Response) : Bool
+        response.ok && request.command.try(&.name) == IPC::CommandName::SHUTDOWN_SERVER
+      end
+
+      private def protocol_error_response(id : String, message : String) : IPC::Response
+        IPC::Response.new(id, false, nil, IPC::ErrorPayload.new(IPC::ErrorCode::IPC_PROTOCOL_ERROR, message))
       end
 
       # How long to let the `shutdown_server` response reach the client before

@@ -6,6 +6,7 @@ require "../config/config_schema"
 require "../domain/errors"
 require "../ipc/protocol"
 require "../ipc/socket_path"
+require "../runtime/secret_redaction"
 require "../service/systemd_user_service"
 require "../version"
 
@@ -97,7 +98,7 @@ module Obsctl
         {
           [Check.fail(
             "config",
-            "#{@config_path} is invalid: #{ex.message}",
+            "#{@config_path} is invalid: #{redact(ex.message)}",
             "run: obsctl validate-config"
           )],
           nil,
@@ -194,7 +195,7 @@ module Obsctl
 
         return Check.ok("obs", "connected") if daemon["obs_connected"]?.try(&.as_bool?) == true
 
-        detail = daemon["last_error"]?.try(&.as_s?) || "the daemon is not connected to OBS"
+        detail = redact(daemon["last_error"]?.try(&.as_s?)) || "the daemon is not connected to OBS"
         if daemon["reconnecting"]?.try(&.as_bool?) == true
           return Check.warn("obs", "reconnecting: #{detail}")
         end
@@ -214,6 +215,10 @@ module Obsctl
           "no systemd user unit at #{@service_path}",
           "optional; install with: obsctl service install"
         )
+      end
+
+      private def redact(message : String?) : String?
+        message.try { |text| Runtime::SecretRedaction.redact(text) }
       end
     end
   end

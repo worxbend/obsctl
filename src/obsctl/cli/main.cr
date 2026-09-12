@@ -173,28 +173,14 @@ module Obsctl
 
       # Converts any failure into its canonical exit code and user-facing form.
       private def self.report_failure(ex : Exception, json_output : Bool, stdout : IO, stderr : IO) : Int32
-        error = case ex
-                when Domain::ObsctlError     then ex
-                when OptionParser::Exception then Domain::CommandParseError.new(ex.message || "invalid option")
-                end
+        error = domain_error_for(ex)
 
         unless error
-          if json_output
-            write_json_error(stdout, IPC::ErrorPayload.server_error, Domain::ExitCode::Failure.value)
-          else
-            stderr.puts ex.message
-          end
+          write_unhandled_failure(ex, json_output, stdout, stderr)
           return Domain::ExitCode::Failure.value
         end
 
-        if json_output
-          write_json_error(stdout, IPC::ErrorPayload.from_exception(error), error.exit_code.value)
-        elsif error.is_a?(Domain::ServerUnavailable)
-          # The startup hint is more useful here than the bare message.
-          stderr.puts server_unavailable_message
-        else
-          stderr.puts error.message
-        end
+        write_handled_failure(error, json_output, stdout, stderr)
 
         error.exit_code.value
       end
@@ -277,16 +263,7 @@ module Obsctl
       CONFIG_ACTIONS = Domain::LocalCommands.subcommands_for("config")
 
       private def self.run_config(args : Array(String), options : Options, stdout : IO, json_output : Bool) : Int32
-        action = args[0]?
-        raise Domain::CommandParseError.new("missing config action; expected #{CONFIG_ACTIONS.join(", ")}") unless action
-
-        flags = args[1..]
-        dry_run = flags.includes?("--dry-run")
-        surplus = flags.reject { |flag| flag == "--dry-run" }
-        expect_arity!("config #{action}", surplus, 0)
-        if dry_run && action != "migrate"
-          raise Domain::CommandParseError.new("--dry-run is only supported for config migrate")
-        end
+        action, dry_run = parse_config_request(args)
 
         case action
         when "explain" then run_config_explain(options.config_path, stdout, json_output)
@@ -495,6 +472,55 @@ module Obsctl
             json.field "exit_code", exit_code
           end
         end
+      end
+
+      private def self.domain_error_for(ex : Exception) : Domain::ObsctlError?
+        case ex
+        when Domain::ObsctlError     then ex
+        when OptionParser::Exception then Domain::CommandParseError.new(ex.message || "invalid option")
+        end
+      end
+
+      private def self.write_unhandled_failure(ex : Exception, json_output : Bool, stdout : IO, stderr : IO) : Nil
+        if json_output
+          write_json_error(stdout, IPC::ErrorPayload.server_error, Domain::ExitCode::Failure.value)
+        else
+          stderr.puts ex.message
+        end
+      end
+
+      private def self.write_handled_failure(error : Domain::ObsctlError, json_output : Bool, stdout : IO, stderr : IO) : Nil
+        if json_output
+          write_json_error(stdout, IPC::ErrorPayload.from_exception(error), error.exit_code.value)
+        elsif error.is_a?(Domain::ServerUnavailable)
+          # The startup hint is more useful here than the bare message.
+          stderr.puts server_unavailable_message
+        else
+          stderr.puts error.message
+        end
+      end
+
+      private def self.parse_config_request(args : Array(String)) : Tuple(String, Bool)
+        action = args[0]?
+        raise Domain::CommandParseError.new("missing config action; expected #{CONFIG_ACTIONS.join(", ")}") unless action
+
+        dry_run = false
+        extra_flags = [] of String
+
+        args[1..].each do |flag|
+          if flag == "--dry-run"
+            dry_run = true
+          else
+            extra_flags << flag
+          end
+        end
+
+        expect_arity!("config #{action}", extra_flags, 0)
+        if dry_run && action != "migrate"
+          raise Domain::CommandParseError.new("--dry-run is only supported for config migrate")
+        end
+
+        {action, dry_run}
       end
     end
   end

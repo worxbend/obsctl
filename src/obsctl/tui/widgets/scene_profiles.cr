@@ -27,16 +27,20 @@ module Obsctl
           return if rect.empty?
 
           theme = model.theme
-          Overlay.clear(rect, buffer, theme)
           frame = block(model, rect)
-          frame.render(rect, buffer)
           items = scenes.map { |scene| item(scene, model) }
-          state = CryTUI::Widgets::ListState.new(selected: model.scene_profile_editor.cursor)
           # The block is drawn here rather than handed to the list, because the
           # list gets only the rows above the hint row and the border is around
           # both of them.
-          CryTUI::Widgets::List.new(items, highlight_style: Overlay.highlight_style(theme))
-            .render(frame.inner(SceneProfilesLayout.list_area(rect)), buffer, state)
+          Overlay.render_framed_list(
+            rect,
+            frame.inner(SceneProfilesLayout.list_area(rect)),
+            buffer,
+            frame,
+            items,
+            model.scene_profile_editor.cursor,
+            theme
+          )
           render_hints(rect, frame.inner(rect), buffer, model)
         end
 
@@ -49,15 +53,10 @@ module Obsctl
         end
 
         private def block(model : Model, rect : CryTUI::Rect) : CryTUI::Widgets::Block
-          theme = model.theme
           # Through the shared layout, and against the width the box actually
           # got, so the title drawn is the title that fits the box.
           heading, name = SceneProfilesLayout.title_parts(model, rect.width)
-          title = CryTUI::Line.new([
-            CryTUI::Span.new(heading, CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold)),
-            CryTUI::Span.new(name, CryTUI::Style.new(foreground: theme.badge_foreground, background: theme.badge_background, modifiers: CryTUI::Modifier::Bold)),
-          ])
-          Overlay.block(model, title)
+          Overlay.block(model, Overlay.title(model, heading, name))
         end
 
         # Split so the spans concatenate back to `SceneProfilesLayout.row_text`,

@@ -268,7 +268,7 @@ describe Obsctl::Config::Config do
   it "detaches every mutable collection when copying a config" do
     config = Obsctl::Config::Config.new(
       scenes: [Obsctl::Config::SceneConfig.new(name: "Main")],
-      scene_profiles: [Obsctl::Config::SceneProfileConfig.new(name: "streaming")],
+      scene_profiles: [Obsctl::Config::SceneProfileConfig.new(name: "streaming", hidden: ["Utility Cam"])],
       audio: Obsctl::Config::AudioConfig.new(
         inputs: [Obsctl::Config::AudioInputConfig.new(name: "Mic/Aux")]
       ),
@@ -277,11 +277,13 @@ describe Obsctl::Config::Config do
     copy = config.copy
     copy.scenes << Obsctl::Config::SceneConfig.new(name: "Cam 2")
     copy.scene_profiles << Obsctl::Config::SceneProfileConfig.new(name: "recording")
+    copy.scene_profiles.first.hidden << "BRB"
     copy.audio.inputs << Obsctl::Config::AudioInputConfig.new(name: "Desktop Audio")
     copy.keymap.quit << "ctrl+d"
 
     config.scenes.map(&.name).should eq(["Main"])
     config.scene_profiles.map(&.name).should eq(["streaming"])
+    config.scene_profiles.first.hidden.should eq(["Utility Cam"])
     config.audio.inputs.map(&.name).should eq(["Mic/Aux"])
     config.keymap.quit.should eq(["q", "ctrl+c"])
   end

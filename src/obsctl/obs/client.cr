@@ -180,23 +180,19 @@ module Obsctl
       # Returns the full record status, including pause state and timecode.
       def record_status : State::RecordStatus
         data = response_data(Requests::Outputs::GET_RECORD_STATUS)
-        active = data["outputActive"]?.try(&.as_bool?)
+        active = output_active(data)
         State::RecordStatus.new(
           active: active,
           paused: data["outputPaused"]?.try(&.as_bool?),
           timecode: data["outputTimecode"]?.try(&.as_s?),
-          duration_ms: active == true ? data["outputDuration"]?.try(&.as_i64?) : nil,
-          bytes: active == true ? data["outputBytes"]?.try(&.as_i64?) : nil
+          duration_ms: output_value_while_active(data, "outputDuration", active),
+          bytes: output_value_while_active(data, "outputBytes", active)
         )
       end
 
       def profiles : NamedTuple(current: String?, names: Array(String))
         data = response_data(Requests::Studio::GET_PROFILE_LIST)
-        entries = data["profiles"]?.try(&.as_a?) || [] of JSON::Any
-        names = entries.compact_map do |profile|
-          profile.as_s? || profile.as_h?.try { profile["profileName"]?.try(&.as_s?) }
-        end
-        {current: data["currentProfileName"]?.try(&.as_s?), names: names}
+        {current: data["currentProfileName"]?.try(&.as_s?), names: profile_names(data["profiles"]?.try(&.as_a?))}
       end
 
       def set_profile(name : String) : Nil
@@ -205,8 +201,7 @@ module Obsctl
 
       def scene_collections : NamedTuple(current: String?, names: Array(String))
         data = response_data(Requests::Studio::GET_SCENE_COLLECTION_LIST)
-        names = data["sceneCollections"]?.try(&.as_a?).try(&.compact_map(&.as_s?)) || [] of String
-        {current: data["currentSceneCollectionName"]?.try(&.as_s?), names: names}
+        {current: data["currentSceneCollectionName"]?.try(&.as_s?), names: string_list(data, "sceneCollections")}
       end
 
       def set_scene_collection(name : String) : Nil
@@ -222,17 +217,16 @@ module Obsctl
       # periodic telemetry poller. OBS exposes bytes rather than bitrate, so
       # the supervisor derives kbit/s from consecutive samples.
       def telemetry_sample : TelemetrySample
-        stream = response_data(Requests::Outputs::GET_STREAM_STATUS)
-        record = response_data(Requests::Outputs::GET_RECORD_STATUS)
-        stream_active = stream["outputActive"]?.try(&.as_bool?) || false
-        record_active = record["outputActive"]?.try(&.as_bool?) || false
+        stream, record = output_statuses
+        stream_active = output_active(stream) || false
+        record_active = output_active(record) || false
         TelemetrySample.new(
           stats: stats,
           stream_active: stream_active,
           record_active: record_active,
           stream_bytes: stream["outputBytes"]?.try(&.as_i64?),
-          stream_duration_ms: stream_active ? stream["outputDuration"]?.try(&.as_i64?) : nil,
-          record_duration_ms: record_active ? record["outputDuration"]?.try(&.as_i64?) : nil
+          stream_duration_ms: output_value_while_active(stream, "outputDuration", stream_active),
+          record_duration_ms: output_value_while_active(record, "outputDuration", record_active)
         )
       end
 
@@ -264,15 +258,16 @@ module Obsctl
       # Reads stream and record status in one pass, since the two output flags
       # and the two durations all come from the same pair of requests.
       def output_details
-        stream = response_data(Requests::Outputs::GET_STREAM_STATUS)
-        record = response_data(Requests::Outputs::GET_RECORD_STATUS)
+        stream, record = output_statuses
+        stream_active = output_active(stream)
+        record_active = output_active(record)
         {
           state: State::OutputState.new(
-            streaming: stream["outputActive"]?.try(&.as_bool?),
-            recording: record["outputActive"]?.try(&.as_bool?)
+            streaming: stream_active,
+            recording: record_active
           ),
-          stream_duration_ms: stream["outputActive"]?.try(&.as_bool?) == true ? stream["outputDuration"]?.try(&.as_i64?) : nil,
-          record_duration_ms: record["outputActive"]?.try(&.as_bool?) == true ? record["outputDuration"]?.try(&.as_i64?) : nil,
+          stream_duration_ms: output_value_while_active(stream, "outputDuration", stream_active),
+          record_duration_ms: output_value_while_active(record, "outputDuration", record_active),
         }
       end
 
@@ -291,6 +286,31 @@ module Obsctl
 
       private def number(data : JSON::Any, key : String) : Float64?
         Protocol::JsonValue.number(data, key)
+      end
+
+      private def output_statuses : Tuple(JSON::Any, JSON::Any)
+        {
+          response_data(Requests::Outputs::GET_STREAM_STATUS),
+          response_data(Requests::Outputs::GET_RECORD_STATUS),
+        }
+      end
+
+      private def output_active(data : JSON::Any) : Bool?
+        data["outputActive"]?.try(&.as_bool?)
+      end
+
+      private def output_value_while_active(data : JSON::Any, key : String, active : Bool?) : Int64?
+        active == true ? data[key]?.try(&.as_i64?) : nil
+      end
+
+      private def profile_names(entries : Array(JSON::Any)?) : Array(String)
+        (entries || [] of JSON::Any).compact_map do |profile|
+          profile.as_s? || profile.as_h?.try { profile["profileName"]?.try(&.as_s?) }
+        end
+      end
+
+      private def string_list(data : JSON::Any, key : String) : Array(String)
+        data[key]?.try(&.as_a?).try(&.compact_map(&.as_s?)) || [] of String
       end
     end
   end

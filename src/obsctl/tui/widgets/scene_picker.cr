@@ -30,16 +30,10 @@ module Obsctl
         end
 
         private def block(count : Int32, model : Model) : CryTUI::Widgets::Block
-          theme = model.theme
           # Through the shared layout, so the title drawn is the title the box
           # was sized around.
           heading, badge, hint = ScenePickerLayout.title_parts(model, count)
-          title = CryTUI::Line.new([
-            CryTUI::Span.new(heading, CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold)),
-            CryTUI::Span.new(badge, CryTUI::Style.new(foreground: theme.badge_foreground, background: theme.badge_background, modifiers: CryTUI::Modifier::Bold)),
-            CryTUI::Span.new(hint, CryTUI::Style.new(foreground: theme.muted)),
-          ])
-          Overlay.block(model, title)
+          Overlay.block(model, Overlay.title(model, heading, badge, hint))
         end
 
         # Split so the spans concatenate back to `ScenePickerLayout.row_text`,

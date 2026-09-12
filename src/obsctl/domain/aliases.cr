@@ -79,21 +79,32 @@ module Obsctl
       private def self.resolve(entries : Array(TargetEntry), target : String, kind : TargetKind) : TargetEntry
         exact = [] of TargetEntry
         insensitive = [] of TargetEntry
+        folded_target = target.downcase
 
         entries.each do |entry|
-          if entry.shortcut == target || entry.alias == target || entry.name == target
+          if exact_match?(entry, target)
             exact << entry
-          elsif entry.alias.try(&.downcase) == target.downcase || entry.name.downcase == target.downcase
+          elsif insensitive_match?(entry, folded_target)
             insensitive << entry
           end
         end
 
-        return exact.first if exact.size == 1
-        raise AliasAmbiguous.new(kind.label, target) if exact.size > 1
-        return insensitive.first if insensitive.size == 1
-        raise AliasAmbiguous.new(kind.label, target) if insensitive.size > 1
+        pick_unique!(exact, kind, target) ||
+          pick_unique!(insensitive, kind, target) ||
+          raise kind.not_found(target)
+      end
 
-        raise kind.not_found(target)
+      private def self.exact_match?(entry : TargetEntry, target : String) : Bool
+        entry.shortcut == target || entry.alias == target || entry.name == target
+      end
+
+      private def self.insensitive_match?(entry : TargetEntry, folded_target : String) : Bool
+        entry.alias.try(&.downcase) == folded_target || entry.name.downcase == folded_target
+      end
+
+      private def self.pick_unique!(matches : Array(TargetEntry), kind : TargetKind, target : String) : TargetEntry?
+        return matches.first if matches.size == 1
+        raise AliasAmbiguous.new(kind.label, target) if matches.size > 1
       end
     end
   end

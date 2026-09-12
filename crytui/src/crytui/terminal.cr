@@ -30,8 +30,10 @@ module CryTUI
 
     def draw(changes : Array(Tuple(Int32, Int32, Cell))) : Nil
       changes.each do |x, y, cell|
-        @buffer[x, y].symbol = cell.symbol
-        @buffer[x, y].style = cell.style
+        target = @buffer[x, y]
+        target.symbol = cell.symbol
+        target.style = cell.style
+        target.continuation = cell.continuation?
       end
     end
 

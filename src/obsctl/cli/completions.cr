@@ -46,6 +46,12 @@ module Obsctl
         Domain::ArgumentKind::SceneProfile    => CandidateSource.new("scene-profiles", "scene_profiles", named: true),
       }
 
+      SOURCE_BY_KIND = begin
+        table = {} of String => CandidateSource
+        SOURCES.each_value { |source| table[source.kind] = source }
+        table
+      end
+
       # Renders the completion script for one shell.
       def render(shell : String) : String
         case shell
@@ -116,12 +122,9 @@ module Obsctl
       def candidates(kind : String, snapshot : JSON::Any?) : Array(String)
         # Validate before the snapshot check, so a typo is still reported when
         # no daemon is running.
-        unless CANDIDATE_KINDS.includes?(kind)
-          raise Domain::CommandParseError.new("unknown candidate kind: #{kind}; expected #{CANDIDATE_KINDS.join(", ")}")
-        end
+        source = source_for(kind)
         return [] of String unless snapshot
 
-        source = SOURCES.values.find! { |entry| entry.kind == kind }
         source.named ? names_at(snapshot, source.snapshot_key) : strings_at(snapshot, source.snapshot_key)
       end
 
@@ -303,6 +306,10 @@ module Obsctl
 
       private def fish_escape(text : String) : String
         text.gsub("'", %q(\'))
+      end
+
+      private def source_for(kind : String) : CandidateSource
+        SOURCE_BY_KIND[kind]? || raise Domain::CommandParseError.new("unknown candidate kind: #{kind}; expected #{CANDIDATE_KINDS.join(", ")}")
       end
     end
   end

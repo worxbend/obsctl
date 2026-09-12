@@ -576,33 +576,22 @@ module Obsctl
       private def settings_action(action : Action) : ActionOutcome?
         case action.kind
         when .open_settings?
-          @model.theme_preview_origin = @model.theme
-          @model.settings_cursor = Theme::ALL.index(@model.theme) || 0
-          @model.view = View::Settings
+          open_settings
           ActionOutcome::HANDLED
         when .close_settings?
-          @model.theme = @model.theme_preview_origin || @model.theme
-          @model.theme_preview_origin = nil
-          @model.view = View::Main
+          close_settings(apply_preview: false)
           ActionOutcome::HANDLED
         when .settings_navigate_up?
-          @model.settings_cursor = {@model.settings_cursor - 1, 0}.max
-          @model.theme = Theme::ALL[@model.settings_cursor]
+          preview_theme({@model.settings_cursor - 1, 0}.max)
           ActionOutcome::HANDLED
         when .settings_navigate_down?
-          @model.settings_cursor = {@model.settings_cursor + 1, Theme::ALL.size - 1}.min
-          @model.theme = Theme::ALL[@model.settings_cursor]
+          preview_theme({@model.settings_cursor + 1, Theme::ALL.size - 1}.min)
           ActionOutcome::HANDLED
         when .pointer_settings_select?
-          index = action.index
-          if index && (theme = Theme::ALL[index]?)
-            @model.settings_cursor = index
-            @model.theme = theme
-          end
+          preview_theme(action.index)
           ActionOutcome::HANDLED
         when .apply_settings_theme?, .pointer_settings_apply?
-          @model.theme_preview_origin = nil
-          @model.view = View::Main
+          close_settings(apply_preview: true)
           ActionOutcome.new(message: @theme_persister.try(&.call(@model.theme)) || "theme set: #{@model.theme.id}")
         end
       end
@@ -813,14 +802,14 @@ module Obsctl
           # carriage return -- what a copied line ending arrives as -- would
           # otherwise submit, here saving a profile under a name the user never
           # chose.
-          editor.name_input += text.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
+          editor.name_input += sanitized_paste(text)
           return
         end
 
         palette = @model.command_palette
         return unless palette.active
 
-        palette.input += text.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
+        palette.input += sanitized_paste(text)
         refresh_completions
       end
 
@@ -837,6 +826,29 @@ module Obsctl
         palette = @model.command_palette
         palette.completions = Completion.compute(palette.input, @model)
         palette.completion_index = nil
+      end
+
+      private def open_settings : Nil
+        @model.theme_preview_origin = @model.theme
+        @model.settings_cursor = Theme::ALL.index(@model.theme) || 0
+        @model.view = View::Settings
+      end
+
+      private def close_settings(apply_preview : Bool) : Nil
+        @model.theme = @model.theme_preview_origin || @model.theme unless apply_preview
+        @model.theme_preview_origin = nil
+        @model.view = View::Main
+      end
+
+      private def preview_theme(index : Int32?) : Nil
+        return unless index && (theme = Theme::ALL[index]?)
+
+        @model.settings_cursor = index
+        @model.theme = theme
+      end
+
+      private def sanitized_paste(text : String) : String
+        text.gsub(/[\x00-\x08\x0B-\x1F\x7F]/, "")
       end
 
       private def close_palette

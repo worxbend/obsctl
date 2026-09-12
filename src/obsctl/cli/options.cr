@@ -84,61 +84,79 @@ module Obsctl
         FlagSpec.new("--help", short: "-h", description: "Show help"),
       ]
 
-      def parse(argv : Array(String)) : Options
-        config_path = Config::ConfigPaths.default_path
-        log_level = "info"
-        force = false
-        json = false
-        version = false
-        quiet = false
-        help = false
-        color = ColorMode::Auto
-        timeout = nil.as(Time::Span?)
+      private class GlobalOptionsState
+        property config_path : String
+        property log_level : String
+        property force : Bool
+        property json : Bool
+        property version : Bool
+        property quiet : Bool
+        property color : ColorMode
+        property timeout : Time::Span?
+        property help : Bool
 
-        parser = OptionParser.new do |opts|
-          opts.banner = BANNER
-          FLAGS.each do |flag|
-            handler = ->(value : String) do
-              case flag.long
-              when "--config"    then config_path = value
-              when "--log-level" then log_level = value
-              when "--color"     then color = ColorMode.from_option(value)
-              when "--timeout"   then timeout = parse_timeout(value)
-              when "--force"     then force = true
-              when "--json"      then json = true
-              when "--quiet"     then quiet = true
-              when "--version"   then version = true
-              when "--help"      then help = true
-              end
-              nil
-            end
+        def initialize
+          @config_path = Config::ConfigPaths.default_path
+          @log_level = "info"
+          @force = false
+          @json = false
+          @version = false
+          @quiet = false
+          @color = ColorMode::Auto
+          @timeout = nil
+          @help = false
+        end
 
-            if short = flag.short
-              opts.on(short, flag.to_flag, flag.description) { |value| handler.call(value) }
-            else
-              opts.on(flag.to_flag, flag.description) { |value| handler.call(value) }
-            end
+        def apply!(flag_name : String, value : String) : Nil
+          case flag_name
+          when "--config"    then @config_path = value
+          when "--log-level" then @log_level = value
+          when "--color"     then @color = ColorMode.from_option(value)
+          when "--timeout"   then @timeout = parse_timeout(value)
+          when "--force"     then @force = true
+          when "--json"      then @json = true
+          when "--quiet"     then @quiet = true
+          when "--version"   then @version = true
+          when "--help"      then @help = true
           end
         end
+
+        def to_options(help_text : String, command : String?, args : Array(String)) : Options
+          Options.new(
+            config_path: @config_path,
+            log_level: @log_level,
+            force: @force,
+            json: @json,
+            version: @version,
+            quiet: @quiet,
+            color: @color,
+            timeout: @timeout,
+            help: @help,
+            help_text: help_text,
+            command: command,
+            args: args
+          )
+        end
+
+        private def parse_timeout(value : String) : Time::Span
+          seconds = value.to_f?
+          unless seconds && seconds > 0
+            raise Domain::CommandParseError.new("--timeout must be a positive number of seconds")
+          end
+
+          seconds.seconds
+        end
+      end
+
+      def parse(argv : Array(String)) : Options
+        state = GlobalOptionsState.new
+        parser = option_parser(state)
 
         global_argv, command, args = split(argv)
         parser.parse(global_argv)
         command, args = translate_scene_profile_flags(command, args)
 
-        Options.new(
-          config_path: config_path,
-          log_level: log_level,
-          force: force,
-          json: json,
-          version: version,
-          quiet: quiet,
-          color: color,
-          timeout: timeout,
-          help: help,
-          help_text: parser.to_s,
-          command: command,
-          args: args
-        )
+        state.to_options(parser.to_s, command, args)
       end
 
       # Splits argv into the global option section, the command, and its args.
@@ -193,13 +211,21 @@ module Obsctl
         end
       end
 
-      private def parse_timeout(value : String) : Time::Span
-        seconds = value.to_f?
-        unless seconds && seconds > 0
-          raise Domain::CommandParseError.new("--timeout must be a positive number of seconds")
+      private def option_parser(state : GlobalOptionsState) : OptionParser
+        OptionParser.new do |opts|
+          opts.banner = BANNER
+          FLAGS.each do |flag|
+            register_flag(opts, flag) { |value| state.apply!(flag.long, value) }
+          end
         end
+      end
 
-        seconds.seconds
+      private def register_flag(opts : OptionParser, flag : FlagSpec, &block : String ->) : Nil
+        if short = flag.short
+          opts.on(short, flag.to_flag, flag.description) { |value| block.call(value) }
+        else
+          opts.on(flag.to_flag, flag.description) { |value| block.call(value) }
+        end
       end
     end
   end

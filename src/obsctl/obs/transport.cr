@@ -12,6 +12,7 @@ require "./protocol/event"
 require "./protocol/message"
 require "../config/config"
 require "../domain/errors"
+require "../runtime/secret_redaction"
 
 module Obsctl
   module OBS
@@ -145,11 +146,7 @@ module Obsctl
         select
         when result = responses.receive
           raise result if result.is_a?(Exception)
-          response = result
-          unless response.request_status.result
-            raise Domain::ObsRequestFailed.new(request_type, response.request_status.comment || "request returned failure")
-          end
-          response
+          validate_response(request_type, result)
         when timeout(timeout)
           raise Domain::RequestTimeout.new(request_type)
         end
@@ -166,33 +163,48 @@ module Obsctl
       # escaping into the supervisor's catch-all, which logs an ordinary
       # protocol mismatch as an internal daemon error.
       private def identify(hello_frame : String) : Nil
-        hello = JSON.parse(hello_frame)
-        raise Domain::ConnectionFailed.new("expected OBS Hello frame") unless hello["op"].as_i == Protocol::Opcode::Hello.value
-        data = hello["d"]? || raise malformed_handshake("d")
-        identify_data = {} of String => JSON::Any
-        rpc_version = Protocol::JsonValue.integer(data, "rpcVersion") || raise malformed_handshake("rpcVersion")
-        identify_data["rpcVersion"] = JSON::Any.new(rpc_version)
-        if event_subscriptions = @event_subscriptions
-          identify_data["eventSubscriptions"] = JSON::Any.new(event_subscriptions.to_i64)
-        end
-
-        if auth = data["authentication"]?
-          password = password_from_config
-          salt = Protocol::JsonValue.string(auth, "salt") || raise malformed_handshake("authentication.salt")
-          challenge = Protocol::JsonValue.string(auth, "challenge") || raise malformed_handshake("authentication.challenge")
-          identify_data["authentication"] = JSON::Any.new(Auth.authentication(password, salt, challenge))
-        end
-
+        data = hello_data(hello_frame)
         frame = JSON.build do |json|
           json.object do
             json.field "op", Protocol::Opcode::Identify.value
-            json.field "d", identify_data
+            json.field "d", identify_payload(data)
           end
         end
         connected_socket.send(frame)
         identified = read_system_frame
         parsed = JSON.parse(identified)
         raise Domain::AuthenticationFailed.new unless parsed["op"].as_i == Protocol::Opcode::Identified.value
+      end
+
+      private def hello_data(hello_frame : String) : JSON::Any
+        hello = JSON.parse(hello_frame)
+        raise Domain::ConnectionFailed.new("expected OBS Hello frame") unless hello["op"].as_i == Protocol::Opcode::Hello.value
+        hello["d"]? || raise malformed_handshake("d")
+      end
+
+      private def identify_payload(data : JSON::Any) : Hash(String, JSON::Any)
+        payload = {"rpcVersion" => JSON::Any.new(rpc_version(data))} of String => JSON::Any
+        if event_subscriptions = @event_subscriptions
+          payload["eventSubscriptions"] = JSON::Any.new(event_subscriptions.to_i64)
+        end
+        if authentication = authentication_response(data)
+          payload["authentication"] = JSON::Any.new(authentication)
+        end
+        payload
+      end
+
+      private def rpc_version(data : JSON::Any) : Int64
+        Protocol::JsonValue.integer(data, "rpcVersion") || raise malformed_handshake("rpcVersion")
+      end
+
+      private def authentication_response(data : JSON::Any) : String?
+        auth = data["authentication"]?
+        return unless auth
+
+        password = password_from_config
+        salt = Protocol::JsonValue.string(auth, "salt") || raise malformed_handshake("authentication.salt")
+        challenge = Protocol::JsonValue.string(auth, "challenge") || raise malformed_handshake("authentication.challenge")
+        Auth.authentication(password, salt, challenge)
       end
 
       private def malformed_handshake(field : String) : Exception
@@ -360,8 +372,17 @@ module Obsctl
 
       private def websocket_close_message(code : HTTP::WebSocket::CloseCode, reason : String) : String
         explanation = Protocol::CloseCode.explanation(code.value)
-        suffix = reason.empty? ? explanation : "#{explanation}; reason: #{reason}"
+        safe_reason = Runtime::SecretRedaction.redact(reason)
+        suffix = safe_reason.empty? ? explanation : "#{explanation}; reason: #{safe_reason}"
         "OBS WebSocket disconnected (close code #{code.value}: #{suffix})"
+      end
+
+      private def validate_response(request_type : String, response : Protocol::Response) : Protocol::Response
+        unless response.request_status.result
+          message = response.request_status.comment || "request returned failure"
+          raise Domain::ObsRequestFailed.new(request_type, Runtime::SecretRedaction.redact(message))
+        end
+        response
       end
 
       private def record_terminal_error(error : Domain::ConnectionFailed) : Domain::ConnectionFailed

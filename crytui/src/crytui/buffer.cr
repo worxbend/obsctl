@@ -86,7 +86,7 @@ module CryTUI
       raise ArgumentError.new("buffer areas differ") unless @area == other.area
       changes = [] of Tuple(Int32, Int32, Cell)
       @cells.each_with_index do |cell, index|
-        unless cell.symbol == other.cells[index].symbol && cell.style == other.cells[index].style && cell.continuation? == other.cells[index].continuation?
+        unless rendered_identically?(cell, other.cells[index])
           x, y = position(index)
           changes << {x, y, other.cells[index]}
         end
@@ -124,6 +124,10 @@ module CryTUI
     private def clear_content(cell : Cell)
       cell.symbol = " "
       cell.continuation = false
+    end
+
+    private def rendered_identically?(cell : Cell, other : Cell) : Bool
+      cell.symbol == other.symbol && cell.style == other.style && cell.continuation? == other.continuation?
     end
 
     # The inverse of `index`: where the cell at a row-major offset sits.

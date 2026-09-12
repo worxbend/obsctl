@@ -231,7 +231,8 @@ module CryTUI
       def render(area : Rect, buffer : Buffer, state : ListState)
         content = Block.frame(@block, area, buffer)
         return if content.empty? || @items.empty?
-        clamp_state(state, content.height)
+        heights = @items.map(&.height)
+        clamp_state(state, content.height, heights)
         y = content.y
         @items.each_with_index.skip(state.offset).each do |item, index|
           break if y >= content.bottom
@@ -308,7 +309,12 @@ module CryTUI
       # every list that has not opted into taller rows and spares each caller
       # spelling out an array of ones.
       def self.row_at(count : Int32, selected : Int32?, content : Rect, row : Int32) : Int32?
-        row_at(Array.new({count, 0}.max, 1), selected, content, row)
+        return if count <= 0 || content.height <= 0
+        return unless row >= content.y && row < content.bottom
+
+        offset = visible_offset(count, selected, content.height)
+        index = offset + (row - content.y)
+        index < count ? index : nil
       end
 
       private def self.rows(heights : Array(Int32), from : Int32, through : Int32) : Int32
@@ -316,11 +322,18 @@ module CryTUI
         heights[from..through].sum
       end
 
-      private def clamp_state(state : ListState, height : Int32)
+      private def self.visible_offset(count : Int32, selected : Int32?, height : Int32, offset : Int32 = 0) : Int32
+        return offset.clamp(0, {count - 1, 0}.max) unless selected
+
+        selected = selected.clamp(0, count - 1)
+        {selected - height + 1, 0}.max.clamp(0, selected)
+      end
+
+      private def clamp_state(state : ListState, height : Int32, heights : Array(Int32))
         selected = state.selected
         return state.offset = state.offset.clamp(0, {@items.size - 1, 0}.max) unless selected
         state.selected = selected.clamp(0, @items.size - 1)
-        state.offset = List.visible_offset(@items.map(&.height), state.selected, height, state.offset)
+        state.offset = List.visible_offset(heights, state.selected, height, state.offset)
       end
     end
 

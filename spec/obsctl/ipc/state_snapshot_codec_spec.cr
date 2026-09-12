@@ -24,6 +24,11 @@ private def full_snapshot
     current_profile: "Streaming",
     scene_collections: ["Main"],
     current_scene_collection: "Main",
+    scene_profiles: [
+      Obsctl::OBS::State::SceneProfileState.new(name: "streaming", hidden: ["BRB"]),
+      Obsctl::OBS::State::SceneProfileState.new(name: "recording", hidden: [] of String),
+    ],
+    active_scene_profile: "streaming",
     stats: Obsctl::OBS::State::ObsStats.new(
       cpu_usage_percent: 12.5, memory_usage_mb: 2048.0,
       available_disk_space_mb: 51200.0, active_fps: 60.0,
@@ -62,6 +67,8 @@ describe Obsctl::IPC::StateSnapshotCodec do
     decoded.current_profile.should eq(original.current_profile)
     decoded.scene_collections.should eq(original.scene_collections)
     decoded.current_scene_collection.should eq(original.current_scene_collection)
+    decoded.scene_profiles.should eq(original.scene_profiles)
+    decoded.active_scene_profile.should eq(original.active_scene_profile)
     decoded.stats.should eq(original.stats)
     decoded.stream_bitrate_kbps.should eq(original.stream_bitrate_kbps)
     decoded.stream_duration_ms.should eq(original.stream_duration_ms)

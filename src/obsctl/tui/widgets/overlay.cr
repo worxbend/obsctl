@@ -32,6 +32,26 @@ module Obsctl
           )
         end
 
+        # The accent heading, count/name badge, and muted hint are reused
+        # across overlays so they stay visually identical to the title widths
+        # their matching layout code measured.
+        def title(model : Model, heading : String, badge : String? = nil, hint : String? = nil) : CryTUI::Line
+          theme = model.theme
+          spans = [CryTUI::Span.new(heading, CryTUI::Style.new(foreground: theme.accent, modifiers: CryTUI::Modifier::Bold))]
+          if badge
+            spans << CryTUI::Span.new(
+              badge,
+              CryTUI::Style.new(
+                foreground: theme.badge_foreground,
+                background: theme.badge_background,
+                modifiers: CryTUI::Modifier::Bold
+              )
+            )
+          end
+          spans << CryTUI::Span.new(hint, CryTUI::Style.new(foreground: theme.muted)) if hint && !hint.empty?
+          CryTUI::Line.new(spans)
+        end
+
         # The bordered box, built here rather than through `Chrome.panel`
         # because a dashboard panel is transparent and an overlay must not be:
         # the box needs an opaque `style` so the dashboard does not show
@@ -48,6 +68,24 @@ module Obsctl
             border_style: CryTUI::Style.new(foreground: theme.border_focus),
             border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
           )
+        end
+
+        # Overlay lists share the same layering rules: blank the dashboard
+        # beneath them, draw their own border first, then paint the selectable
+        # rows only inside the content area that leaves the hint row untouched.
+        def render_framed_list(
+          rect : CryTUI::Rect,
+          content : CryTUI::Rect,
+          buffer : CryTUI::Buffer,
+          frame : CryTUI::Widgets::Block,
+          items : Array(CryTUI::Widgets::ListItem),
+          selected : Int32,
+          theme : Theme,
+        )
+          clear(rect, buffer, theme)
+          frame.render(rect, buffer)
+          state = CryTUI::Widgets::ListState.new(selected: selected)
+          CryTUI::Widgets::List.new(items, highlight_style: highlight_style(theme)).render(content, buffer, state)
         end
 
         # The row of key hints an overlay keeps under its list.

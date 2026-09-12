@@ -359,11 +359,6 @@ module Obsctl
       # before a single byte reached disk. Each of those collections is
       # therefore given a copy of its own below.
       #
-      # The copy is one level deep, which is what the callers need: an edit may
-      # add, remove, reorder or wholesale-replace entries in these collections,
-      # but must not reach inside an entry and mutate a collection the entry
-      # itself holds -- a scene profile's `hidden` list being the only one.
-      #
       # Named `copy` rather than `dup` deliberately: Crystal's `Object#dup` is
       # shallow by contract, and callers already rely on `Config#dup` being
       # exactly that.
@@ -374,15 +369,25 @@ module Obsctl
         copy = Config.new
         copy.replace_with(self)
         copy.scenes = @scenes.dup
-        copy.scene_profiles = @scene_profiles.dup
+        copy.scene_profiles = duplicate_scene_profiles(@scene_profiles)
         copy.audio = @audio.copy_with(inputs: @audio.inputs.dup)
-        copy.keymap = @keymap.copy_with(
-          quit: @keymap.quit.dup,
-          command_palette: @keymap.command_palette.dup,
-          reload_config: @keymap.reload_config.dup,
-          dump_config: @keymap.dump_config.dup,
-        )
+        copy.keymap = duplicate_keymap(@keymap)
         copy
+      end
+
+      private def duplicate_scene_profiles(profiles : Array(SceneProfileConfig)) : Array(SceneProfileConfig)
+        profiles.map do |profile|
+          profile.copy_with(hidden: profile.hidden.dup)
+        end
+      end
+
+      private def duplicate_keymap(keymap : KeymapConfig) : KeymapConfig
+        keymap.copy_with(
+          quit: keymap.quit.dup,
+          command_palette: keymap.command_palette.dup,
+          reload_config: keymap.reload_config.dup,
+          dump_config: keymap.dump_config.dup,
+        )
       end
 
       # Parses YAML into the typed config model and rejects unsupported top-level

@@ -7,6 +7,13 @@ module Obsctl
   module Service
     # Installs and controls the obsctl systemd user service.
     class ServiceInstaller
+      SERVICE_ACTION_MESSAGES = {
+        "status"  => "service status shown",
+        "start"   => "service started",
+        "stop"    => "service stopped",
+        "restart" => "service restarted",
+      }
+
       # Creates a service installer with injectable paths and command runner for tests.
       def initialize(
         @service_path : String = SystemdUserService.default_path,
@@ -17,26 +24,14 @@ module Obsctl
 
       # Runs a service action such as install, start, status, or uninstall.
       def run(action : String) : String
-        case action
-        when "install"
-          install
-        when "uninstall"
-          uninstall
-        when "status"
-          systemctl_service("status")
-          "service status shown"
-        when "start"
-          systemctl_service("start")
-          "service started"
-        when "stop"
-          systemctl_service("stop")
-          "service stopped"
-        when "restart"
-          systemctl_service("restart")
-          "service restarted"
-        else
-          raise Domain::CommandParseError.new("unknown service action: #{action}")
-        end
+        return install if action == "install"
+        return uninstall if action == "uninstall"
+
+        message = SERVICE_ACTION_MESSAGES[action]?
+        raise Domain::CommandParseError.new("unknown service action: #{action}") unless message
+
+        systemctl_service(action)
+        message
       end
 
       # Writes the service unit and reloads the user systemd manager.

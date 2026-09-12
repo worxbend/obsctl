@@ -92,22 +92,17 @@ module Obsctl
       end
 
       private def raise_remote_error(error : IPC::ErrorPayload) : NoReturn
-        case code = self.class.exit_code_for(error)
-        when Domain::ExitCode::Connection
-          if error.code == IPC::ErrorCode::SERVER_UNAVAILABLE
-            raise Domain::ServerUnavailable.new(error.message)
-          end
-          if error.code == IPC::ErrorCode::OBS_UNAVAILABLE
-            raise Domain::ObsUnavailable.new(error.message)
-          end
-          raise Domain::RemoteCommandFailed.new(error.message, code)
-        when Domain::ExitCode::CommandParse
-          raise Domain::CommandParseError.new(error.message) if error.code == IPC::ErrorCode::COMMAND_PARSE_ERROR
-          raise Domain::RemoteCommandFailed.new(error.message, code)
-        when Domain::ExitCode::Config
+        case error.code
+        when IPC::ErrorCode::SERVER_UNAVAILABLE
+          raise Domain::ServerUnavailable.new(error.message)
+        when IPC::ErrorCode::OBS_UNAVAILABLE
+          raise Domain::ObsUnavailable.new(error.message)
+        when IPC::ErrorCode::COMMAND_PARSE_ERROR
+          raise Domain::CommandParseError.new(error.message)
+        when IPC::ErrorCode::CONFIG_INVALID
           raise Domain::ConfigInvalid.new(error.message)
         else
-          raise Domain::RemoteCommandFailed.new(error.message, code)
+          raise Domain::RemoteCommandFailed.new(error.message, self.class.exit_code_for(error))
         end
       end
 

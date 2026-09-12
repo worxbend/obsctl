@@ -152,34 +152,14 @@ module Obsctl
         @needs_render = true unless message.is_a?(SubscriptionMessage)
         case message
         when CryTUI::KeyEvent
-          if action = Input.handle_key(@model, message)
-            apply_outcome(dispatcher.handle(action))
-          else
-            false
-          end
+          handle_input_action(Input.handle_key(@model, message), dispatcher)
         when CryTUI::MouseEvent
-          if action = Input.handle_mouse(@model, message, @area)
-            apply_outcome(dispatcher.handle(action))
-          else
-            false
-          end
+          handle_input_action(Input.handle_mouse(@model, message, @area), dispatcher)
         when CryTUI::PasteEvent
           dispatcher.paste(message.text)
           false
         when SubscriptionMessage
-          return false unless message.generation == @subscription_generation
-          if event = message.event
-            # Applied first and combined after: `||=` would short-circuit and
-            # never apply the event at all whenever a redraw is already owed.
-            # The result is OR-ed in so an event that needs no redraw cannot
-            # cancel one owed from an earlier pass.
-            @needs_render = true if EventApplier.apply(@model, event)
-          else
-            @model.connected_to_daemon = false
-            @model.set_last_result(message.error || "server connection closed")
-            @needs_render = true
-          end
-          false
+          handle_subscription_message(message)
         when DeferredOutcome
           apply_outcome(message.outcome)
         when InputClosed
@@ -227,6 +207,31 @@ module Obsctl
         end
         connect_subscription(retry: true) if outcome.retry_subscription
         outcome.quit
+      end
+
+      private def handle_input_action(action : Action?, dispatcher : Dispatcher) : Bool
+        action ? apply_outcome(dispatcher.handle(action)) : false
+      end
+
+      private def handle_subscription_message(message : SubscriptionMessage) : Bool
+        return false unless message.generation == @subscription_generation
+
+        if event = message.event
+          # Applied first and combined after: `||=` would short-circuit and
+          # never apply the event at all whenever a redraw is already owed.
+          # The result is OR-ed in so an event that needs no redraw cannot
+          # cancel one owed from an earlier pass.
+          @needs_render = true if EventApplier.apply(@model, event)
+        else
+          subscription_closed(message.error)
+        end
+        false
+      end
+
+      private def subscription_closed(error : String?) : Nil
+        @model.connected_to_daemon = false
+        @model.set_last_result(error || "server connection closed")
+        @needs_render = true
       end
 
       private def run_splash(terminal : CryTUI::Terminal) : Nil

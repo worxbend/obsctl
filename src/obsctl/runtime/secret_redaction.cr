@@ -12,22 +12,24 @@ module Obsctl
     module SecretRedaction
       SENSITIVE_KEY_PATTERN   = "(?:password|authentication(?:[ _-]?string)?|auth(?:[ _-]?string)?|token|secret)"
       SENSITIVE_VALUE_PATTERN = "(?:\"[^\"]*\"|'[^']*'|\\S+)"
+      URL_CREDENTIAL_PATTERN  = "((?:wss?|https?)://)([^/@\\s]+)@"
 
       # The shapes a credential can take in a human-readable message, one rule
-      # per shape: `password=hunter2`, `password: hunter2`, `password "hunter2"`,
-      # and the copula form `password is hunter2`.
+      # per shape: `wss://user:pass@example`, `password: hunter2`,
+      # `password "hunter2"`, and the copula form `password is hunter2`.
       #
       # These are compiled once at load rather than per call because
       # redaction runs on every failed IPC command and every log line, on both
       # the daemon and the client side. Keeping them as a named table also
       # makes the security-relevant ruleset readable as a list.
-      private ASSIGNMENT_RULE = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*=\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1=[redacted]"}
-      private COLON_RULE      = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*:\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1: [redacted]"}
-      private QUOTED_RULE     = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(\"[^\"]*\"|'[^']*')"), "\\1 [redacted]"}
-      private COPULA_RULE     = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(is|was|equals|set to|configured as|provided as)\\s+#{SENSITIVE_VALUE_PATTERN}"), "\\1 \\2 [redacted]"}
+      private URL_CREDENTIAL_RULE = {Regex.new("(?i)#{URL_CREDENTIAL_PATTERN}"), "\\1[redacted]@"}
+      private ASSIGNMENT_RULE     = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*=\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1=[redacted]"}
+      private COLON_RULE          = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s*:\\s*#{SENSITIVE_VALUE_PATTERN}"), "\\1: [redacted]"}
+      private QUOTED_RULE         = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(\"[^\"]*\"|'[^']*')"), "\\1 [redacted]"}
+      private COPULA_RULE         = {Regex.new("(?i)\\b(#{SENSITIVE_KEY_PATTERN})\\s+(is|was|equals|set to|configured as|provided as)\\s+#{SENSITIVE_VALUE_PATTERN}"), "\\1 \\2 [redacted]"}
 
       # Order matters: each rule is applied to the output of the previous one.
-      private REDACTION_RULES = [ASSIGNMENT_RULE, COLON_RULE, QUOTED_RULE, COPULA_RULE]
+      private REDACTION_RULES = [URL_CREDENTIAL_RULE, ASSIGNMENT_RULE, COLON_RULE, QUOTED_RULE, COPULA_RULE]
 
       # Redacts secret-like values from a human-readable message.
       def self.redact(message : String) : String
