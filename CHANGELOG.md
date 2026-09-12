@@ -8,6 +8,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
+## [0.9.0] - 2026-09-12
+
+### Added
+
+- Scene profiles: named sets of scenes to hide from the dashboard's scene
+  list, replacing the earlier anonymous scene-preset list. A profile can be
+  saved, applied, listed, and deleted from the CLI (`scene-profile`,
+  `scene-profile --off/--delete`, `scene-profiles`) or from the dashboard's
+  `<leader>P` editor, and `ui.scene_profiles` in config stores every saved
+  profile plus which one is active. Scene-profile names are also completed
+  in the command palette and in generated shell completions.
+
+### Fixed
+
+- `obsctl config explain` and `obsctl config diff` printed every effective
+  setting straight to stdout, including a plaintext `connection.password`,
+  where it could linger in terminal scrollback, a redirected file, or a CI
+  log. Both commands now redact secret values the same way every other
+  output path in this codebase already does.
+- `ConfigWriter#write_atomic` wrote a config's full contents to a
+  world-readable temporary file before narrowing its permissions in a
+  separate call, briefly exposing a plaintext password to any other local
+  user. The temp file is now created with its final permissions from the
+  start.
+- The daemon accepted a Unix-socket connection and then blocked forever in
+  `session.read_message` if the client never sent a first line, with no
+  timeout — unlike every other bounded socket boundary in the daemon. A
+  stalled or wedged client no longer ties up a fiber indefinitely.
+- `set_volume` bounded its `percent` argument for the CLI and for TUI
+  keypresses, but not for the IPC protocol itself, so any process on the
+  same machine could push an out-of-range value straight into daemon state.
+  The daemon now rejects out-of-range percents itself.
+- Holding a volume key in the dashboard paints the new level immediately and
+  only sends the real command 120 ms after the keys stop; a state snapshot
+  pushed by the daemon inside that window could overwrite the in-flight edit
+  with a stale level. The optimistic edit now survives snapshots that arrive
+  before the debounced send completes.
+- A malformed or non-obs-websocket-5.x handshake was read from the OBS Hello
+  frame without validation, surfacing as an unrelated crash instead of the
+  connection failure every other transport fault already produces.
+- The dashboard could unexpectedly disconnect or crash if the daemon reported
+  itself unreachable mid-action instead of returning the same connection
+  error every other command path already handles.
+- The scene-profile editor rejected a duplicate name only when it matched a
+  saved profile byte-for-byte, so two names differing only in case could
+  silently overwrite each other's hidden-scene set.
+
+### Internal
+
+- A broad maintainability and performance pass across every layer, behaviour
+  -preserving throughout: the command line, the IPC protocol, the config
+  format, and the exit codes are exactly as they were in 0.8.4, and no
+  fixture or documented behaviour changed.
+- CryTUI (the dashboard's rendering library) was extracted into its own
+  shard inside this repository, so it depends on nothing in obsctl and can
+  be built and tested on its own.
+- The client registry now serializes each broadcast frame once per topic
+  instead of once per subscriber, the daemon's snapshot assembler indexes
+  scenes and audio inputs by name instead of scanning linearly, and status
+  reads take one lock instead of two.
+- The IPC codec, and the state and status codecs, build `JSON::Any` trees
+  directly instead of round-tripping through `to_json` and re-parsing; OBS
+  request builders do the same. Secret redaction short-circuits on a fast
+  trigger check before running its full rule set, with a dedicated spec now
+  proving every redaction shape it supports.
+- The dashboard's model caches the scene, audio, and picker views it derives
+  from server state and invalidates only what an optimistic volume edit
+  touches; frames are marked dirty only when visible state actually changed;
+  and the volume-keypress debounce now runs on one long-lived fiber instead
+  of spawning one per keypress.
+- CryTUI's frame buffer reuses two swapped instances instead of allocating
+  fresh ones every draw, diffs cells through a row-major cursor, and its ANSI
+  backend batches a whole frame's escape sequences into a single write
+  instead of one write per cell; its layout engine caches repeated Cassowary
+  solves keyed on their immutable inputs.
+- Command-line option parsing, alias resolution, and command-registry
+  lookups were repeating work per token or per call that a cache or a single
+  pass now avoids.
+- Numerous smaller consolidations: OBS number decoding, close-code handling,
+  and status payload shapes each moved to one shared place instead of being
+  restated at each call site; dead code (an unused JSON writer, two unused
+  scene-profile helpers, unreachable branches) was removed; and new specs
+  pin the architecture boundary between the OBS transport and the client
+  layers, and that every dispatcher action kind is actually routed.
+
 ## [0.8.4] - 2026-08-22
 
 ### Fixed
@@ -605,7 +690,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.8.4...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/worxbend/obsctl/compare/v0.8.4...v0.9.0
 [0.8.4]: https://github.com/worxbend/obsctl/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/worxbend/obsctl/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/worxbend/obsctl/compare/v0.8.1...v0.8.2
