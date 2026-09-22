@@ -23,6 +23,9 @@ module Obsctl
     class Dispatcher
       VOLUME_DEBOUNCE = 120.milliseconds
 
+      # `percent` and `version` are read and written from two fibers -- the
+      # dispatch fiber and this input's debounce fiber -- so every access
+      # goes through `@volume_debouncers_lock`; see the note there.
       private class VolumeDebounceState
         property percent : Int32
         property version : UInt64
@@ -55,6 +58,18 @@ module Obsctl
         @outcomes : OutcomeSink? = nil,
       )
         @volume_debouncers = {} of String => VolumeDebounceState
+        # Concurrency: unlike the model's writes -- which each fiber does in
+        # one uninterrupted run -- the debounce state is read and written
+        # *across* yield points: the version check and the hash delete
+        # straddle a channel receive and the send to the daemon. "No yield
+        # between the writes" is therefore not a property this code can keep
+        # under Crystal's default single-threaded scheduler, and under
+        # `-Dpreview_mt` it is a plain race: a keypress landing between the
+        # check and the delete would have its debouncer entry removed out
+        # from under it. The critical sections are a hash lookup and two
+        # field writes, so a Mutex is cheaper than the caveat. Held nowhere
+        # across a blocking call -- the daemon send runs outside it.
+        @volume_debouncers_lock = Mutex.new
       end
 
       # Actions that only move focus or the cursor, with no daemon round trip.
@@ -776,16 +791,22 @@ module Obsctl
         ActionOutcome::HANDLED
       end
 
+      # Lookup-or-create is one critical section: two fibers debouncing the
+      # same input concurrently must not each miss and spawn a second
+      # debounce fiber for it.
       private def debounce_volume(input_name : String, percent : Int32) : Nil
-        debouncer = @volume_debouncers[input_name]?
-        if debouncer
-          debouncer.percent = percent
-          debouncer.version = debouncer.version &+ 1
-        else
-          debouncer = VolumeDebounceState.new(percent)
-          @volume_debouncers[input_name] = debouncer
-          spawn(name: "obsctl-volume-debounce") { run_volume_debounce(input_name, debouncer) }
+        debouncer, spawned_fiber = @volume_debouncers_lock.synchronize do
+          if existing = @volume_debouncers[input_name]?
+            existing.percent = percent
+            existing.version = existing.version &+ 1
+            {existing, false}
+          else
+            fresh = VolumeDebounceState.new(percent)
+            @volume_debouncers[input_name] = fresh
+            {fresh, true}
+          end
         end
+        spawn(name: "obsctl-volume-debounce") { run_volume_debounce(input_name, debouncer) } if spawned_fiber
 
         signal_volume_debounce(debouncer)
       end
@@ -803,7 +824,7 @@ module Obsctl
       private def run_volume_debounce(input_name : String, debouncer : VolumeDebounceState) : Nil
         loop do
           debouncer.wake.receive
-          version = debouncer.version
+          version = @volume_debouncers_lock.synchronize { debouncer.version }
           quiet = true
           select
           when debouncer.wake.receive
@@ -812,10 +833,26 @@ module Obsctl
           end
           next unless quiet
 
-          send_debounced_volume(input_name, debouncer.percent)
-          next unless debouncer.version == version
+          # The percent is snapshotted under the lock, but the send runs
+          # outside it: holding the lock across the daemon round trip would
+          # stall every other input's volume keys behind a slow daemon.
+          percent = @volume_debouncers_lock.synchronize { debouncer.percent }
+          send_debounced_volume(input_name, percent)
+          # The re-check and the delete are one critical section, so a
+          # keypress that bumped the version while the send was in flight
+          # keeps its debouncer entry and gets another quiet window instead
+          # of being settled out from under the user. The entry leaves the
+          # hash here and only here, so a live input's debouncer cannot leak.
+          settled = @volume_debouncers_lock.synchronize do
+            if debouncer.version == version
+              @volume_debouncers.delete(input_name)
+              true
+            else
+              false
+            end
+          end
+          next unless settled
 
-          @volume_debouncers.delete(input_name)
           @model.settle_volume(input_name)
           return
         end
