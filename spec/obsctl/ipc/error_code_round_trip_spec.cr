@@ -4,11 +4,12 @@ require "../../../src/obsctl/domain/errors"
 require "../../../src/obsctl/ipc/response"
 
 # An error raised in the daemon reaches the user's shell as an exit code by way
-# of two independently maintained tables: `ErrorCode.for_exception` turns the
-# exception into a wire code, and `ClientCommands.exit_code_for` turns that wire
-# code back into an exit code. Nothing but agreement between those two makes
-# `obsctl scene nope; echo $?` print what `docs/commands.md` promises, and until
-# this spec existed nothing checked that agreement.
+# of `ErrorCode.for_exception` turning the exception into a wire code, and
+# `ClientCommands.exit_code_for` rebuilding the exception from that code and
+# deriving its exit code through `Domain::ExitCode.for_exception`. Nothing but
+# agreement between those two makes `obsctl scene nope; echo $?` print what
+# `docs/commands.md` promises, and until this spec existed nothing checked that
+# agreement.
 describe "IPC error code round trip" do
   # One instance per concrete error class, built with whatever arguments its
   # constructor needs.

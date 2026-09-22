@@ -76,6 +76,29 @@ module Obsctl
           SERVER_ERROR
         end
       end
+
+      # The exit code a wire code maps to on the client side. This is the
+      # taxonomy's mirror image: each code's exit code is the one carried by
+      # the exception class it stands for (see `Domain::ExitCode.for_exception`
+      # and the `exit_code` each class passes to its super), so this table and
+      # `for_exception` describe one mapping from two directions and a new
+      # code needs an entry in both.
+      def self.exit_code(code : String) : Domain::ExitCode
+        case code
+        when SERVER_UNAVAILABLE, OBS_UNAVAILABLE, REQUEST_TIMEOUT
+          Domain::ExitCode::Connection
+        when COMMAND_PARSE_ERROR, SHUTDOWN_DISABLED, ALIAS_AMBIGUOUS
+          Domain::ExitCode::CommandParse
+        when CONFIG_INVALID
+          Domain::ExitCode::Config
+        when SCENE_NOT_FOUND, AUDIO_INPUT_NOT_FOUND, OBS_REQUEST_FAILED
+          Domain::ExitCode::ObsRequest
+        when IPC_PROTOCOL_ERROR
+          Domain::ExitCode::Ipc
+        else
+          Domain::ExitCode::Failure
+        end
+      end
     end
 
     # Stable error payload returned for failed IPC command requests.

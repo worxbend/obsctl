@@ -18,19 +18,32 @@ module Obsctl
       end
 
       def self.exit_code_for(error : IPC::ErrorPayload) : Domain::ExitCode
+        Domain::ExitCode.for_exception(remote_exception(error))
+      end
+
+      # Rebuilds the domain error a failed response stands for — the one place
+      # the wire taxonomy becomes exception types again.
+      #
+      # Only the four codes whose classes carry the daemon's message verbatim
+      # get their own type; `ServerUnavailable` additionally drives the
+      # startup hint in `CLI::Main`. The rest become `RemoteCommandFailed`,
+      # because classes like `RequestTimeout` format their own message and
+      # would overwrite what the daemon said. Their exit code comes from the
+      # wire code (`IPC::ErrorCode.exit_code`), so every remote failure's exit
+      # code is derivable from the exception alone through
+      # `Domain::ExitCode.for_exception` — there is no second table.
+      def self.remote_exception(error : IPC::ErrorPayload) : Domain::ObsctlError
         case error.code
-        when IPC::ErrorCode::SERVER_UNAVAILABLE, IPC::ErrorCode::OBS_UNAVAILABLE, IPC::ErrorCode::REQUEST_TIMEOUT
-          Domain::ExitCode::Connection
-        when IPC::ErrorCode::COMMAND_PARSE_ERROR, IPC::ErrorCode::SHUTDOWN_DISABLED, IPC::ErrorCode::ALIAS_AMBIGUOUS
-          Domain::ExitCode::CommandParse
+        when IPC::ErrorCode::SERVER_UNAVAILABLE
+          Domain::ServerUnavailable.new(error.message)
+        when IPC::ErrorCode::OBS_UNAVAILABLE
+          Domain::ObsUnavailable.new(error.message)
+        when IPC::ErrorCode::COMMAND_PARSE_ERROR
+          Domain::CommandParseError.new(error.message)
         when IPC::ErrorCode::CONFIG_INVALID
-          Domain::ExitCode::Config
-        when IPC::ErrorCode::SCENE_NOT_FOUND, IPC::ErrorCode::AUDIO_INPUT_NOT_FOUND, IPC::ErrorCode::OBS_REQUEST_FAILED
-          Domain::ExitCode::ObsRequest
-        when IPC::ErrorCode::IPC_PROTOCOL_ERROR
-          Domain::ExitCode::Ipc
+          Domain::ConfigInvalid.new(error.message)
         else
-          Domain::ExitCode::Failure
+          Domain::RemoteCommandFailed.new(error.message, IPC::ErrorCode.exit_code(error.code))
         end
       end
 
@@ -92,18 +105,7 @@ module Obsctl
       end
 
       private def raise_remote_error(error : IPC::ErrorPayload) : NoReturn
-        case error.code
-        when IPC::ErrorCode::SERVER_UNAVAILABLE
-          raise Domain::ServerUnavailable.new(error.message)
-        when IPC::ErrorCode::OBS_UNAVAILABLE
-          raise Domain::ObsUnavailable.new(error.message)
-        when IPC::ErrorCode::COMMAND_PARSE_ERROR
-          raise Domain::CommandParseError.new(error.message)
-        when IPC::ErrorCode::CONFIG_INVALID
-          raise Domain::ConfigInvalid.new(error.message)
-        else
-          raise Domain::RemoteCommandFailed.new(error.message, self.class.exit_code_for(error))
-        end
+        raise self.class.remote_exception(error)
       end
 
       private def next_id : String
