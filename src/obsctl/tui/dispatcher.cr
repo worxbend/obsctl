@@ -105,9 +105,7 @@ module Obsctl
           palette_action(action) ||
           scene_picker_action(action) ||
           scene_profile_list_action(action) ||
-          scene_profile_manage_action(action) ||
           scene_profiles_action(action) ||
-          scene_profile_name_action(action) ||
           navigation_action(action) ||
           settings_action(action) ||
           command_action(action) ||
@@ -159,11 +157,12 @@ module Obsctl
         target_command(IPC::CommandName::SET_SCENE, scene.name)
       end
 
-      # The scene-profile list: which saved profile is in effect.
+      # The scene-profile list: which saved profile is in effect, and the
+      # editing, creating and deleting that hang off its rows.
       #
       # Nothing here talks to the daemon -- the daemon keeps reporting every
       # scene and this only changes which of them the dashboard draws. Unlike
-      # the editor, every branch here takes effect at once and is written to
+      # the editor, activating a row takes effect at once and is written to
       # the config file at once: there is no draft to throw away, so there is
       # nothing for an Esc to undo.
       private def scene_profile_list_action(action : Action) : ActionOutcome?
@@ -193,6 +192,26 @@ module Obsctl
         when .pick_scene_profile?
           index = action.index
           index ? activate_scene_profile(index) : ActionOutcome::HANDLED
+        when .scene_profile_list_edit?   then edit_selected_scene_profile(naming: false)
+        when .scene_profile_list_rename? then edit_selected_scene_profile(naming: true)
+        when .scene_profile_list_new?
+          return ActionOutcome.new(message: NO_SCENES_TO_CONFIGURE) unless open_scene_profile_editor(profile: nil)
+
+          ActionOutcome.new(message: "new scene profile: toggle scenes, then n to name it")
+        when .scene_profile_list_delete_prompt?
+          entry = selected_scene_profile_entry
+          return ActionOutcome.new(message: "'#{SceneProfileList::SHOW_EVERY_SCENE}' is not a profile, so there is nothing to delete") unless entry && entry.profile
+
+          @model.scene_profile_list.confirming = true
+          # Said out loud as well as shown on the hint row, because a delete
+          # cannot be undone and the second press is the only thing standing
+          # between the user and losing the profile.
+          ActionOutcome.new(message: "delete scene profile '#{entry.name}'? press d again to confirm")
+        when .scene_profile_list_delete_cancel?
+          @model.scene_profile_list.confirming = false
+          ActionOutcome.new(message: "delete cancelled")
+        when .scene_profile_list_delete_confirm?
+          delete_selected_scene_profile
         end
       end
 
@@ -220,35 +239,6 @@ module Obsctl
         return command(IPC::CommandPayload.new(name: IPC::CommandName::SET_SCENE_PROFILE, target: profile.name)) if profile
 
         command(IPC::CommandPayload.new(name: IPC::CommandName::CLEAR_SCENE_PROFILE))
-      end
-
-      # Editing, creating and deleting from the list. Split from
-      # `scene_profile_list_action` because the two together are more branches
-      # than ameba's complexity ratchet allows in one method -- the same split
-      # the editor's two sub-modes already needed.
-      private def scene_profile_manage_action(action : Action) : ActionOutcome?
-        case action.kind
-        when .scene_profile_list_edit?   then edit_selected_scene_profile(naming: false)
-        when .scene_profile_list_rename? then edit_selected_scene_profile(naming: true)
-        when .scene_profile_list_new?
-          return ActionOutcome.new(message: NO_SCENES_TO_CONFIGURE) unless open_scene_profile_editor(profile: nil)
-
-          ActionOutcome.new(message: "new scene profile: toggle scenes, then n to name it")
-        when .scene_profile_list_delete_prompt?
-          entry = selected_scene_profile_entry
-          return ActionOutcome.new(message: "'#{SceneProfileList::SHOW_EVERY_SCENE}' is not a profile, so there is nothing to delete") unless entry && entry.profile
-
-          @model.scene_profile_list.confirming = true
-          # Said out loud as well as shown on the hint row, because a delete
-          # cannot be undone and the second press is the only thing standing
-          # between the user and losing the profile.
-          ActionOutcome.new(message: "delete scene profile '#{entry.name}'? press d again to confirm")
-        when .scene_profile_list_delete_cancel?
-          @model.scene_profile_list.confirming = false
-          ActionOutcome.new(message: "delete cancelled")
-        when .scene_profile_list_delete_confirm?
-          delete_selected_scene_profile
-        end
       end
 
       private def selected_scene_profile_entry : SceneProfileList::Entry?
@@ -294,10 +284,6 @@ module Obsctl
       # Nothing here talks to the daemon. Every branch edits the draft on the
       # model, and only `save_scene_profile` makes the draft the list the
       # dashboard draws -- which is what lets Esc throw an edit away.
-      #
-      # Split from `scene_profile_name_action` because the two sub-modes
-      # together are more branches than ameba's complexity ratchet allows in
-      # one method.
       private def scene_profiles_action(action : Action) : ActionOutcome?
         editor = @model.scene_profile_editor
         case action.kind
@@ -339,6 +325,53 @@ module Obsctl
           end
 
           save_scene_profile(editor.name)
+          # The naming sub-mode: a one-line text field with the same key set
+          # as the command palette's.
+        when .scene_profiles_name_character?
+          editor.name_input += action.character.to_s
+          ActionOutcome::HANDLED
+        when .scene_profiles_name_backspace?
+          editor.name_input = drop_last_grapheme(editor.name_input)
+          ActionOutcome::HANDLED
+        when .scene_profiles_name_clear_line?
+          editor.name_input = ""
+          ActionOutcome::HANDLED
+        when .scene_profiles_name_cancel?
+          # Back to the list, not out of the editor: the draft is still there
+          # to save under another name.
+          editor.naming = false
+          editor.name_input = ""
+          ActionOutcome::HANDLED
+        when .scene_profiles_name_submit?
+          name = editor.name_input.strip
+          return ActionOutcome.new(message: "scene profile name cannot be empty") if name.empty?
+
+          # Refused rather than silently replacing the other profile: `upsert`
+          # overwrites by name, and the only evidence would have been someone
+          # else's hidden set quietly becoming this draft's. Saving over the
+          # profile this draft came from is still allowed -- that is editing it.
+          #
+          # Both halves ask about identity, so both match the way `index_of`
+          # does: an exact "came from" check beside a case-insensitive lookup
+          # would refuse "streaming" -> "Streaming", which is a recapitalization
+          # of the draft's own profile and not a collision with anything.
+          if @model.scene_profiles.index_of(name) && !Domain::SceneProfileNames.same?(name, editor.origin_name)
+            return ActionOutcome.new(message: "a scene profile named '#{name}' already exists; open it from <leader>p to edit it")
+          end
+
+          # Naming is not saving. Confirming the name puts the draft back in
+          # the list so more scenes can be toggled under it, and `Enter` there
+          # is what writes the config -- which is what the box says on screen
+          # ("n name" and "enter save" are separate hints, and the naming hint
+          # reads "enter confirm").
+          #
+          # Saving here instead would also close the modal, so the `Enter` the
+          # hint asks for next would land on the dashboard and switch the live
+          # OBS scene under the cursor.
+          editor.name = name
+          editor.name_input = ""
+          editor.naming = false
+          ActionOutcome.new(message: "scene profile named: #{name}; press enter to save")
         end
       end
 
@@ -456,59 +489,6 @@ module Obsctl
       private def renamed_scene_profile(origin : String?, name : String) : String?
         return unless origin && origin != name
         @model.scene_profiles.index_of(origin) ? origin : nil
-      end
-
-      # The editor's naming sub-mode, which is a one-line text field with the
-      # same key set as the command palette's.
-      private def scene_profile_name_action(action : Action) : ActionOutcome?
-        editor = @model.scene_profile_editor
-        case action.kind
-        when .scene_profiles_name_character?
-          editor.name_input += action.character.to_s
-          ActionOutcome::HANDLED
-        when .scene_profiles_name_backspace?
-          editor.name_input = drop_last_grapheme(editor.name_input)
-          ActionOutcome::HANDLED
-        when .scene_profiles_name_clear_line?
-          editor.name_input = ""
-          ActionOutcome::HANDLED
-        when .scene_profiles_name_cancel?
-          # Back to the list, not out of the editor: the draft is still there
-          # to save under another name.
-          editor.naming = false
-          editor.name_input = ""
-          ActionOutcome::HANDLED
-        when .scene_profiles_name_submit?
-          name = editor.name_input.strip
-          return ActionOutcome.new(message: "scene profile name cannot be empty") if name.empty?
-
-          # Refused rather than silently replacing the other profile: `upsert`
-          # overwrites by name, and the only evidence would have been someone
-          # else's hidden set quietly becoming this draft's. Saving over the
-          # profile this draft came from is still allowed -- that is editing it.
-          #
-          # Both halves ask about identity, so both match the way `index_of`
-          # does: an exact "came from" check beside a case-insensitive lookup
-          # would refuse "streaming" -> "Streaming", which is a recapitalization
-          # of the draft's own profile and not a collision with anything.
-          if @model.scene_profiles.index_of(name) && !Domain::SceneProfileNames.same?(name, editor.origin_name)
-            return ActionOutcome.new(message: "a scene profile named '#{name}' already exists; open it from <leader>p to edit it")
-          end
-
-          # Naming is not saving. Confirming the name puts the draft back in
-          # the list so more scenes can be toggled under it, and `Enter` there
-          # is what writes the config -- which is what the box says on screen
-          # ("n name" and "enter save" are separate hints, and the naming hint
-          # reads "enter confirm").
-          #
-          # Saving here instead would also close the modal, so the `Enter` the
-          # hint asks for next would land on the dashboard and switch the live
-          # OBS scene under the cursor.
-          editor.name = name
-          editor.name_input = ""
-          editor.naming = false
-          ActionOutcome.new(message: "scene profile named: #{name}; press enter to save")
-        end
       end
 
       private def palette_action(action : Action) : ActionOutcome?
