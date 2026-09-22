@@ -25,7 +25,7 @@ module Obsctl
 
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
           visible = {area.height - 2, 0}.max
-          entries = model.logs.last(visible)
+          entries = model.logs_pane.entries.last(visible)
           resources = resource_lookup(model)
           items = entries.map do |entry|
             color, marker = level_appearance(entry.level, model)
@@ -38,7 +38,7 @@ module Obsctl
             spans.concat(highlight_message(entry.message, model, resources))
             CryTUI::Widgets::ListItem.new([CryTUI::Line.new(spans)])
           end
-          block = Chrome.panel(feed_icon(model), "Logs // Event Stream", "live daemon feed", model.logs.size, false, model)
+          block = Chrome.panel(feed_icon(model), "Logs // Event Stream", "live daemon feed", model.logs_pane.entries.size, false, model)
           CryTUI::Widgets::List.new(items, block: block).render(area, buffer, CryTUI::Widgets::ListState.new)
         end
 

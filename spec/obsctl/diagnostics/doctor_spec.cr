@@ -119,7 +119,7 @@ describe Obsctl::Diagnostics::Doctor do
       checks = run_doctor(root, path, daemon: nil)
       daemon = check_for(checks, "daemon")
       daemon.status.fail?.should be_true
-      daemon.remedy.not_nil!.should contain("obsctl server --headless")
+      daemon.remedy.not_nil!.should eq("run: obsctl server (or: obsctl service install)")
 
       obs = check_for(checks, "obs")
       obs.status.warn?.should be_true
@@ -174,7 +174,7 @@ describe Obsctl::Diagnostics::Doctor do
       daemon = parsed.find! { |entry| entry["name"].as_s == "daemon" }
       daemon["status"].as_s.should eq("fail")
       daemon["detail"].as_s.should contain("no obsctl daemon is responding")
-      daemon["remedy"].as_s.should contain("obsctl server --headless")
+      daemon["remedy"].as_s.should eq("run: obsctl server (or: obsctl service install)")
 
       version = parsed.find! { |entry| entry["name"].as_s == "version" }
       version["remedy"].raw.should be_nil

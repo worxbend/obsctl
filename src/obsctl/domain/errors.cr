@@ -9,6 +9,20 @@ module Obsctl
       ObsRequest   = 4
       CommandParse = 5
       Ipc          = 6
+
+      # The one derivation of a process exit code from any failure.
+      #
+      # Every boundary that turns an exception into an exit code goes through
+      # here, so the mapping cannot drift between them: the CLI's error
+      # boundary, and the IPC client rebuilding a remote failure from its
+      # wire code. A failure that is not a typed domain error is a bug, and
+      # bugs exit as plain failure.
+      def self.for_exception(error : Exception) : ExitCode
+        case error
+        when ObsctlError then error.exit_code
+        else                  Failure
+        end
+      end
     end
 
     # Base error type with a stable process exit-code mapping.

@@ -12,7 +12,6 @@ require "../domain/errors"
 require "../ipc/socket_path"
 require "../runtime/logger"
 require "../server/server"
-require "../server/server_options"
 require "../service/service_installer"
 require "../tui/app"
 require "../version"
@@ -86,7 +85,7 @@ module Obsctl
         when "config"      then run_config(command_args, options, stdout, json_output)
         when "watch"       then run_watch(command_args, options, stdout)
         when "completions" then run_completions(command_args, options, stdout)
-        when "server"      then run_server(options, command_args, log_level, stderr)
+        when "server"      then run_server(options, log_level, stderr)
         when "service"
           run_service(command_args, service_installer, stdout)
         when nil, "tui"
@@ -125,12 +124,11 @@ module Obsctl
         Domain::ExitCode::Success.value
       end
 
-      private def self.run_server(options : Options, command_args : Array(String), log_level : Runtime::LogLevel, stderr : IO) : Int32
+      private def self.run_server(options : Options, log_level : Runtime::LogLevel, stderr : IO) : Int32
         config = load_server_config(options.config_path, stderr)
-        server_options = Server::ServerOptions.new(headless: command_args.includes?("--headless"))
         socket_path = IPC::SocketPath.resolve(config.server.socket_path)
         logger = Runtime::Logger.new(log_level, output: stderr)
-        Server::Server.new(config, options.config_path, server_options, socket_path, logger).run
+        Server::Server.new(config, options.config_path, socket_path, logger).run
       end
 
       private def self.run_service(command_args : Array(String), service_installer : Service::ServiceInstaller?, stdout : IO) : Int32
@@ -431,7 +429,7 @@ module Obsctl
       private def self.server_unavailable_message : String
         "obsctl server is not running.\n" \
         "Start it with:\n" \
-        "  obsctl server --headless\n" \
+        "  obsctl server\n" \
         "Or install service:\n" \
         "  obsctl service install\n" \
         "  systemctl --user enable --now obsctl.service"

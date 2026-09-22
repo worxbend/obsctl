@@ -8,7 +8,6 @@ require "./client_registry"
 require "./log_payload"
 require "./command_executor"
 require "./obs_supervisor"
-require "./server_options"
 require "./state_store"
 
 module Obsctl
@@ -30,7 +29,6 @@ module Obsctl
       def initialize(
         @config : Config::Config,
         @config_path : String,
-        @options : ServerOptions = ServerOptions.new,
         @socket_path : String = IPC::SocketPath.resolve,
         @logger : Runtime::Logger? = nil,
         # Injectable so a spec can prove the drop happens without waiting the

@@ -32,8 +32,8 @@ your application state
   restoration on signals so a crash cannot leave the terminal unusable.
 - **Input** — an incremental VT parser covering keys, modifiers, arrow and
   function keys, bracketed paste, and mouse events.
-- **Widgets** — blocks and borders, paragraphs with wrapping, lists, gauges,
-  tables and sparklines.
+- **Widgets** — blocks and borders, paragraphs, styled multi-line text, lists,
+  gauges and sparklines.
 - **Spinners** — several animated progress indicators.
 
 ## Usage
@@ -43,8 +43,7 @@ Add it to your `shard.yml`:
 ```yaml
 dependencies:
   crytui:
-    github: worxbend/obsctl
-    path: crytui
+    path: ../obsctl/crytui
 ```
 
 Then:
@@ -52,12 +51,28 @@ Then:
 ```crystal
 require "crytui"
 
-CryTUI::Terminal.open do |terminal|
-  terminal.draw do |frame|
-    frame.render(CryTUI::Widgets::Paragraph.new("hello"), frame.area)
+backend = CryTUI::AnsiBackend.for_terminal(STDOUT, STDIN)
+terminal = CryTUI::Terminal.new(backend)
+
+terminal.run(STDIN) do |t|
+  parser = CryTUI::InputParser.new
+  quit = false
+  until quit
+    t.draw do |frame|
+      CryTUI::Widgets::Paragraph.new(
+        "hello — press q to quit",
+        block: CryTUI::Widgets::Block.new(title: " demo ")
+      ).render(frame.area, frame.buffer)
+    end
+    parser.feed(STDIN.read_char.to_s).each do |event|
+      quit = true if event.is_a?(CryTUI::KeyEvent) && event.character == 'q'
+    end
   end
 end
 ```
+
+Widgets do not draw themselves: each one exposes `render(area, buffer)` and
+paints into the frame's buffer, which CryTUI diffs against the previous frame.
 
 ## Status
 

@@ -43,9 +43,9 @@ module Obsctl
       def handle_key(model : Model, key : CryTUI::KeyEvent) : Action?
         return scene_profiles_key(model, key) if model.scene_profile_editor.active
         return scene_profile_list_key(model, key) if model.scene_profile_list.active
-        return scene_picker_key(model, key) if model.scene_picker_active
+        return scene_picker_key(model, key) if model.scene_picker.active
         return palette_key(key) if model.command_palette.active
-        return settings_key(key) if model.view.settings?
+        return settings_key(key) if model.settings.view.settings?
         return sequence_key(model.pending_sequence, key) unless model.pending_sequence.empty?
 
         sequence_start(key) ||
@@ -66,9 +66,9 @@ module Obsctl
       def handle_mouse(model : Model, event : CryTUI::MouseEvent, area : CryTUI::Rect) : Action?
         return scene_profiles_mouse(model, event, area) if model.scene_profile_editor.active
         return scene_profile_list_mouse(model, event, area) if model.scene_profile_list.active
-        return scene_picker_mouse(model, event, area) if model.scene_picker_active
+        return scene_picker_mouse(model, event, area) if model.scene_picker.active
         return which_key_mouse(model, event, area) unless model.pending_sequence.empty?
-        return settings_mouse(model, event, area) if model.view.settings?
+        return settings_mouse(model, event, area) if model.settings.view.settings?
         return palette_mouse(model, event, area) if model.command_palette.active
 
         dashboard_mouse(model, event, area)

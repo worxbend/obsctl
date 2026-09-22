@@ -40,7 +40,7 @@ module Obsctl
             border_style: CryTUI::Style.new(foreground: theme.border),
             border_set: model.advanced_ui ? CryTUI::Widgets::BorderSet::ROUNDED : CryTUI::Widgets::BorderSet::ASCII
           )
-          state = CryTUI::Widgets::ListState.new(selected: model.settings_cursor)
+          state = CryTUI::Widgets::ListState.new(selected: model.settings.settings_cursor)
           highlight = CryTUI::Style.new(foreground: theme.highlight_foreground, background: theme.highlight_background, modifiers: CryTUI::Modifier::Bold)
           CryTUI::Widgets::List.new(theme_list_items(model.advanced_ui), highlight_style: highlight, block: block).render(area, buffer, state)
         end

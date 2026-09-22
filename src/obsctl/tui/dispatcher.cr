@@ -23,6 +23,9 @@ module Obsctl
     class Dispatcher
       VOLUME_DEBOUNCE = 120.milliseconds
 
+      # `percent` and `version` are read and written from two fibers -- the
+      # dispatch fiber and this input's debounce fiber -- so every access
+      # goes through `@volume_debouncers_lock`; see the note there.
       private class VolumeDebounceState
         property percent : Int32
         property version : UInt64
@@ -55,6 +58,18 @@ module Obsctl
         @outcomes : OutcomeSink? = nil,
       )
         @volume_debouncers = {} of String => VolumeDebounceState
+        # Concurrency: unlike the model's writes -- which each fiber does in
+        # one uninterrupted run -- the debounce state is read and written
+        # *across* yield points: the version check and the hash delete
+        # straddle a channel receive and the send to the daemon. "No yield
+        # between the writes" is therefore not a property this code can keep
+        # under Crystal's default single-threaded scheduler, and under
+        # `-Dpreview_mt` it is a plain race: a keypress landing between the
+        # check and the delete would have its debouncer entry removed out
+        # from under it. The critical sections are a hash lookup and two
+        # field writes, so a Mutex is cheaper than the caveat. Held nowhere
+        # across a blocking call -- the daemon send runs outside it.
+        @volume_debouncers_lock = Mutex.new
       end
 
       # Actions that only move focus or the cursor, with no daemon round trip.
@@ -90,9 +105,7 @@ module Obsctl
           palette_action(action) ||
           scene_picker_action(action) ||
           scene_profile_list_action(action) ||
-          scene_profile_manage_action(action) ||
           scene_profiles_action(action) ||
-          scene_profile_name_action(action) ||
           navigation_action(action) ||
           settings_action(action) ||
           command_action(action) ||
@@ -100,6 +113,7 @@ module Obsctl
       end
 
       private def scene_picker_action(action : Action) : ActionOutcome?
+        picker = @model.scene_picker
         case action.kind
         when .open_scene_picker?
           # Refusing to open on an empty list rather than showing an empty box:
@@ -109,20 +123,20 @@ module Obsctl
 
           # Opens on the scene that is live, so the cursor starts where the eye
           # already is instead of at the top of the list.
-          @model.scene_picker_cursor = @model.scenes.index(&.active) || 0
-          @model.scene_picker_active = true
+          picker.cursor = @model.scenes.index(&.active) || 0
+          picker.active = true
           ActionOutcome::HANDLED
         when .close_scene_picker?
-          @model.scene_picker_active = false
+          picker.active = false
           ActionOutcome::HANDLED
         when .scene_picker_navigate_up?
-          @model.move_scene_picker_cursor(-1)
+          picker.move(-1, @model.scenes.size)
           ActionOutcome::HANDLED
         when .scene_picker_navigate_down?
-          @model.move_scene_picker_cursor(1)
+          picker.move(1, @model.scenes.size)
           ActionOutcome::HANDLED
         when .scene_picker_activate?
-          switch_scene(@model.scene_picker_cursor)
+          switch_scene(picker.cursor)
         when .pick_scene?
           index = action.index
           index ? switch_scene(index) : ActionOutcome::HANDLED
@@ -135,7 +149,7 @@ module Obsctl
       # underneath agrees with what was just picked and a later Enter on the
       # scenes panel repeats the same switch rather than a stale one.
       private def switch_scene(index : Int32) : ActionOutcome
-        @model.scene_picker_active = false
+        @model.scene_picker.active = false
         scene = @model.scenes[index]?
         return ActionOutcome::HANDLED unless scene
 
@@ -143,11 +157,12 @@ module Obsctl
         target_command(IPC::CommandName::SET_SCENE, scene.name)
       end
 
-      # The scene-profile list: which saved profile is in effect.
+      # The scene-profile list: which saved profile is in effect, and the
+      # editing, creating and deleting that hang off its rows.
       #
       # Nothing here talks to the daemon -- the daemon keeps reporting every
       # scene and this only changes which of them the dashboard draws. Unlike
-      # the editor, every branch here takes effect at once and is written to
+      # the editor, activating a row takes effect at once and is written to
       # the config file at once: there is no draft to throw away, so there is
       # nothing for an Esc to undo.
       private def scene_profile_list_action(action : Action) : ActionOutcome?
@@ -177,6 +192,26 @@ module Obsctl
         when .pick_scene_profile?
           index = action.index
           index ? activate_scene_profile(index) : ActionOutcome::HANDLED
+        when .scene_profile_list_edit?   then edit_selected_scene_profile(naming: false)
+        when .scene_profile_list_rename? then edit_selected_scene_profile(naming: true)
+        when .scene_profile_list_new?
+          return ActionOutcome.new(message: NO_SCENES_TO_CONFIGURE) unless open_scene_profile_editor(profile: nil)
+
+          ActionOutcome.new(message: "new scene profile: toggle scenes, then n to name it")
+        when .scene_profile_list_delete_prompt?
+          entry = selected_scene_profile_entry
+          return ActionOutcome.new(message: "'#{SceneProfileList::SHOW_EVERY_SCENE}' is not a profile, so there is nothing to delete") unless entry && entry.profile
+
+          @model.scene_profile_list.confirming = true
+          # Said out loud as well as shown on the hint row, because a delete
+          # cannot be undone and the second press is the only thing standing
+          # between the user and losing the profile.
+          ActionOutcome.new(message: "delete scene profile '#{entry.name}'? press d again to confirm")
+        when .scene_profile_list_delete_cancel?
+          @model.scene_profile_list.confirming = false
+          ActionOutcome.new(message: "delete cancelled")
+        when .scene_profile_list_delete_confirm?
+          delete_selected_scene_profile
         end
       end
 
@@ -204,35 +239,6 @@ module Obsctl
         return command(IPC::CommandPayload.new(name: IPC::CommandName::SET_SCENE_PROFILE, target: profile.name)) if profile
 
         command(IPC::CommandPayload.new(name: IPC::CommandName::CLEAR_SCENE_PROFILE))
-      end
-
-      # Editing, creating and deleting from the list. Split from
-      # `scene_profile_list_action` because the two together are more branches
-      # than ameba's complexity ratchet allows in one method -- the same split
-      # the editor's two sub-modes already needed.
-      private def scene_profile_manage_action(action : Action) : ActionOutcome?
-        case action.kind
-        when .scene_profile_list_edit?   then edit_selected_scene_profile(naming: false)
-        when .scene_profile_list_rename? then edit_selected_scene_profile(naming: true)
-        when .scene_profile_list_new?
-          return ActionOutcome.new(message: NO_SCENES_TO_CONFIGURE) unless open_scene_profile_editor(profile: nil)
-
-          ActionOutcome.new(message: "new scene profile: toggle scenes, then n to name it")
-        when .scene_profile_list_delete_prompt?
-          entry = selected_scene_profile_entry
-          return ActionOutcome.new(message: "'#{SceneProfileList::SHOW_EVERY_SCENE}' is not a profile, so there is nothing to delete") unless entry && entry.profile
-
-          @model.scene_profile_list.confirming = true
-          # Said out loud as well as shown on the hint row, because a delete
-          # cannot be undone and the second press is the only thing standing
-          # between the user and losing the profile.
-          ActionOutcome.new(message: "delete scene profile '#{entry.name}'? press d again to confirm")
-        when .scene_profile_list_delete_cancel?
-          @model.scene_profile_list.confirming = false
-          ActionOutcome.new(message: "delete cancelled")
-        when .scene_profile_list_delete_confirm?
-          delete_selected_scene_profile
-        end
       end
 
       private def selected_scene_profile_entry : SceneProfileList::Entry?
@@ -278,10 +284,6 @@ module Obsctl
       # Nothing here talks to the daemon. Every branch edits the draft on the
       # model, and only `save_scene_profile` makes the draft the list the
       # dashboard draws -- which is what lets Esc throw an edit away.
-      #
-      # Split from `scene_profile_name_action` because the two sub-modes
-      # together are more branches than ameba's complexity ratchet allows in
-      # one method.
       private def scene_profiles_action(action : Action) : ActionOutcome?
         editor = @model.scene_profile_editor
         case action.kind
@@ -323,6 +325,53 @@ module Obsctl
           end
 
           save_scene_profile(editor.name)
+          # The naming sub-mode: a one-line text field with the same key set
+          # as the command palette's.
+        when .scene_profiles_name_character?
+          editor.name_input += action.character.to_s
+          ActionOutcome::HANDLED
+        when .scene_profiles_name_backspace?
+          editor.name_input = drop_last_grapheme(editor.name_input)
+          ActionOutcome::HANDLED
+        when .scene_profiles_name_clear_line?
+          editor.name_input = ""
+          ActionOutcome::HANDLED
+        when .scene_profiles_name_cancel?
+          # Back to the list, not out of the editor: the draft is still there
+          # to save under another name.
+          editor.naming = false
+          editor.name_input = ""
+          ActionOutcome::HANDLED
+        when .scene_profiles_name_submit?
+          name = editor.name_input.strip
+          return ActionOutcome.new(message: "scene profile name cannot be empty") if name.empty?
+
+          # Refused rather than silently replacing the other profile: `upsert`
+          # overwrites by name, and the only evidence would have been someone
+          # else's hidden set quietly becoming this draft's. Saving over the
+          # profile this draft came from is still allowed -- that is editing it.
+          #
+          # Both halves ask about identity, so both match the way `index_of`
+          # does: an exact "came from" check beside a case-insensitive lookup
+          # would refuse "streaming" -> "Streaming", which is a recapitalization
+          # of the draft's own profile and not a collision with anything.
+          if @model.scene_profiles.index_of(name) && !Domain::SceneProfileNames.same?(name, editor.origin_name)
+            return ActionOutcome.new(message: "a scene profile named '#{name}' already exists; open it from <leader>p to edit it")
+          end
+
+          # Naming is not saving. Confirming the name puts the draft back in
+          # the list so more scenes can be toggled under it, and `Enter` there
+          # is what writes the config -- which is what the box says on screen
+          # ("n name" and "enter save" are separate hints, and the naming hint
+          # reads "enter confirm").
+          #
+          # Saving here instead would also close the modal, so the `Enter` the
+          # hint asks for next would land on the dashboard and switch the live
+          # OBS scene under the cursor.
+          editor.name = name
+          editor.name_input = ""
+          editor.naming = false
+          ActionOutcome.new(message: "scene profile named: #{name}; press enter to save")
         end
       end
 
@@ -442,59 +491,6 @@ module Obsctl
         @model.scene_profiles.index_of(origin) ? origin : nil
       end
 
-      # The editor's naming sub-mode, which is a one-line text field with the
-      # same key set as the command palette's.
-      private def scene_profile_name_action(action : Action) : ActionOutcome?
-        editor = @model.scene_profile_editor
-        case action.kind
-        when .scene_profiles_name_character?
-          editor.name_input += action.character.to_s
-          ActionOutcome::HANDLED
-        when .scene_profiles_name_backspace?
-          editor.name_input = drop_last_grapheme(editor.name_input)
-          ActionOutcome::HANDLED
-        when .scene_profiles_name_clear_line?
-          editor.name_input = ""
-          ActionOutcome::HANDLED
-        when .scene_profiles_name_cancel?
-          # Back to the list, not out of the editor: the draft is still there
-          # to save under another name.
-          editor.naming = false
-          editor.name_input = ""
-          ActionOutcome::HANDLED
-        when .scene_profiles_name_submit?
-          name = editor.name_input.strip
-          return ActionOutcome.new(message: "scene profile name cannot be empty") if name.empty?
-
-          # Refused rather than silently replacing the other profile: `upsert`
-          # overwrites by name, and the only evidence would have been someone
-          # else's hidden set quietly becoming this draft's. Saving over the
-          # profile this draft came from is still allowed -- that is editing it.
-          #
-          # Both halves ask about identity, so both match the way `index_of`
-          # does: an exact "came from" check beside a case-insensitive lookup
-          # would refuse "streaming" -> "Streaming", which is a recapitalization
-          # of the draft's own profile and not a collision with anything.
-          if @model.scene_profiles.index_of(name) && !Domain::SceneProfileNames.same?(name, editor.origin_name)
-            return ActionOutcome.new(message: "a scene profile named '#{name}' already exists; open it from <leader>p to edit it")
-          end
-
-          # Naming is not saving. Confirming the name puts the draft back in
-          # the list so more scenes can be toggled under it, and `Enter` there
-          # is what writes the config -- which is what the box says on screen
-          # ("n name" and "enter save" are separate hints, and the naming hint
-          # reads "enter confirm").
-          #
-          # Saving here instead would also close the modal, so the `Enter` the
-          # hint asks for next would land on the dashboard and switch the live
-          # OBS scene under the cursor.
-          editor.name = name
-          editor.name_input = ""
-          editor.naming = false
-          ActionOutcome.new(message: "scene profile named: #{name}; press enter to save")
-        end
-      end
-
       private def palette_action(action : Action) : ActionOutcome?
         case action.kind
         when .open_palette?
@@ -584,6 +580,7 @@ module Obsctl
       end
 
       private def settings_action(action : Action) : ActionOutcome?
+        settings = @model.settings
         case action.kind
         when .open_settings?
           open_settings
@@ -592,17 +589,17 @@ module Obsctl
           close_settings(apply_preview: false)
           ActionOutcome::HANDLED
         when .settings_navigate_up?
-          preview_theme({@model.settings_cursor - 1, 0}.max)
+          preview_theme({settings.settings_cursor - 1, 0}.max)
           ActionOutcome::HANDLED
         when .settings_navigate_down?
-          preview_theme({@model.settings_cursor + 1, Theme::ALL.size - 1}.min)
+          preview_theme({settings.settings_cursor + 1, Theme::ALL.size - 1}.min)
           ActionOutcome::HANDLED
         when .pointer_settings_select?
           preview_theme(action.index)
           ActionOutcome::HANDLED
         when .apply_settings_theme?, .pointer_settings_apply?
           close_settings(apply_preview: true)
-          ActionOutcome.new(message: @theme_persister.try(&.call(@model.theme)) || "theme set: #{@model.theme.id}")
+          ActionOutcome.new(message: @theme_persister.try(&.call(settings.theme)) || "theme set: #{settings.theme.id}")
         end
       end
 
@@ -774,16 +771,22 @@ module Obsctl
         ActionOutcome::HANDLED
       end
 
+      # Lookup-or-create is one critical section: two fibers debouncing the
+      # same input concurrently must not each miss and spawn a second
+      # debounce fiber for it.
       private def debounce_volume(input_name : String, percent : Int32) : Nil
-        debouncer = @volume_debouncers[input_name]?
-        if debouncer
-          debouncer.percent = percent
-          debouncer.version = debouncer.version &+ 1
-        else
-          debouncer = VolumeDebounceState.new(percent)
-          @volume_debouncers[input_name] = debouncer
-          spawn(name: "obsctl-volume-debounce") { run_volume_debounce(input_name, debouncer) }
+        debouncer, spawned_fiber = @volume_debouncers_lock.synchronize do
+          if existing = @volume_debouncers[input_name]?
+            existing.percent = percent
+            existing.version = existing.version &+ 1
+            {existing, false}
+          else
+            fresh = VolumeDebounceState.new(percent)
+            @volume_debouncers[input_name] = fresh
+            {fresh, true}
+          end
         end
+        spawn(name: "obsctl-volume-debounce") { run_volume_debounce(input_name, debouncer) } if spawned_fiber
 
         signal_volume_debounce(debouncer)
       end
@@ -801,7 +804,7 @@ module Obsctl
       private def run_volume_debounce(input_name : String, debouncer : VolumeDebounceState) : Nil
         loop do
           debouncer.wake.receive
-          version = debouncer.version
+          version = @volume_debouncers_lock.synchronize { debouncer.version }
           quiet = true
           select
           when debouncer.wake.receive
@@ -810,10 +813,26 @@ module Obsctl
           end
           next unless quiet
 
-          send_debounced_volume(input_name, debouncer.percent)
-          next unless debouncer.version == version
+          # The percent is snapshotted under the lock, but the send runs
+          # outside it: holding the lock across the daemon round trip would
+          # stall every other input's volume keys behind a slow daemon.
+          percent = @volume_debouncers_lock.synchronize { debouncer.percent }
+          send_debounced_volume(input_name, percent)
+          # The re-check and the delete are one critical section, so a
+          # keypress that bumped the version while the send was in flight
+          # keeps its debouncer entry and gets another quiet window instead
+          # of being settled out from under the user. The entry leaves the
+          # hash here and only here, so a live input's debouncer cannot leak.
+          settled = @volume_debouncers_lock.synchronize do
+            if debouncer.version == version
+              @volume_debouncers.delete(input_name)
+              true
+            else
+              false
+            end
+          end
+          next unless settled
 
-          @volume_debouncers.delete(input_name)
           @model.settle_volume(input_name)
           return
         end
@@ -876,22 +895,25 @@ module Obsctl
       end
 
       private def open_settings : Nil
-        @model.theme_preview_origin = @model.theme
-        @model.settings_cursor = Theme::ALL.index(@model.theme) || 0
-        @model.view = View::Settings
+        settings = @model.settings
+        settings.theme_preview_origin = settings.theme
+        settings.settings_cursor = Theme::ALL.index(settings.theme) || 0
+        settings.view = View::Settings
       end
 
       private def close_settings(apply_preview : Bool) : Nil
-        @model.theme = @model.theme_preview_origin || @model.theme unless apply_preview
-        @model.theme_preview_origin = nil
-        @model.view = View::Main
+        settings = @model.settings
+        settings.theme = settings.theme_preview_origin || settings.theme unless apply_preview
+        settings.theme_preview_origin = nil
+        settings.view = View::Main
       end
 
       private def preview_theme(index : Int32?) : Nil
         return unless index && (theme = Theme::ALL[index]?)
 
-        @model.settings_cursor = index
-        @model.theme = theme
+        settings = @model.settings
+        settings.settings_cursor = index
+        settings.theme = theme
       end
 
       private def sanitized_paste(text : String) : String

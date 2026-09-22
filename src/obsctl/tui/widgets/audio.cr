@@ -67,12 +67,12 @@ module Obsctl
 
         private def draw_strip(buffer, strip : CryTUI::Rect, rows : MixerRows, input : OBS::State::AudioState, selected : Bool, focused : Bool, model : Model)
           columns = MixerLayout.columns(strip)
-          level = model.meter_levels[input.name]?
+          level = model.stats_pane.meter_levels[input.name]?
           fraction = level.try { |value| Meter.fraction(value) }
           muted = input.muted == true
 
           rows.name.try { |row| draw_name(buffer, strip, row, input, fraction, selected, focused, model) }
-          draw_meter(buffer, strip, columns, rows, fraction, model.meter_peak(input.name), muted, model)
+          draw_meter(buffer, strip, columns, rows, fraction, model.stats_pane.meter_peak(input.name, model.anim), muted, model)
           draw_fader(buffer, strip, columns, rows, input.volume_percent, muted, model)
           rows.decibels.try { |row| draw_readout(buffer, strip, row, decibels_text(fraction, model), fraction, muted, model) }
           rows.value.try { |row| draw_gain(buffer, strip, row, input.volume_percent, muted, model) }

@@ -3,7 +3,7 @@ require "../../src/crytui"
 
 describe CryTUI::TextWidth do
   it "measures ASCII, Cyrillic, combining text, CJK, and emoji" do
-    CryTUI::TextWidth.width("obsctl").should eq(6)
+    CryTUI::TextWidth.width("buffer").should eq(6)
     CryTUI::TextWidth.width("Київ").should eq(4)
     CryTUI::TextWidth.width("e\u0301").should eq(1)
     CryTUI::TextWidth.width("界").should eq(2)
@@ -28,12 +28,12 @@ describe CryTUI::TextWidth do
   end
 
   it "fits text to a column count from either end" do
-    CryTUI::TextWidth.truncate("obsctl", 6, "…").should eq("obsctl")
-    CryTUI::TextWidth.truncate("obsctl", 4, "…").should eq("obs…")
-    CryTUI::TextWidth.truncate_start("obsctl", 4, "…").should eq("…ctl")
+    CryTUI::TextWidth.truncate("buffer", 6, "…").should eq("buffer")
+    CryTUI::TextWidth.truncate("buffer", 4, "…").should eq("buf…")
+    CryTUI::TextWidth.truncate_start("buffer", 4, "…").should eq("…fer")
     # No ellipsis asked for, so every column goes to the text itself.
-    CryTUI::TextWidth.truncate("obsctl", 3).should eq("obs")
-    CryTUI::TextWidth.truncate_start("obsctl", 3).should eq("ctl")
+    CryTUI::TextWidth.truncate("buffer", 3).should eq("buf")
+    CryTUI::TextWidth.truncate_start("buffer", 3).should eq("fer")
   end
 
   it "drops a two-column glyph whole rather than drawing half of it" do
@@ -47,7 +47,7 @@ describe CryTUI::TextWidth do
   end
 
   it "cuts an ellipsis that is itself too long for the space" do
-    CryTUI::TextWidth.truncate("obsctl", 1, "..").should eq(".")
-    CryTUI::TextWidth.truncate_start("obsctl", 0, "…").should eq("")
+    CryTUI::TextWidth.truncate("buffer", 1, "..").should eq(".")
+    CryTUI::TextWidth.truncate_start("buffer", 0, "…").should eq("")
   end
 end

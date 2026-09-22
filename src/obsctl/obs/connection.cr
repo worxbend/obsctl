@@ -7,10 +7,7 @@ module Obsctl
   module OBS
     # Opens the raw obs-websocket transport for an OBS connection config.
     class Connection
-      getter websocket
-
       def initialize(@config : Config::ConnectionConfig)
-        @websocket = uninitialized HTTP::WebSocket
       end
 
       # Connects to OBS and converts low-level connection failures into a domain error.
@@ -20,7 +17,7 @@ module Obsctl
       def connect : HTTP::WebSocket
         uri = URI.parse("ws://#{@config.host}:#{@config.port}")
         timeout = @config.connect_timeout_ms
-        @websocket = timeout > 0 ? open_with_timeout(uri, timeout.milliseconds) : open(uri)
+        timeout > 0 ? open_with_timeout(uri, timeout.milliseconds) : open(uri)
       rescue ex : Domain::ConnectionFailed
         raise ex
       rescue ex

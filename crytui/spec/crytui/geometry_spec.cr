@@ -10,7 +10,7 @@ describe CryTUI::Rect do
 end
 
 describe CryTUI::Layout do
-  it "recreates the obsctl dashboard fixed and flexible rows" do
+  it "splits fixed and flexible rows together" do
     rows = CryTUI::Layout.new(
       CryTUI::Direction::Vertical,
       [CryTUI::Constraint.length(4), CryTUI::Constraint.length(4), CryTUI::Constraint.min(6), CryTUI::Constraint.length(7), CryTUI::Constraint.length(4)]
