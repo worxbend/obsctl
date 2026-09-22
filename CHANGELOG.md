@@ -10,6 +10,12 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-22
+
+First stable release. The public contract — the IPC protocol (`docs/protocol.md`),
+the CLI grammar and JSON envelopes (`docs/commands.md`), and the exit codes — is
+frozen: changing it is a breaking change requiring a major version bump.
+
 ### Changed
 
 - The release workflow now refuses to publish when the git tag does not match
@@ -733,7 +739,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/worxbend/obsctl/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/worxbend/obsctl/compare/v0.8.4...v0.9.0
 [0.8.4]: https://github.com/worxbend/obsctl/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/worxbend/obsctl/compare/v0.8.2...v0.8.3
