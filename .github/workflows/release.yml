@@ -45,6 +45,20 @@ jobs:
           ldd bin/obsctl 2>&1 | grep -qE 'not a dynamic executable|statically linked'
           ./bin/obsctl --version
 
+      # A tag that disagrees with src/obsctl/version.cr would still build and
+      # package fine, shipping a release whose binary reports the wrong
+      # version. The check runs on both matrix legs before anything is
+      # packaged or uploaded.
+      - name: Verify the tag matches the built version
+        run: |
+          BUILT="$(./bin/obsctl --version | awk '{print $2}')"
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "${BUILT}" != "${TAG}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match the built version ${BUILT} (src/obsctl/version.cr)"
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} matches built version ${BUILT}"
+
       - name: Package binary
         run: |
           ARCHIVE="obsctl-${GITHUB_REF_NAME}-${{ matrix.target }}.tar.gz"
