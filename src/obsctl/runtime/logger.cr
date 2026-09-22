@@ -37,6 +37,13 @@ module Obsctl
         @path : String = Config::ConfigPaths.log_path,
         @output : IO? = nil,
       )
+        @dropped_writes = Atomic(Int32).new(0)
+        @drop_warning_sent = Atomic(Bool).new(false)
+      end
+
+      # How many log lines never reached the file because the write failed.
+      def dropped_writes : Int32
+        @dropped_writes.get
       end
 
       # Writes a debug-level message when enabled.
@@ -79,7 +86,29 @@ module Obsctl
         File.open(@path, "a") do |file|
           file.puts(line)
         end
+      rescue ex
+        record_dropped_write(ex)
+      end
+
+      # A daemon whose log file stopped being writable — disk full, the path
+      # rotated away — would otherwise keep "logging" into nothing with no
+      # signal anywhere. The warning goes straight to the output sink rather
+      # than through `write`, so a broken file sink cannot recurse, and only
+      # the first failure is reported: one disk-full event is one problem,
+      # not one per log line. Later drops are still counted in
+      # `dropped_writes`.
+      private def record_dropped_write(error : Exception) : Nil
+        @dropped_writes.add(1)
+        return if @drop_warning_sent.swap(true)
+
+        warning = "obsctl: writing to log file #{@path} failed (#{error.message}); log lines are being dropped"
+        if output = @output
+          output.puts(warning)
+        else
+          STDERR.puts(warning)
+        end
       rescue
+        # The last-resort sink is broken too; the counter still recorded the drop.
       end
 
       private def write_output(line : String) : Nil

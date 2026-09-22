@@ -66,4 +66,19 @@ describe Obsctl::Runtime::Logger do
 
     output.to_s.should contain("terminal diagnostic")
   end
+
+  it "warns once and counts the drops when the file sink keeps failing" do
+    output = IO::Memory.new
+    logger = Obsctl::Runtime::Logger.new(
+      Obsctl::Runtime::LogLevel::Info,
+      "/dev/null/obsctl.log",
+      output
+    )
+
+    logger.info("first")
+    logger.info("second")
+
+    logger.dropped_writes.should eq(2)
+    output.to_s.scan("log lines are being dropped").size.should eq(1)
+  end
 end
