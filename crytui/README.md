@@ -32,8 +32,8 @@ your application state
   restoration on signals so a crash cannot leave the terminal unusable.
 - **Input** — an incremental VT parser covering keys, modifiers, arrow and
   function keys, bracketed paste, and mouse events.
-- **Widgets** — blocks and borders, paragraphs with wrapping, lists, gauges,
-  tables and sparklines.
+- **Widgets** — blocks and borders, paragraphs, styled multi-line text, lists,
+  gauges and sparklines.
 - **Spinners** — several animated progress indicators.
 
 ## Usage
