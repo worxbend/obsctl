@@ -61,7 +61,12 @@ module Obsctl
         response.ok ? response.result : nil
       rescue Domain::ObsctlError
         nil
-      rescue
+      rescue IO::Error
+        # A daemon that dies mid-exchange surfaces as a raw socket error
+        # (EPIPE, ECONNRESET) rather than a typed refusal; it means the same
+        # thing — no diagnosis available. Anything else escaping here is a bug
+        # in the probe itself and should crash loudly, not be reported as a
+        # missing daemon.
         nil
       end
 
