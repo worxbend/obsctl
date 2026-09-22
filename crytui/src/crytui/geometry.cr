@@ -99,6 +99,10 @@ module CryTUI
 
     private MAX_SOLVE_CACHE = 128
     @@solve_cache = {} of SolveCacheKey => Array(Tuple(Int32, Int32))
+    # Layout objects are rebuilt freely rather than kept, so the cache is
+    # process-global; the mutex keeps it correct under -Dpreview_mt, where
+    # fibers that share this class may run on different threads.
+    @@solve_cache_mutex = Mutex.new
 
     property direction : Direction
     property constraints : Array(Constraint)
@@ -122,7 +126,7 @@ module CryTUI
 
     private def solve(total : Int32) : Array(Tuple(Int32, Int32))
       key = SolveCacheKey.new(total, @spacing, @constraints.dup)
-      if cached = @@solve_cache[key]?
+      if cached = @@solve_cache_mutex.synchronize { @@solve_cache[key]? }
         return cached
       end
 
@@ -169,11 +173,13 @@ module CryTUI
       cache_solution(key, result)
     end
 
-    # The same dashboard layouts are solved frame after frame; a small exact
-    # cache skips rebuilding identical Kiwi systems without letting memory grow.
+    # The same layouts are solved frame after frame; a small exact cache skips
+    # rebuilding identical Kiwi systems without letting memory grow.
     private def cache_solution(key : SolveCacheKey, ranges : Array(Tuple(Int32, Int32))) : Array(Tuple(Int32, Int32))
-      @@solve_cache.clear if @@solve_cache.size >= MAX_SOLVE_CACHE
-      @@solve_cache[key] = ranges
+      @@solve_cache_mutex.synchronize do
+        @@solve_cache.clear if @@solve_cache.size >= MAX_SOLVE_CACHE
+        @@solve_cache[key] = ranges
+      end
       ranges
     end
 
