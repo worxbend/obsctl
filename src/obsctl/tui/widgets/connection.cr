@@ -59,7 +59,7 @@ module Obsctl
             CryTUI::Line.from(error, CryTUI::Style.new(foreground: theme.warning)),
             CryTUI::Line.from(""),
             CryTUI::Line.from(Localization.text(model.locale, :start_daemon)),
-            CryTUI::Line.from("  obsctl server --headless", CryTUI::Style.new(foreground: theme.info)),
+            CryTUI::Line.from("  obsctl server", CryTUI::Style.new(foreground: theme.info)),
             CryTUI::Line.from(Localization.text(model.locale, :install_service)),
             CryTUI::Line.from("  obsctl service install", CryTUI::Style.new(foreground: theme.info)),
             CryTUI::Line.from("  systemctl --user enable --now obsctl.service", CryTUI::Style.new(foreground: theme.info)),

@@ -26,7 +26,7 @@ describe Obsctl::Service::ServiceInstaller do
     ).install
 
     message.should eq("installed user service: #{service_path}")
-    File.read(service_path).should contain("ExecStart=/tmp/obsctl server --headless")
+    File.read(service_path).should contain("ExecStart=/tmp/obsctl server")
     runner.calls.should eq([{"systemctl", ["--user", "daemon-reload"]}])
   ensure
     FileUtils.rm_rf(dir) if dir

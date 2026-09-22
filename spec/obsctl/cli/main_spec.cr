@@ -642,7 +642,7 @@ describe Obsctl::CLI::Main do
 
     Obsctl::SpecSupport::CliCapture.exit_code(["service", "install"], installer).should eq(0)
 
-    File.read(service_path).should contain("ExecStart=/tmp/obsctl server --headless")
+    File.read(service_path).should contain("ExecStart=/tmp/obsctl server")
     runner.calls.should eq([{"systemctl", ["--user", "daemon-reload"]}])
   ensure
     FileUtils.rm_rf(dir) if dir

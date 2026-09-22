@@ -1,6 +1,6 @@
 module Obsctl
   module Service
-    # Renders the systemd --user unit that runs `obsctl server --headless`.
+    # Renders the systemd --user unit that runs `obsctl server`.
     struct SystemdUserService
       SERVICE_NAME = "obsctl.service"
 
@@ -25,7 +25,7 @@ module Obsctl
 
           [Service]
           Type=simple
-          ExecStart=#{escaped_executable_path} server --headless
+          ExecStart=#{escaped_executable_path} server
           Restart=on-failure
           RestartSec=10
 

@@ -572,7 +572,7 @@ describe Obsctl::TUI::Widgets::Connection do
     text = rendered_text(buffer)
     text.should contain("obsctl — daemon unavailable")
     text.should contain("connection refused")
-    text.should contain("obsctl server --headless")
+    text.should contain("obsctl server")
     text.should contain("systemctl --user enable --now obsctl.service")
   end
 end

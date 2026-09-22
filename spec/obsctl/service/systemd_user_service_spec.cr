@@ -2,11 +2,11 @@ require "../../spec_helper"
 require "../../../src/obsctl/service/systemd_user_service"
 
 describe Obsctl::Service::SystemdUserService do
-  it "renders a user service with an absolute headless ExecStart" do
+  it "renders a user service with an absolute ExecStart" do
     unit = Obsctl::Service::SystemdUserService.new("/opt/obsctl/bin/obsctl").render
 
     unit.should contain("Description=obsctl OBS WebSocket control daemon")
-    unit.should contain("ExecStart=/opt/obsctl/bin/obsctl server --headless")
+    unit.should contain("ExecStart=/opt/obsctl/bin/obsctl server")
     unit.should contain("Restart=on-failure")
     unit.should contain("StartLimitIntervalSec=0")
     unit.should contain("WantedBy=graphical-session.target")

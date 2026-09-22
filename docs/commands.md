@@ -134,7 +134,7 @@ Server logs are written to `~/.local/state/obsctl/obsctl.log` and mirrored to
 stderr for the running process. Password and authentication fields are redacted
 before either sink receives an entry.
 
-`obsctl service install` writes `~/.config/systemd/user/obsctl.service` with an absolute `ExecStart=<obsctl> server --headless`, then runs `systemctl --user daemon-reload`. The other service subcommands wrap `systemctl --user start|stop|restart|status obsctl.service`; uninstall removes the unit file and reloads systemd.
+`obsctl service install` writes `~/.config/systemd/user/obsctl.service` with an absolute `ExecStart=<obsctl> server`, then runs `systemctl --user daemon-reload`. The other service subcommands wrap `systemctl --user start|stop|restart|status obsctl.service`; uninstall removes the unit file and reloads systemd.
 
 Non-interactive OBS control commands are IPC clients. They connect to the local Unix socket, send a typed command to the server, print the response, and exit. If the server is unavailable, they print startup/service instructions and exit `3`. `obsctl shutdown-server` is rejected unless `server.allow_remote_shutdown: true` is configured.
 

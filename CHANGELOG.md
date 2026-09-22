@@ -16,11 +16,40 @@ development; the `Unreleased` section below becomes that version at tag time.
   the version the binary reports, so a mistagged release fails instead of
   shipping green.
 
+### Removed
+
+- The `--headless` flag on `obsctl server`. It was parsed, documented, and
+  recommended by `doctor`, but consumed by nothing — `obsctl server` has
+  always run the daemon in the foreground. The generated systemd unit, the
+  dashboard's start hint, and the docs now say `obsctl server`; an installed
+  unit keeps working because extra arguments after `server` are ignored.
+
+### Fixed
+
+- WebSocket frame writes to OBS are serialized, so concurrent IPC clients can
+  no longer interleave frame bytes on the shared connection (latent under a
+  multithreaded scheduler; unreachable on the default one).
+- A daemon whose log file stopped being writable (disk full, rotated away)
+  now warns once and counts the dropped writes instead of failing silently.
+- The doctor daemon probe only swallows `IO::Error` from a daemon dying
+  mid-exchange; a bug in the probe itself now crashes loudly instead of
+  being reported as "daemon not running".
+- CryTUI's global layout cache is mutex-guarded, removing its
+  multithreaded-scheduler caveat.
+
 ### Internal
 
 - CI runs a scheduled weekly build so breakage from a new Crystal release
   surfaces between commits, and the pinned GitHub Actions update weekly
   through Dependabot.
+- The exception-to-exit-code mapping lives in one place
+  (`Domain::ExitCode.for_exception`) instead of four; the IPC wire taxonomy
+  is unchanged and golden contract fixtures pass byte-identical.
+- `TUI::Model` is composed from per-surface state objects (dashboard, stats,
+  logs, status, settings, focus, scene picker) instead of one 43-property
+  bag, and the volume debouncers are mutex-guarded.
+- CryTUI's README quickstart compiles against the real API, and the library
+  no longer references obsctl in its code comments.
 
 ## [0.9.0] - 2026-09-12
 
