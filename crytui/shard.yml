@@ -1,12 +1,16 @@
 name: crytui
 version: 0.1.0
 
+description: Immediate-mode terminal UI library with Cassowary layout, developed as its own shard inside obsctl
+
 authors:
   - obsctl-cr contributors
 
 crystal: ">= 1.21.0"
 
 license: MIT
+
+repository: https://github.com/worxbend/obsctl
 
 # Kiwi solves the Cassowary constraints behind `CryTUI::Layout`. It is the only
 # runtime dependency, and it belongs to this shard rather than to obsctl, which
