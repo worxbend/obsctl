@@ -11,11 +11,11 @@ describe Obsctl::CLI::OptionsParser do
   end
 
   it "leaves command-specific flags in args" do
-    options = Obsctl::CLI::OptionsParser.new.parse(["--config", "/tmp/config.yml", "server", "--headless"])
+    options = Obsctl::CLI::OptionsParser.new.parse(["--config", "/tmp/config.yml", "watch", "--topics", "logs"])
 
     options.config_path.should eq("/tmp/config.yml")
-    options.command.should eq("server")
-    options.args.should eq(["--headless"])
+    options.command.should eq("watch")
+    options.args.should eq(["--topics", "logs"])
   end
 end
 

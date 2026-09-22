@@ -24,7 +24,7 @@ module Obsctl
     # The argv splitter has to know whether a flag consumes the following token
     # before `OptionParser` ever sees it, because everything from the first
     # positional onwards belongs to the subcommand and may contain flags this
-    # parser knows nothing about (`--topics`, `--headless`, `--dry-run`).
+    # parser knows nothing about (`--topics`, `--dry-run`).
     # Declaring the flags as data keeps the splitter and the parser from
     # disagreeing about where the global section ends.
     # The completion-facing fields exist so the generated shell scripts read

@@ -62,8 +62,7 @@ module Obsctl
           usage_arguments: "bash|zsh|fish",
           subcommands: ["bash", "zsh", "fish"]),
         LocalCommandSpec.new(
-          name: "server", summary: "Run the local daemon in the foreground",
-          usage_arguments: "[--headless]"),
+          name: "server", summary: "Run the local daemon in the foreground"),
         LocalCommandSpec.new(
           name: "service", summary: "Manage the systemd --user unit",
           usage_arguments: "install|start|stop|restart|status|uninstall",

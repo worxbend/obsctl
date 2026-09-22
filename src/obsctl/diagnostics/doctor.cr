@@ -148,7 +148,7 @@ module Obsctl
           return Check.warn(
             "socket",
             "socket directory #{directory} does not exist yet",
-            "it is created when the daemon starts; run: obsctl server --headless"
+            "it is created when the daemon starts; run: obsctl server"
           )
         end
 
@@ -179,7 +179,7 @@ module Obsctl
             Check.fail(
               "daemon",
               "no obsctl daemon is responding at #{@socket_path}",
-              "run: obsctl server --headless (or: obsctl service install)"
+              "run: obsctl server (or: obsctl service install)"
             ),
             nil,
           }

@@ -16,7 +16,7 @@ Global options:
 
 Global options must precede the command. Everything after the command name
 belongs to that command, so a subcommand flag such as `--topics` or
-`--headless` is never intercepted by the global parser. `--json` is the one
+`--dry-run` is never intercepted by the global parser. `--json` is the one
 exception: it is also accepted after the command arguments.
 
 `--color` defaults to `auto`, which emits ANSI decoration only when stdout is a
@@ -44,7 +44,6 @@ Required commands:
 - `obsctl completions candidates scenes|profiles|collections|audio`
 - `obsctl init [--force]`
 - `obsctl server`
-- `obsctl server --headless`
 - `obsctl status`
 - `obsctl obs-status`
 - `obsctl server-status`
@@ -128,7 +127,7 @@ backslash escapes the next character. Quoted names are preserved:
 Control characters are rejected in any argument, and an argument is limited to
 256 characters.
 
-`obsctl server` starts the foreground local server and owns the OBS WebSocket connection. `obsctl server --headless` runs the same server without interactive UI and is intended for a `systemd --user` service.
+`obsctl server` starts the foreground local server and owns the OBS WebSocket connection. It has no interactive UI and is intended to run in a terminal or under a `systemd --user` service.
 
 `--log-level` controls server log verbosity when running `obsctl server`.
 Server logs are written to `~/.local/state/obsctl/obsctl.log` and mirrored to
@@ -333,7 +332,7 @@ without a daemon, so it is the first thing to run when something is wrong.
 [warn] credentials    connection.password_env is OBS_WEBSOCKET_PASSWORD, but that variable is unset or empty
                       -> export OBS_WEBSOCKET_PASSWORD in the environment that runs the daemon
 [fail] daemon         no obsctl daemon is responding at /run/user/1000/obsctl/obsctl.sock
-                      -> run: obsctl server --headless (or: obsctl service install)
+                      -> run: obsctl server (or: obsctl service install)
 ```
 
 Checks are `version`, `config`, `config.schema`, `credentials`, `socket`,
@@ -352,7 +351,7 @@ the exit status, and every entry has `name`, `status`, `detail`, and `remedy`
 (null when there is nothing to do):
 
 ```json
-{"ok":false,"result":{"healthy":false,"checks":[{"name":"daemon","status":"fail","detail":"no obsctl daemon is responding at /run/user/1000/obsctl/obsctl.sock","remedy":"run: obsctl server --headless (or: obsctl service install)"}]},"error":null,"exit_code":1}
+{"ok":false,"result":{"healthy":false,"checks":[{"name":"daemon","status":"fail","detail":"no obsctl daemon is responding at /run/user/1000/obsctl/obsctl.sock","remedy":"run: obsctl server (or: obsctl service install)"}]},"error":null,"exit_code":1}
 ```
 
 Doctor never prints a password. The `credentials` check reports only which
