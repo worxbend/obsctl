@@ -105,7 +105,9 @@ development, so at release time they already hold the version being cut.
    `Unreleased` section.
 
 The release workflow builds static musl binaries for `linux-amd64` and
-`linux-arm64`, publishes `SHA256SUMS.txt`, and generates the release notes.
+`linux-arm64`, publishes `SHA256SUMS.txt`, and generates the release notes. It
+refuses to publish unless the tag matches the version in `shard.yml` and
+`src/obsctl/version.cr`.
 
 ## Reporting security issues
 
