@@ -80,8 +80,9 @@ module CryTUI
 
   alias InputEvent = KeyEvent | PasteEvent | MouseEvent
 
-  # Incremental VT input parser for the keys used by obsctl. It accepts chunks
-  # because escape sequences and UTF-8 input may straddle reads.
+  # Incremental VT input parser for keys, mouse events, and bracketed paste.
+  # It accepts chunks because escape sequences and UTF-8 input may straddle
+  # reads.
   class InputParser
     PASTE_START = "\e[200~"
     PASTE_END   = "\e[201~"
