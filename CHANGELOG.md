@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `shard.yml` and `src/obsctl/version.cr` carry the version currently in
 development; the `Unreleased` section below becomes that version at tag time.
 
+## [Unreleased]
+
+### Changed
+
+- The release workflow now refuses to publish when the git tag does not match
+  the version the binary reports, so a mistagged release fails instead of
+  shipping green.
+
+### Internal
+
+- CI runs a scheduled weekly build so breakage from a new Crystal release
+  surfaces between commits, and the pinned GitHub Actions update weekly
+  through Dependabot.
+
 ## [0.9.0] - 2026-09-12
 
 ### Added
