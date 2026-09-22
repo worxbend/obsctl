@@ -82,8 +82,8 @@ module Obsctl
             ])
           end
 
-          graph = model.advanced_ui ? Anim.sparkline(model.cpu_history, 10) : Anim.sparkline_ascii(model.cpu_history, 10)
-          bitrate_graph = model.advanced_ui ? Anim.sparkline(model.bitrate_history, 10) : Anim.sparkline_ascii(model.bitrate_history, 10)
+          graph = model.advanced_ui ? Anim.sparkline(model.stats_pane.cpu_history, 10) : Anim.sparkline_ascii(model.stats_pane.cpu_history, 10)
+          bitrate_graph = model.advanced_ui ? Anim.sparkline(model.stats_pane.bitrate_history, 10) : Anim.sparkline_ascii(model.stats_pane.bitrate_history, 10)
           bitrate = model.stream_bitrate_kbps.try { |value| "#{value.round.to_i}kbps" } || "--kbps"
           CryTUI::Line.new([
             metric("CPU", "#{stats.cpu_usage_percent.round(1)}%", graph, model.theme.warning), separator(model),

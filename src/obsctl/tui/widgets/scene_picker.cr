@@ -16,7 +16,7 @@ module Obsctl
         extend self
 
         def render(area : CryTUI::Rect, buffer : CryTUI::Buffer, model : Model)
-          return unless model.scene_picker_active
+          return unless model.scene_picker.active
 
           entries = model.scene_picker_entries
           rect = ScenePickerLayout.compute(area, model)
@@ -25,7 +25,7 @@ module Obsctl
           theme = model.theme
           Overlay.clear(rect, buffer, theme)
           items = entries.map { |entry| item(entry, model) }
-          state = CryTUI::Widgets::ListState.new(selected: model.scene_picker_cursor)
+          state = CryTUI::Widgets::ListState.new(selected: model.scene_picker.cursor)
           CryTUI::Widgets::List.new(items, highlight_style: Overlay.highlight_style(theme), block: block(entries.size, model)).render(rect, buffer, state)
         end
 

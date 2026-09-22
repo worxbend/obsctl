@@ -71,8 +71,8 @@ module Obsctl
             CryTUI::Span.new("%.2f" % stats.active_fps, CryTUI::Style.new(foreground: fps_color(stats, model), modifiers: CryTUI::Modifier::Bold)),
             CryTUI::Span.new(" fps", CryTUI::Style.new(foreground: model.theme.muted)),
           ]
-          if wide && model.fps_history.size > 1
-            graph = model.advanced_ui ? Anim.sparkline(model.fps_history, FPS_GRAPH_WIDTH) : Anim.sparkline_ascii(model.fps_history, FPS_GRAPH_WIDTH)
+          if wide && model.stats_pane.fps_history.size > 1
+            graph = model.advanced_ui ? Anim.sparkline(model.stats_pane.fps_history, FPS_GRAPH_WIDTH) : Anim.sparkline_ascii(model.stats_pane.fps_history, FPS_GRAPH_WIDTH)
             spans << CryTUI::Span.new("  #{graph}", CryTUI::Style.new(foreground: model.theme.accent_alt))
           end
           spans << CryTUI::Span.new("  #{model.symbol("⏱", "T")} ", CryTUI::Style.new(foreground: model.theme.muted))
@@ -165,7 +165,7 @@ module Obsctl
         end
 
         private def fps_color(stats : OBS::State::ObsStats, model : Model) : CryTUI::Color
-          reference = {model.fps_history.max? || stats.active_fps, stats.active_fps}.max
+          reference = {model.stats_pane.fps_history.max? || stats.active_fps, stats.active_fps}.max
           return model.theme.muted unless reference > 0.0
           ratio = stats.active_fps / reference
           return model.theme.success if ratio >= HEALTHY_FPS_RATIO

@@ -26,7 +26,7 @@ module Obsctl
       extend self
 
       def resolve(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : PointerTarget?
-        return unless model.view.main?
+        return unless model.settings.view.main?
         return if model.command_palette.active
 
         areas = DashboardLayout.compute(area, model.streaming?)
@@ -44,7 +44,7 @@ module Obsctl
 
       # The theme row under the pointer in the appearance lab.
       def settings_index(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Int32?
-        return unless model.view.settings?
+        return unless model.settings.view.settings?
 
         themes = SettingsLayout.compute(area).themes
         return unless contains?(themes, column, row)
@@ -72,12 +72,12 @@ module Obsctl
       # its chrome, past its last row, or anywhere outside it -- all of which
       # the caller treats as a request to close.
       def scene_picker_index(model : Model, area : CryTUI::Rect, column : Int32, row : Int32) : Int32?
-        return unless model.scene_picker_active
+        return unless model.scene_picker.active
 
         rect = ScenePickerLayout.compute(area, model)
         return unless contains?(rect, column, row)
 
-        item_at(rect, model.scene_picker_entries.size, model.scene_picker_cursor, row)
+        item_at(rect, model.scene_picker_entries.size, model.scene_picker.cursor, row)
       end
 
       # The scene under the pointer in the scene-profile editor, or nil for a

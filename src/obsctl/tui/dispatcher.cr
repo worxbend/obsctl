@@ -100,6 +100,7 @@ module Obsctl
       end
 
       private def scene_picker_action(action : Action) : ActionOutcome?
+        picker = @model.scene_picker
         case action.kind
         when .open_scene_picker?
           # Refusing to open on an empty list rather than showing an empty box:
@@ -109,20 +110,20 @@ module Obsctl
 
           # Opens on the scene that is live, so the cursor starts where the eye
           # already is instead of at the top of the list.
-          @model.scene_picker_cursor = @model.scenes.index(&.active) || 0
-          @model.scene_picker_active = true
+          picker.cursor = @model.scenes.index(&.active) || 0
+          picker.active = true
           ActionOutcome::HANDLED
         when .close_scene_picker?
-          @model.scene_picker_active = false
+          picker.active = false
           ActionOutcome::HANDLED
         when .scene_picker_navigate_up?
-          @model.move_scene_picker_cursor(-1)
+          picker.move(-1, @model.scenes.size)
           ActionOutcome::HANDLED
         when .scene_picker_navigate_down?
-          @model.move_scene_picker_cursor(1)
+          picker.move(1, @model.scenes.size)
           ActionOutcome::HANDLED
         when .scene_picker_activate?
-          switch_scene(@model.scene_picker_cursor)
+          switch_scene(picker.cursor)
         when .pick_scene?
           index = action.index
           index ? switch_scene(index) : ActionOutcome::HANDLED
@@ -135,7 +136,7 @@ module Obsctl
       # underneath agrees with what was just picked and a later Enter on the
       # scenes panel repeats the same switch rather than a stale one.
       private def switch_scene(index : Int32) : ActionOutcome
-        @model.scene_picker_active = false
+        @model.scene_picker.active = false
         scene = @model.scenes[index]?
         return ActionOutcome::HANDLED unless scene
 
@@ -584,6 +585,7 @@ module Obsctl
       end
 
       private def settings_action(action : Action) : ActionOutcome?
+        settings = @model.settings
         case action.kind
         when .open_settings?
           open_settings
@@ -592,17 +594,17 @@ module Obsctl
           close_settings(apply_preview: false)
           ActionOutcome::HANDLED
         when .settings_navigate_up?
-          preview_theme({@model.settings_cursor - 1, 0}.max)
+          preview_theme({settings.settings_cursor - 1, 0}.max)
           ActionOutcome::HANDLED
         when .settings_navigate_down?
-          preview_theme({@model.settings_cursor + 1, Theme::ALL.size - 1}.min)
+          preview_theme({settings.settings_cursor + 1, Theme::ALL.size - 1}.min)
           ActionOutcome::HANDLED
         when .pointer_settings_select?
           preview_theme(action.index)
           ActionOutcome::HANDLED
         when .apply_settings_theme?, .pointer_settings_apply?
           close_settings(apply_preview: true)
-          ActionOutcome.new(message: @theme_persister.try(&.call(@model.theme)) || "theme set: #{@model.theme.id}")
+          ActionOutcome.new(message: @theme_persister.try(&.call(settings.theme)) || "theme set: #{settings.theme.id}")
         end
       end
 
@@ -876,22 +878,25 @@ module Obsctl
       end
 
       private def open_settings : Nil
-        @model.theme_preview_origin = @model.theme
-        @model.settings_cursor = Theme::ALL.index(@model.theme) || 0
-        @model.view = View::Settings
+        settings = @model.settings
+        settings.theme_preview_origin = settings.theme
+        settings.settings_cursor = Theme::ALL.index(settings.theme) || 0
+        settings.view = View::Settings
       end
 
       private def close_settings(apply_preview : Bool) : Nil
-        @model.theme = @model.theme_preview_origin || @model.theme unless apply_preview
-        @model.theme_preview_origin = nil
-        @model.view = View::Main
+        settings = @model.settings
+        settings.theme = settings.theme_preview_origin || settings.theme unless apply_preview
+        settings.theme_preview_origin = nil
+        settings.view = View::Main
       end
 
       private def preview_theme(index : Int32?) : Nil
         return unless index && (theme = Theme::ALL[index]?)
 
-        @model.settings_cursor = index
-        @model.theme = theme
+        settings = @model.settings
+        settings.settings_cursor = index
+        settings.theme = theme
       end
 
       private def sanitized_paste(text : String) : String
