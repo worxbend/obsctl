@@ -44,7 +44,7 @@ OBS Studio ──WebSocket──> obsctl server (daemon) ──Unix socket JSON�
 
 The daemon is the sole owner of the OBS WebSocket and the authoritative state holder. Everything else is a thin IPC client. **This boundary is a mechanically enforced contract**, not a convention — `spec/obsctl/architecture_boundary_spec.cr` greps the tree and fails if:
 
-- anything under `src/obsctl/{cli,ipc,domain,tui}/` requires `obs/client`/`obs/connection` or names `OBS::Client`/`OBS::Connection`;
+- anything under `src/obsctl/{cli,ipc,domain,tui}/` requires anything under `obs/` at all (the shared state vocabulary lives in `state/`, the JSON field reader in `json_value.cr`) or names `OBS::Client`/`OBS::Connection`/`OBS::Transport`;
 - any file under `src/obsctl/server/` other than `obs_supervisor.cr` constructs an OBS client;
 - `IPC::CommandPayload` handling or `@supervisor.with_client` appears anywhere but `server/command_executor.cr`.
 
@@ -58,7 +58,9 @@ Adding an OBS call means going through `CommandExecutor` → `ObsSupervisor#with
 | `src/obsctl/domain/` | command registry/parser, aliases, error → exit-code mapping |
 | `src/obsctl/ipc/` | newline-delimited JSON Unix-socket protocol, codec, socket path resolution |
 | `src/obsctl/server/` | daemon: supervisor, state store, command executor, client registry, log fanout |
-| `src/obsctl/obs/` | obs-websocket 5.x client, auth, protocol messages, state snapshots |
+| `src/obsctl/obs/` | obs-websocket 5.x client, auth, protocol messages |
+| `src/obsctl/state/` | shared state vocabulary: the snapshot records the daemon publishes and every client decodes |
+| `src/obsctl/json_value.cr` | the lenient JSON field reader both the wire side and the client layers use |
 | `src/obsctl/tui/` | dashboard: model, input → action, dispatcher, event applier, widgets |
 | `src/obsctl/config/` | YAML config, schema validation, atomic writes, dump/diff/explain |
 | `crytui/` | a **separate shard** in this repository: immediate-mode TUI library (Ratatui-inspired), depends on nothing in obsctl and is consumed through `require "crytui"` |

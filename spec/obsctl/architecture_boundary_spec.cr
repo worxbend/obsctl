@@ -11,14 +11,17 @@ private NORMAL_CLIENT_LAYER_GLOBS = [
   "src/obsctl/tui/**/*.cr",
 ]
 private DIRECT_OBS_CLIENT_PATTERNS = [
-  {name: "OBS client require", regex: /require\s+"(?:\.\.\/)+obs\/client"/},
-  {name: "OBS connection require", regex: /require\s+"(?:\.\.\/)+obs\/connection"/},
+  # `(?:\.\.\/)*` rather than `(?:\.\.\/)+`: an absolute
+  # `require "obsctl/obs/client"` compiles from the src root just as well as
+  # the relative form, and a relative-only pattern would never see it.
+  {name: "OBS client require", regex: /require\s+"(?:\.\.\/)*(?:obsctl\/)?obs\/client"/},
+  {name: "OBS connection require", regex: /require\s+"(?:\.\.\/)*(?:obsctl\/)?obs\/connection"/},
   {name: "OBS client instantiation", regex: /\b(?:Obsctl::)?OBS::Client\.new\b/},
   {name: "OBS connection reference", regex: /\b(?:Obsctl::)?OBS::Connection\b/},
   # `Transport` opens the websocket itself and hands out `request`/`events`, so
   # reaching for it is the same breach as reaching for `Client` -- one level
   # lower down, where the four rules above do not look.
-  {name: "OBS transport require", regex: /require\s+"(?:\.\.\/)+obs\/transport"/},
+  {name: "OBS transport require", regex: /require\s+"(?:\.\.\/)*(?:obsctl\/)?obs\/transport"/},
   {name: "OBS transport reference", regex: /\b(?:Obsctl::)?OBS::Transport\b/},
 ]
 
@@ -28,6 +31,8 @@ private INNER_LAYER_GLOBS = [
   "src/obsctl/ipc/**/*.cr",
   "src/obsctl/obs/**/*.cr",
   "src/obsctl/runtime/**/*.cr",
+  "src/obsctl/state/**/*.cr",
+  "src/obsctl/json_value.cr",
 ]
 
 private def src_files(glob : String) : Array(String)
@@ -87,6 +92,21 @@ describe "daemon-first architecture boundary" do
     normal_client_files = src_files(NORMAL_CLIENT_LAYER_GLOBS)
 
     direct_obs_client_usages(normal_client_files).should eq([] of String)
+  end
+
+  it "keeps the client layers out of the obs tree entirely" do
+    # The state vocabulary the layers used to share lived under obs/, which is
+    # why a require from there once looked harmless. It lives in `state/` and
+    # `json_value.cr` now, so a require into obs/ means a layer reached for
+    # the connection, the protocol codec, or the transport -- the things this
+    # spec exists to keep apart.
+    offenders = pattern_usages(
+      src_files(NORMAL_CLIENT_LAYER_GLOBS),
+      /require\s+"(?:\.\.\/)+obs\/|require\s+"(?:obsctl\/)?obs\//,
+      "require into the obs layer"
+    )
+
+    offenders.should eq([] of String)
   end
 
   it "keeps server-owned OBS client construction inside the supervisor" do
