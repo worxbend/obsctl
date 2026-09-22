@@ -38,7 +38,12 @@ module Obsctl
         @event_subscriptions : Int32? = nil,
       )
         @request_ids = Protocol::RequestId.new
-        @identified = false
+        # Atomic rather than a plain Bool: the reader fiber clears it in
+        # `fail_all_pending` while request fibers read it, and the reader must
+        # never park — a mutex here could block it behind a request fiber that
+        # is itself parked in a socket write, stalling response routing for
+        # every caller waiting on one.
+        @identified = Atomic(Bool).new(false)
         @ws = nil.as(HTTP::WebSocket?)
         @system_frames = Channel(String | Exception).new(8)
         # Buffered, so `handle_frame` can hand off an event without waiting for
@@ -49,6 +54,14 @@ module Obsctl
         @events = Channel(Protocol::Event).new(EVENT_BUFFER_SIZE)
         @pending = {} of String => Channel(Protocol::Response | Exception)
         @pending_lock = Mutex.new
+        # Serializes frame writes to the socket. Every IPC client session gets
+        # its own fiber, so two `request` calls can be inside
+        # `HTTP::WebSocket#send` at once, and the socket is not safe for
+        # concurrent writers — two fibers can interleave frame bytes. Only the
+        # write itself is locked; the response wait stays outside so a slow
+        # OBS does not block other request fibers. A blocking `Mutex` rather
+        # than a spin lock, because the write can park on IO.
+        @send_lock = Mutex.new
         @terminal_error = nil.as(Domain::ConnectionFailed?)
         @terminal_error_lock = Mutex.new
         @close_notifications = Channel(Domain::ConnectionFailed).new(1)
@@ -62,7 +75,7 @@ module Obsctl
         ws = @ws
         return false unless ws
 
-        @identified && !ws.closed?
+        @identified.get && !ws.closed?
       end
 
       # Returns the safe terminal connection error that closed this client.
@@ -108,7 +121,7 @@ module Obsctl
         end
         hello = read_system_frame
         identify(hello)
-        @identified = true
+        @identified.set(true)
       end
 
       # Returns true once `connect` has opened the socket, whether or not the
@@ -122,7 +135,7 @@ module Obsctl
       # Safe to call on a client that never connected, and safe to call twice.
       def close : Nil
         @terminal_error_lock.synchronize { @close_requested = true }
-        @identified = false
+        @identified.set(false)
         ws = @ws
         return unless ws
 
@@ -133,12 +146,12 @@ module Obsctl
       # Sends a typed obs-websocket request frame and waits for the matching
       # request ID response or timeout.
       def request(request_type : String, data : JSON::Any? = nil) : Protocol::Response
-        raise Domain::ConnectionFailed.new("OBS client is not identified") unless @identified
+        raise Domain::ConnectionFailed.new("OBS client is not identified") unless @identified.get
         id = @request_ids.next
         responses = Channel(Protocol::Response | Exception).new(1)
         @pending_lock.synchronize { @pending[id] = responses }
         begin
-          connected_socket.send(Protocol::Request.new(request_type, id, data).to_frame)
+          send_frame(Protocol::Request.new(request_type, id, data).to_frame)
         rescue ex
           raise Domain::ConnectionFailed.new("failed to send OBS request #{request_type}: #{ex.message}")
         end
@@ -170,7 +183,7 @@ module Obsctl
             json.field "d", identify_payload(data)
           end
         end
-        connected_socket.send(frame)
+        send_frame(frame)
         identified = read_system_frame
         parsed = JSON.parse(identified)
         raise Domain::AuthenticationFailed.new unless parsed["op"].as_i == Protocol::Opcode::Identified.value
@@ -241,6 +254,11 @@ module Obsctl
       # checked error rather than an assumption.
       private def connected_socket : HTTP::WebSocket
         @ws || raise Domain::ConnectionFailed.new("OBS WebSocket is not open")
+      end
+
+      # The one path frames go out through; see `@send_lock`.
+      private def send_frame(frame : String) : Nil
+        @send_lock.synchronize { connected_socket.send(frame) }
       end
 
       # Sends on a channel if it can be done immediately, and drops the value
@@ -317,7 +335,7 @@ module Obsctl
       end
 
       private def fail_all_pending(error : Exception) : Nil
-        @identified = false
+        @identified.set(false)
         pending = @pending_lock.synchronize do
           channels = @pending.values.to_a
           @pending.clear
