@@ -26,7 +26,7 @@ module Obsctl
 
       private record ReconnectPublication,
         detached_client : OBS::Client?,
-        state_snapshot : OBS::State::ObsSnapshot,
+        state_snapshot : State::ObsSnapshot,
         log_payload : JSON::Any
 
       # Creates a supervisor that updates server state and optional event/log broadcasts.
@@ -426,7 +426,7 @@ module Obsctl
         publish_reconnect_log(publication.log_payload)
       end
 
-      private def publish_reconnect_state(snapshot : OBS::State::ObsSnapshot) : Nil
+      private def publish_reconnect_state(snapshot : State::ObsSnapshot) : Nil
         @state.publish_snapshot_state(snapshot)
       rescue ex
         publish_reconnect_diagnostic(

@@ -18,18 +18,18 @@ require "../../../src/obsctl/tui/widgets/which_key"
 private def widget_model
   model = Obsctl::TUI::Model.new(theme: Obsctl::TUI::Theme::NORD)
   model.connected_to_daemon = true
-  model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+  model.snapshot = Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: "30.1.0",
     obs_websocket_version: "5.0.0",
     current_scene: "Main",
     scenes: [
-      Obsctl::OBS::State::SceneState.new("Main", alias: "m", shortcut: "1", active: true),
-      Obsctl::OBS::State::SceneState.new("Cam", group: "Studio"),
+      Obsctl::State::SceneState.new("Main", alias: "m", shortcut: "1", active: true),
+      Obsctl::State::SceneState.new("Cam", group: "Studio"),
     ],
     audio_inputs: [
-      Obsctl::OBS::State::AudioState.new("Mic", alias: "mic", muted: false, volume_percent: 80),
-      Obsctl::OBS::State::AudioState.new("Desktop", muted: true, volume_percent: 0),
+      Obsctl::State::AudioState.new("Mic", alias: "mic", muted: false, volume_percent: 80),
+      Obsctl::State::AudioState.new("Desktop", muted: true, volume_percent: 0),
     ],
     profiles: ["Default"],
     current_profile: "Default"
@@ -53,7 +53,7 @@ private def beacon_model(streaming = false, recording = false, connected = true,
   model.advanced_ui = advanced
   model.snapshot = model.snapshot.not_nil!.copy_with(
     connected: connected,
-    output: Obsctl::OBS::State::OutputState.new(streaming: streaming, recording: recording),
+    output: Obsctl::State::OutputState.new(streaming: streaming, recording: recording),
     stream_duration_ms: 5_025_000_i64,
     record_duration_ms: 754_000_i64
   )
@@ -71,8 +71,8 @@ end
 private def streaming_model
   model = widget_model
   model.snapshot = model.snapshot.not_nil!.copy_with(
-    output: Obsctl::OBS::State::OutputState.new(streaming: true, recording: false),
-    stats: Obsctl::OBS::State::ObsStats.new(
+    output: Obsctl::State::OutputState.new(streaming: true, recording: false),
+    stats: Obsctl::State::ObsStats.new(
       cpu_usage_percent: 3.2,
       memory_usage_mb: 742.0,
       active_fps: 59.94,
@@ -114,8 +114,8 @@ describe Obsctl::TUI::Widgets::LiveBar do
   it "renders active durations and OBS performance telemetry" do
     model = widget_model
     model.snapshot = model.snapshot.not_nil!.copy_with(
-      output: Obsctl::OBS::State::OutputState.new(streaming: true, recording: true),
-      stats: Obsctl::OBS::State::ObsStats.new(
+      output: Obsctl::State::OutputState.new(streaming: true, recording: true),
+      stats: Obsctl::State::ObsStats.new(
         cpu_usage_percent: 12.5,
         memory_usage_mb: 768.0,
         active_fps: 59.9
@@ -209,7 +209,7 @@ describe Obsctl::TUI::Widgets::Stats do
 
   it "colors a lagging stream by the worst of its drop ratios and frame budget" do
     model = streaming_model
-    model.snapshot = model.snapshot.not_nil!.copy_with(stats: Obsctl::OBS::State::ObsStats.new(
+    model.snapshot = model.snapshot.not_nil!.copy_with(stats: Obsctl::State::ObsStats.new(
       active_fps: 41.2,
       average_frame_render_time_ms: 19.8,
       render_skipped_frames: 4_100_i64,
@@ -264,7 +264,7 @@ describe Obsctl::TUI::Widgets::Stats do
   it "reports unknown ratios rather than a perfect score before OBS composites a frame" do
     model = streaming_model
     model.snapshot = model.snapshot.not_nil!.copy_with(
-      stats: Obsctl::OBS::State::ObsStats.new(active_fps: 60.0, average_frame_render_time_ms: 0.4)
+      stats: Obsctl::State::ObsStats.new(active_fps: 60.0, average_frame_render_time_ms: 0.4)
     )
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 48, 8))
 
@@ -512,7 +512,7 @@ describe Obsctl::TUI::Widgets::Audio do
 
   it "scrolls sideways so the selected channel stays on screen" do
     model = widget_model
-    inputs = (1..12).map { |index| Obsctl::OBS::State::AudioState.new("Ch#{index}", volume_percent: 50) }
+    inputs = (1..12).map { |index| Obsctl::State::AudioState.new("Ch#{index}", volume_percent: 50) }
     model.snapshot = model.snapshot.not_nil!.copy_with(audio_inputs: inputs)
     model.audio_cursor = 11
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 40, 10))
@@ -543,7 +543,7 @@ describe Obsctl::TUI::Widgets::Audio do
   it "renders unknown mute state without claiming the input is active" do
     model = widget_model
     model.snapshot = model.snapshot.not_nil!.copy_with(audio_inputs: [
-      Obsctl::OBS::State::AudioState.new("Pending", muted: nil),
+      Obsctl::State::AudioState.new("Pending", muted: nil),
     ])
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 50, 5))
     Obsctl::TUI::Widgets::Audio.render(buffer.area, buffer, model)
@@ -742,7 +742,7 @@ describe Obsctl::TUI::Widgets::Dashboard do
 
   it "leaves the logs at full width while the stream is offline" do
     model = streaming_model
-    model.snapshot = model.snapshot.not_nil!.copy_with(output: Obsctl::OBS::State::OutputState.new(streaming: false, recording: true))
+    model.snapshot = model.snapshot.not_nil!.copy_with(output: Obsctl::State::OutputState.new(streaming: false, recording: true))
     buffer = CryTUI::Buffer.new(CryTUI::Rect.new(0, 0, 120, 40))
 
     Obsctl::TUI::Widgets::Dashboard.render(buffer.area, buffer, model)

@@ -6,19 +6,19 @@ private AREA = CryTUI::Rect.new(0, 0, 120, 40)
 private def mouse_model
   model = Obsctl::TUI::Model.new
   model.connected_to_daemon = true
-  model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+  model.snapshot = Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: "31.0.0",
     obs_websocket_version: "5.5.0",
     current_scene: "Main Camera",
     scenes: [
-      Obsctl::OBS::State::SceneState.new("Main Camera", active: true),
-      Obsctl::OBS::State::SceneState.new("Screen Share"),
-      Obsctl::OBS::State::SceneState.new("Guest Cam"),
+      Obsctl::State::SceneState.new("Main Camera", active: true),
+      Obsctl::State::SceneState.new("Screen Share"),
+      Obsctl::State::SceneState.new("Guest Cam"),
     ],
     audio_inputs: [
-      Obsctl::OBS::State::AudioState.new("Mic/Aux", muted: false, volume_percent: 72),
-      Obsctl::OBS::State::AudioState.new("Desktop Audio", muted: true, volume_percent: 40),
+      Obsctl::State::AudioState.new("Mic/Aux", muted: false, volume_percent: 72),
+      Obsctl::State::AudioState.new("Desktop Audio", muted: true, volume_percent: 40),
     ],
     profiles: ["Default", "Streaming"],
     current_profile: "Default",
@@ -108,7 +108,7 @@ describe Obsctl::TUI::HitTest do
 
   it "follows the list as it scrolls, so a click lands on what is drawn" do
     model = mouse_model
-    scenes = (1..40).map { |index| Obsctl::OBS::State::SceneState.new("Scene #{index}") }
+    scenes = (1..40).map { |index| Obsctl::State::SceneState.new("Scene #{index}") }
     model.snapshot = model.snapshot.not_nil!.copy_with(scenes: scenes)
     areas = Obsctl::TUI::DashboardLayout.compute(AREA, false)
     rows = areas.scenes.height - 2

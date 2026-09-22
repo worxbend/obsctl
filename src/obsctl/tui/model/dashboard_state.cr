@@ -1,4 +1,4 @@
-require "../../obs/state/obs_snapshot"
+require "../../state/obs_snapshot"
 require "../../domain/volume"
 require "../scene_picker"
 require "../scene_profiles"
@@ -16,7 +16,7 @@ module Obsctl
     # which is the snapshot's business alone -- a fresh snapshot is the only
     # thing that can make a derived list stale.
     class DashboardState
-      getter snapshot : OBS::State::ObsSnapshot?
+      getter snapshot : State::ObsSnapshot?
 
       # The scene a pushed snapshot just switched to, and the frame it
       # switched on. The scenes panel flashes the name for a few frames;
@@ -38,8 +38,8 @@ module Obsctl
       # Derived collections are cached until the snapshot or pending preview
       # they depend on changes, so the render loop can ask for them many times
       # per frame without rebuilding the same arrays each time.
-      @audio_inputs_cache : Array(OBS::State::AudioState)?
-      @scenes_cache : Array(OBS::State::SceneState)?
+      @audio_inputs_cache : Array(State::AudioState)?
+      @scenes_cache : Array(State::SceneState)?
       @scene_profiles_cache : SceneProfiles?
       @scene_picker_entries_cache : Array(ScenePicker::Entry)?
       @scene_profile_list_entries_cache : Array(SceneProfileList::Entry)?
@@ -63,7 +63,7 @@ module Obsctl
       # Swapping and invalidating is all this does; re-seeking the cursors
       # onto the scenes they were pointing at is the composition root's job,
       # because the cursors belong to the focus and picker states.
-      def adopt(snapshot : OBS::State::ObsSnapshot?) : Nil
+      def adopt(snapshot : State::ObsSnapshot?) : Nil
         @snapshot = snapshot
         invalidate_snapshot_caches
       end
@@ -87,8 +87,8 @@ module Obsctl
 
       # Every scene the daemon reported, hidden ones included. The scene-profile
       # editor lists these; everything else on the dashboard uses `scenes`.
-      def all_scenes : Array(OBS::State::SceneState)
-        @snapshot.try(&.scenes) || [] of OBS::State::SceneState
+      def all_scenes : Array(State::SceneState)
+        @snapshot.try(&.scenes) || [] of State::SceneState
       end
 
       # The scenes the dashboard draws.
@@ -99,7 +99,7 @@ module Obsctl
       # ships the answer as `hidden` on each scene. The dashboard asking the
       # same question again is exactly how a client ends up disagreeing with
       # the daemon about what should be on screen.
-      def scenes : Array(OBS::State::SceneState)
+      def scenes : Array(State::SceneState)
         @scenes_cache ||= all_scenes.reject(&.hidden)
       end
 
@@ -120,12 +120,12 @@ module Obsctl
         end
       end
 
-      def audio_inputs : Array(OBS::State::AudioState)
+      def audio_inputs : Array(State::AudioState)
         @audio_inputs_cache ||= begin
           if snapshot = @snapshot
             with_pending_volumes(snapshot.audio_inputs)
           else
-            [] of OBS::State::AudioState
+            [] of State::AudioState
           end
         end
       end
@@ -162,7 +162,7 @@ module Obsctl
         @snapshot.try(&.output.recording) || false
       end
 
-      def stats : OBS::State::ObsStats?
+      def stats : State::ObsStats?
         @snapshot.try(&.stats)
       end
 
@@ -208,7 +208,7 @@ module Obsctl
         invalidate_audio_cache
       end
 
-      private def with_pending_volumes(inputs : Array(OBS::State::AudioState)) : Array(OBS::State::AudioState)
+      private def with_pending_volumes(inputs : Array(State::AudioState)) : Array(State::AudioState)
         return inputs if @pending_volumes.empty?
 
         updated = inputs.dup

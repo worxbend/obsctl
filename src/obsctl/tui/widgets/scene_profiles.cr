@@ -61,7 +61,7 @@ module Obsctl
 
         # Split so the spans concatenate back to `SceneProfilesLayout.row_text`,
         # which is what the box was measured and hit-tested against.
-        private def item(scene : OBS::State::SceneState, model : Model) : CryTUI::Widgets::ListItem
+        private def item(scene : State::SceneState, model : Model) : CryTUI::Widgets::ListItem
           theme = model.theme
           hidden = model.scene_profile_editor.hidden.includes?(scene.name)
           # `Dim` as well as the muted colour: the selection bar re-tints a span

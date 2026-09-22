@@ -381,7 +381,7 @@ module Obsctl
       end
 
       private def server_status_for(
-        snapshot : OBS::State::ObsSnapshot,
+        snapshot : State::ObsSnapshot,
         telemetry : ServerTelemetry,
       ) : JSON::Any
         IPC::ServerStatus.new(

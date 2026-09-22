@@ -3,18 +3,18 @@ require "../../../src/obsctl/tui/dispatcher"
 
 private def dispatcher_fixture(volume_debounce : Time::Span = 10.milliseconds)
   model = Obsctl::TUI::Model.new
-  model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+  model.snapshot = Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: nil,
     obs_websocket_version: nil,
     current_scene: "Main",
     scenes: [
-      Obsctl::OBS::State::SceneState.new("Main", active: true),
-      Obsctl::OBS::State::SceneState.new("Cam"),
+      Obsctl::State::SceneState.new("Main", active: true),
+      Obsctl::State::SceneState.new("Cam"),
     ],
     audio_inputs: [
-      Obsctl::OBS::State::AudioState.new("Mic", muted: false, volume_percent: 50),
-      Obsctl::OBS::State::AudioState.new("Desktop", muted: true, volume_percent: 20),
+      Obsctl::State::AudioState.new("Mic", muted: false, volume_percent: 50),
+      Obsctl::State::AudioState.new("Desktop", muted: true, volume_percent: 20),
     ],
     profiles: ["Default", "Streaming"],
     current_profile: "Default"
@@ -308,13 +308,13 @@ describe "vim bindings" do
 
   it "steps by half the focused panel's visible rows" do
     model = Obsctl::TUI::Model.new
-    model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+    model.snapshot = Obsctl::State::ObsSnapshot.new(
       connected: true,
       obs_studio_version: nil,
       obs_websocket_version: nil,
       current_scene: "Scene 00",
-      scenes: (0..40).map { |index| Obsctl::OBS::State::SceneState.new("Scene #{index}") },
-      audio_inputs: [] of Obsctl::OBS::State::AudioState
+      scenes: (0..40).map { |index| Obsctl::State::SceneState.new("Scene #{index}") },
+      audio_inputs: [] of Obsctl::State::AudioState
     )
     sender = ->(_payload : Obsctl::IPC::CommandPayload) do
       Obsctl::IPC::Response.new("test", true, JSON.parse(%({"message":"ok"})))

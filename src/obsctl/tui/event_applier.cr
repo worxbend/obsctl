@@ -1,6 +1,6 @@
 require "json"
 require "../ipc/event"
-require "../obs/protocol/json_value"
+require "../json_value"
 require "../ipc/state_snapshot_codec"
 require "./model"
 
@@ -24,7 +24,7 @@ module Obsctl
         false
       end
 
-      private def parse_snapshot(data : JSON::Any) : OBS::State::ObsSnapshot?
+      private def parse_snapshot(data : JSON::Any) : State::ObsSnapshot?
         IPC::StateSnapshotCodec.decode(data)
       end
 
@@ -97,7 +97,7 @@ module Obsctl
 
       private def meter_reading(data : JSON::Any) : Tuple(String, Float64)?
         name = data["name"]?.try(&.as_s?) || data["inputName"]?.try(&.as_s?)
-        level = OBS::Protocol::JsonValue.number(data["level"]?) || meter_level(data["inputLevelsMul"]?)
+        level = JsonValue.number(data["level"]?) || meter_level(data["inputLevelsMul"]?)
         return unless name && level
 
         {name, level}
@@ -109,7 +109,7 @@ module Obsctl
         channels = data.try(&.as_a?)
         return unless channels
         channels.reduce(0.0) do |maximum, channel|
-          magnitude = channel.as_a?.try(&.first?).try { |value| OBS::Protocol::JsonValue.number(value) }
+          magnitude = channel.as_a?.try(&.first?).try { |value| JsonValue.number(value) }
           return unless magnitude && magnitude.finite? && magnitude >= 0.0
           Math.max(maximum, magnitude)
         end

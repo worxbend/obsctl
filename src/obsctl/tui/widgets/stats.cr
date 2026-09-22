@@ -44,7 +44,7 @@ module Obsctl
           CryTUI::Widgets::StyledText.new(lines, block: block).render(area, buffer)
         end
 
-        private def metric_lines(stats : OBS::State::ObsStats, model : Model, width : Int32) : Array(CryTUI::Line)
+        private def metric_lines(stats : State::ObsStats, model : Model, width : Int32) : Array(CryTUI::Line)
           wide = width >= WIDE_INNER_WIDTH
           [
             fps_line(stats, model, wide),
@@ -64,7 +64,7 @@ module Obsctl
           ])
         end
 
-        private def fps_line(stats : OBS::State::ObsStats, model : Model, wide : Bool) : CryTUI::Line
+        private def fps_line(stats : State::ObsStats, model : Model, wide : Bool) : CryTUI::Line
           budget = frame_budget_ratio(stats)
           spans = [
             CryTUI::Span.new(" #{model.symbol("⚡", "F")} ", CryTUI::Style.new(foreground: model.theme.accent)),
@@ -94,7 +94,7 @@ module Obsctl
           ])
         end
 
-        private def health_line(stats : OBS::State::ObsStats, model : Model, wide : Bool) : CryTUI::Line
+        private def health_line(stats : State::ObsStats, model : Model, wide : Bool) : CryTUI::Line
           budget = frame_budget_ratio(stats)
           worst = {
             drop_severity(drop_percent(stats.render_skipped_frames, stats.render_total_frames)),
@@ -118,7 +118,7 @@ module Obsctl
 
         # Milliseconds spent rendering a frame as a share of the time one frame
         # is allowed at the current rate. Nil until OBS reports a live rate.
-        private def frame_budget_ratio(stats : OBS::State::ObsStats) : Float64?
+        private def frame_budget_ratio(stats : State::ObsStats) : Float64?
           return unless stats.active_fps > 0.0
           stats.average_frame_render_time_ms / (1000.0 / stats.active_fps)
         end
@@ -164,7 +164,7 @@ module Obsctl
           severity.zero? ? model.theme.info : severity_color(severity, model)
         end
 
-        private def fps_color(stats : OBS::State::ObsStats, model : Model) : CryTUI::Color
+        private def fps_color(stats : State::ObsStats, model : Model) : CryTUI::Color
           reference = {model.stats_pane.fps_history.max? || stats.active_fps, stats.active_fps}.max
           return model.theme.muted unless reference > 0.0
           ratio = stats.active_fps / reference

@@ -6,18 +6,18 @@ private def obs_snapshot(
   current_scene : String? = "Main Camera",
   last_error : String? = nil,
   updated_at : Time = Time.utc,
-) : Obsctl::OBS::State::ObsSnapshot
-  Obsctl::OBS::State::ObsSnapshot.new(
+) : Obsctl::State::ObsSnapshot
+  Obsctl::State::ObsSnapshot.new(
     connected: connected,
     obs_studio_version: connected ? "30.1.0" : nil,
     obs_websocket_version: connected ? "5.3.0" : nil,
     current_scene: current_scene,
     scenes: [
-      Obsctl::OBS::State::SceneState.new("Main Camera", active: current_scene == "Main Camera"),
-      Obsctl::OBS::State::SceneState.new("BRB", active: current_scene == "BRB"),
+      Obsctl::State::SceneState.new("Main Camera", active: current_scene == "Main Camera"),
+      Obsctl::State::SceneState.new("BRB", active: current_scene == "BRB"),
     ],
     audio_inputs: [
-      Obsctl::OBS::State::AudioState.new("Mic/Aux", muted: false, volume_percent: 70),
+      Obsctl::State::AudioState.new("Mic/Aux", muted: false, volume_percent: 70),
     ],
     last_error: last_error,
     updated_at: updated_at
@@ -27,10 +27,10 @@ end
 describe Obsctl::Server::StateStore do
   it "updates polled telemetry without losing other authoritative state" do
     updates = [] of JSON::Any
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
     state.update(obs_snapshot)
     updates.clear
-    stats = Obsctl::OBS::State::ObsStats.new(cpu_usage_percent: 17.5, active_fps: 60.0)
+    stats = Obsctl::State::ObsStats.new(cpu_usage_percent: 17.5, active_fps: 60.0)
 
     state.update_stats(stats, 4_500.0, 65_000_i64, 5_000_i64)
 
@@ -48,13 +48,13 @@ describe Obsctl::Server::StateStore do
 
   it "updates stream and record flags independently and publishes snapshots" do
     updates = [] of JSON::Any
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
     state.update(obs_snapshot)
     updates.clear
     state.update_output(streaming: true)
     state.update_output(recording: true)
 
-    state.snapshot.output.should eq(Obsctl::OBS::State::OutputState.new(true, true))
+    state.snapshot.output.should eq(Obsctl::State::OutputState.new(true, true))
     updates.size.should eq(2)
     updates.last["output"]["streaming"].as_bool.should be_true
     updates.last["output"]["recording"].as_bool.should be_true
@@ -204,7 +204,7 @@ describe Obsctl::Server::StateStore do
 
   it "returns the reconnect-requested snapshot without publishing it" do
     updates = [] of JSON::Any
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
     connected_at = Time.utc(2026, 6, 20, 12, 0, 0)
     requested_at = Time.utc(2026, 6, 20, 12, 1, 0)
 
@@ -231,7 +231,7 @@ describe Obsctl::Server::StateStore do
 
   it "publishes a deferred reconnect-requested snapshot without mutating telemetry again" do
     updates = [] of JSON::Any
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
     connected_at = Time.utc(2026, 6, 20, 12, 0, 0)
     attempt_at = Time.utc(2026, 6, 20, 12, 0, 30)
     requested_at = Time.utc(2026, 6, 20, 12, 1, 0)

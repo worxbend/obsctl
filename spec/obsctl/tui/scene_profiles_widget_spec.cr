@@ -10,15 +10,15 @@ private AREA = CryTUI::Rect.new(0, 0, 120, 40)
 private def profile_widget_model(names = ["Main", "Utility Cam", "BRB Loop"], hidden_in_obs = ["Utility Cam"])
   model = Obsctl::TUI::Model.new(theme: Obsctl::TUI::Theme::NORD)
   model.connected_to_daemon = true
-  model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+  model.snapshot = Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: "31.0.0",
     obs_websocket_version: "5.5.0",
     current_scene: names.first?,
     scenes: names.map_with_index do |name, index|
-      Obsctl::OBS::State::SceneState.new(name, active: index == 0, hidden: hidden_in_obs.includes?(name))
+      Obsctl::State::SceneState.new(name, active: index == 0, hidden: hidden_in_obs.includes?(name))
     end,
-    audio_inputs: [] of Obsctl::OBS::State::AudioState
+    audio_inputs: [] of Obsctl::State::AudioState
   )
   model
 end

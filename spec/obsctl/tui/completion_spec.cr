@@ -4,26 +4,26 @@ require "../../../src/obsctl/tui/completion"
 
 private def completion_model
   model = Obsctl::TUI::Model.new
-  model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+  model.snapshot = Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: nil,
     obs_websocket_version: nil,
     current_scene: "Main",
     scenes: [
-      Obsctl::OBS::State::SceneState.new("Main"),
-      Obsctl::OBS::State::SceneState.new("Media", alias: "m2"),
+      Obsctl::State::SceneState.new("Main"),
+      Obsctl::State::SceneState.new("Media", alias: "m2"),
     ],
     audio_inputs: [
-      Obsctl::OBS::State::AudioState.new("Mic"),
-      Obsctl::OBS::State::AudioState.new("Music", alias: "m-bg"),
+      Obsctl::State::AudioState.new("Mic"),
+      Obsctl::State::AudioState.new("Music", alias: "m-bg"),
     ]
   )
   model.snapshot = model.snapshot.not_nil!.copy_with(
     profiles: ["Default", "Streaming"],
     scene_collections: ["Podcast", "Gaming"],
     scene_profiles: [
-      Obsctl::OBS::State::SceneProfileState.new("Solo", ["Media"]),
-      Obsctl::OBS::State::SceneProfileState.new("brb", ["Main"]),
+      Obsctl::State::SceneProfileState.new("Solo", ["Media"]),
+      Obsctl::State::SceneProfileState.new("brb", ["Main"]),
     ]
   )
   model

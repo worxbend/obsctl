@@ -15,13 +15,13 @@ describe Obsctl::TUI::Localization do
   it "renders the localized Rust header and unavailable vocabulary" do
     model = Obsctl::TUI::Model.new(locale: "uk", advanced_ui: false)
     model.connected_to_daemon = true
-    model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+    model.snapshot = Obsctl::State::ObsSnapshot.new(
       connected: true,
       obs_studio_version: "30.1.0",
       obs_websocket_version: "5.0.0",
       current_scene: "Головна",
-      scenes: [] of Obsctl::OBS::State::SceneState,
-      audio_inputs: [] of Obsctl::OBS::State::AudioState,
+      scenes: [] of Obsctl::State::SceneState,
+      audio_inputs: [] of Obsctl::State::AudioState,
       current_profile: "Потік"
     )
     # The active scene profile lands inside the localized header, so it needs a

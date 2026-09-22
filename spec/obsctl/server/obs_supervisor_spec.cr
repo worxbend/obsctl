@@ -174,7 +174,7 @@ describe Obsctl::Server::ObsSupervisor do
       stream_bytes_per_status: 100_000_i64
     ).start
     updates = [] of JSON::Any
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) { updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) })
     supervisor = Obsctl::Server::ObsSupervisor.new(obs.config, state, stats_poll_interval: 20.milliseconds)
 
     supervisor.start
@@ -472,7 +472,7 @@ describe Obsctl::Server::ObsSupervisor do
     event_update_lock = Mutex.new
     log_updates = [] of JSON::Any
     log_update_lock = Mutex.new
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) {
       state_update_lock.synchronize { state_updates << Obsctl::IPC::StateSnapshotCodec.encode(snapshot) }
     })
     supervisor = Obsctl::Server::ObsSupervisor.new(
@@ -565,7 +565,7 @@ describe Obsctl::Server::ObsSupervisor do
     block_lock = Mutex.new
     publication_blocked = Channel(Nil).new(1)
     release_publication = Channel(Nil).new(1)
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) {
       should_block = block_lock.synchronize do
         block_reconnect_publication && snapshot.last_error == "OBS reconnect requested"
       end
@@ -726,7 +726,7 @@ describe Obsctl::Server::ObsSupervisor do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     log_updates = [] of JSON::Any
     log_update_lock = Mutex.new
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) {
       if snapshot.last_error == "OBS reconnect requested"
         raise "state publication failed password=supersecret token: abc123"
       end
@@ -782,7 +782,7 @@ describe Obsctl::Server::ObsSupervisor do
     block_lock = Mutex.new
     diagnostic_blocked = Channel(Nil).new(1)
     release_diagnostic = Channel(Nil).new(1)
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) {
       if snapshot.last_error == "OBS reconnect requested"
         raise "state publication failed password=supersecret token: abc123"
       end
@@ -853,7 +853,7 @@ describe Obsctl::Server::ObsSupervisor do
     diagnostic_capacity = 2
     diagnostic_blocked = Channel(Nil).new(diagnostic_capacity)
     release_diagnostic = Channel(Nil).new(diagnostic_capacity)
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) {
       if snapshot.last_error == "OBS reconnect requested"
         raise "state publication failed password=supersecret token: abc123"
       end

@@ -3,7 +3,7 @@ require "../../../src/obsctl/ipc/server_status_codec"
 
 private alias ServerStatus = Obsctl::IPC::ServerStatus
 private alias RecordStatusCodec = Obsctl::IPC::RecordStatusCodec
-private alias RecordStatus = Obsctl::OBS::State::RecordStatus
+private alias RecordStatus = Obsctl::State::RecordStatus
 
 private def full_server_status
   ServerStatus.new(

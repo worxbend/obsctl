@@ -1,6 +1,6 @@
 require "json"
 require "./event"
-require "./json_value"
+require "../../json_value"
 
 module Obsctl
   module OBS

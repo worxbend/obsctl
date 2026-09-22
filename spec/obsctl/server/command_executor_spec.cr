@@ -94,16 +94,16 @@ end
 describe Obsctl::Server::CommandExecutor do
   it "returns distinct combined, OBS-only, and daemon-only status payloads" do
     state = Obsctl::Server::StateStore.new
-    state.update(Obsctl::OBS::State::ObsSnapshot.new(
+    state.update(Obsctl::State::ObsSnapshot.new(
       connected: true,
       obs_studio_version: "30.1.0",
       obs_websocket_version: "5.3.0",
       current_scene: "Main Camera",
       scenes: [
-        Obsctl::OBS::State::SceneState.new("Main Camera", active: true),
+        Obsctl::State::SceneState.new("Main Camera", active: true),
       ],
       audio_inputs: [
-        Obsctl::OBS::State::AudioState.new("Mic/Aux", muted: false, volume_percent: 72),
+        Obsctl::State::AudioState.new("Mic/Aux", muted: false, volume_percent: 72),
       ]
     ))
     executor = default_executor(state: state, dropped_reconnect_diagnostic_logs: -> { 7_u64 })
@@ -302,7 +302,7 @@ describe Obsctl::Server::CommandExecutor do
       record.result.not_nil!["message"].as_s.should eq("recording started")
       obs.streaming?.should be_true
       obs.recording?.should be_true
-      state.snapshot.output.should eq(Obsctl::OBS::State::OutputState.new(true, true))
+      state.snapshot.output.should eq(Obsctl::State::OutputState.new(true, true))
     ensure
       supervisor.try(&.stop)
       obs.try(&.stop)
@@ -377,7 +377,7 @@ describe Obsctl::Server::CommandExecutor do
     obs = Obsctl::SpecSupport::FakeObsServer.new.start
     logs = [] of JSON::Any
     logs_lock = Mutex.new
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) {
       if snapshot.last_error == "OBS reconnect requested"
         raise "state publication failed password=supersecret token: abc123"
       end
@@ -486,7 +486,7 @@ describe Obsctl::Server::CommandExecutor do
     log_path = File.join(Dir.tempdir, "obsctl-command-reconnect-secondary-success-#{Random.rand(1_000_000)}.log")
     logs = [] of JSON::Any
     logs_lock = Mutex.new
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) {
       if snapshot.last_error == "OBS reconnect requested"
         raise "state publication failed password=supersecret token: abc123"
       end
@@ -625,7 +625,7 @@ describe Obsctl::Server::CommandExecutor do
     diagnostic_blocked = Channel(Nil).new(1)
     release_diagnostic = Channel(Nil).new(1)
     diagnostic_reached = false
-    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::OBS::State::ObsSnapshot) {
+    state = Obsctl::Server::StateStore.new(->(snapshot : Obsctl::State::ObsSnapshot) {
       if snapshot.last_error == "OBS reconnect requested"
         raise "state publication failed secret=sesame token: abc123"
       end

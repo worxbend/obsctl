@@ -1,6 +1,6 @@
 require "json"
 require "./transport"
-require "./protocol/json_value"
+require "../json_value"
 require "./protocol/response"
 require "./protocol/event"
 require "./protocol/event_subscription"
@@ -9,9 +9,9 @@ require "./requests/scenes"
 require "./requests/audio"
 require "./requests/outputs"
 require "./requests/studio"
-require "./state/obs_stats"
-require "./state/output_state"
-require "./state/record_status"
+require "../state/obs_stats"
+require "../state/output_state"
+require "../state/record_status"
 require "../config/config"
 require "../domain/errors"
 require "../domain/volume"
@@ -286,7 +286,7 @@ module Obsctl
       end
 
       private def number(data : JSON::Any, key : String) : Float64?
-        Protocol::JsonValue.number(data, key)
+        JsonValue.number(data, key)
       end
 
       private def output_statuses : Tuple(JSON::Any, JSON::Any)

@@ -168,7 +168,7 @@ module Obsctl
       # One editor row. The widget splits this into styled spans that
       # concatenate back to exactly this string, so the width measured here is
       # the width that gets drawn.
-      def row_text(model : Model, scene : OBS::State::SceneState) : String
+      def row_text(model : Model, scene : State::SceneState) : String
         " #{marker(model, model.scene_profile_editor.hidden.includes?(scene.name))}  #{scene.name} "
       end
 

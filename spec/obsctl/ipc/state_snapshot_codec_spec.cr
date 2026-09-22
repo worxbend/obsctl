@@ -2,34 +2,34 @@ require "../../spec_helper"
 require "../../../src/obsctl/ipc/state_snapshot_codec"
 
 private def full_snapshot
-  Obsctl::OBS::State::ObsSnapshot.new(
+  Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: "30.1.2",
     obs_websocket_version: "5.4.2",
     current_scene: "Main Camera",
     scenes: [
-      Obsctl::OBS::State::SceneState.new(
+      Obsctl::State::SceneState.new(
         name: "Main Camera", alias: "cam", shortcut: "1",
         group: "live", active: true, hidden: false),
-      Obsctl::OBS::State::SceneState.new(name: "BRB", hidden: true),
+      Obsctl::State::SceneState.new(name: "BRB", hidden: true),
     ],
     audio_inputs: [
-      Obsctl::OBS::State::AudioState.new(
+      Obsctl::State::AudioState.new(
         name: "Mic", alias: "mic", shortcut: "m",
         muted: false, volume_mul: 0.75, volume_db: -2.5, volume_percent: 75),
-      Obsctl::OBS::State::AudioState.new(name: "Desktop"),
+      Obsctl::State::AudioState.new(name: "Desktop"),
     ],
-    output: Obsctl::OBS::State::OutputState.new(streaming: true, recording: false),
+    output: Obsctl::State::OutputState.new(streaming: true, recording: false),
     profiles: ["Default", "Streaming"],
     current_profile: "Streaming",
     scene_collections: ["Main"],
     current_scene_collection: "Main",
     scene_profiles: [
-      Obsctl::OBS::State::SceneProfileState.new(name: "streaming", hidden: ["BRB"]),
-      Obsctl::OBS::State::SceneProfileState.new(name: "recording", hidden: [] of String),
+      Obsctl::State::SceneProfileState.new(name: "streaming", hidden: ["BRB"]),
+      Obsctl::State::SceneProfileState.new(name: "recording", hidden: [] of String),
     ],
     active_scene_profile: "streaming",
-    stats: Obsctl::OBS::State::ObsStats.new(
+    stats: Obsctl::State::ObsStats.new(
       cpu_usage_percent: 12.5, memory_usage_mb: 2048.0,
       available_disk_space_mb: 51200.0, active_fps: 60.0,
       average_frame_render_time_ms: 1.25,
@@ -77,13 +77,13 @@ describe Obsctl::IPC::StateSnapshotCodec do
   end
 
   it "round trips a disconnected snapshot with an error" do
-    original = Obsctl::OBS::State::ObsSnapshot.new(
+    original = Obsctl::State::ObsSnapshot.new(
       connected: false,
       obs_studio_version: nil,
       obs_websocket_version: nil,
       current_scene: nil,
-      scenes: [] of Obsctl::OBS::State::SceneState,
-      audio_inputs: [] of Obsctl::OBS::State::AudioState,
+      scenes: [] of Obsctl::State::SceneState,
+      audio_inputs: [] of Obsctl::State::AudioState,
       last_error: "OBS WebSocket disconnected"
     )
     decoded = Obsctl::IPC::StateSnapshotCodec.decode(

@@ -1,5 +1,5 @@
 require "json"
-require "../obs/state/record_status"
+require "../state/record_status"
 
 module Obsctl
   module IPC
@@ -85,7 +85,7 @@ module Obsctl
     # reason `ServerStatus` above holds both halves: five key names the daemon
     # writes and the CLI reads, and nothing else linking them.
     #
-    # The value carried is `OBS::State::RecordStatus`, the type the daemon
+    # The value carried is `State::RecordStatus`, the type the daemon
     # already has and the type a reader already wants, so this stays a pair of
     # functions rather than a second record shaped exactly like the first.
     module RecordStatusCodec
@@ -95,7 +95,7 @@ module Obsctl
       # consumer of a command result knows how to print its `message`, so
       # shipping one alongside the structured fields means the TUI and any
       # generic client render this command like all the others.
-      def self.encode(status : OBS::State::RecordStatus) : JSON::Any
+      def self.encode(status : State::RecordStatus) : JSON::Any
         JSON::Any.new({
           "message"     => JSON::Any.new("recording #{status.state("state unknown")}"),
           "active"      => JSON::Any.new(status.active),
@@ -108,8 +108,8 @@ module Obsctl
 
       # Reads the structured fields back, leniently; `message` is not read
       # because it is derivable from them.
-      def self.decode(data : JSON::Any) : OBS::State::RecordStatus
-        OBS::State::RecordStatus.new(
+      def self.decode(data : JSON::Any) : State::RecordStatus
+        State::RecordStatus.new(
           active: data["active"]?.try(&.as_bool?),
           paused: data["paused"]?.try(&.as_bool?),
           timecode: data["timecode"]?.try(&.as_s?),

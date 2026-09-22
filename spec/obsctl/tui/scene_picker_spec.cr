@@ -7,20 +7,20 @@ private AREA = CryTUI::Rect.new(0, 0, 120, 40)
 
 private def scene_states(names : Array(String), shortcuts = {} of String => String)
   names.map_with_index do |name, index|
-    Obsctl::OBS::State::SceneState.new(name, shortcut: shortcuts[name]?, active: index == 0)
+    Obsctl::State::SceneState.new(name, shortcut: shortcuts[name]?, active: index == 0)
   end
 end
 
 private def picker_model(names = ["Main", "Cam", "BRB"], shortcuts = {} of String => String)
   model = Obsctl::TUI::Model.new
   model.connected_to_daemon = true
-  model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+  model.snapshot = Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: "31.0.0",
     obs_websocket_version: "5.5.0",
     current_scene: names.first?,
     scenes: scene_states(names, shortcuts),
-    audio_inputs: [] of Obsctl::OBS::State::AudioState
+    audio_inputs: [] of Obsctl::State::AudioState
   )
   model
 end
@@ -159,9 +159,9 @@ describe "scene picker dispatch" do
   it "opens on the live scene rather than the top of the list" do
     model = picker_model(["Main", "Cam", "BRB"])
     model.snapshot = model.snapshot.not_nil!.copy_with(scenes: [
-      Obsctl::OBS::State::SceneState.new("Main"),
-      Obsctl::OBS::State::SceneState.new("Cam", active: true),
-      Obsctl::OBS::State::SceneState.new("BRB"),
+      Obsctl::State::SceneState.new("Main"),
+      Obsctl::State::SceneState.new("Cam", active: true),
+      Obsctl::State::SceneState.new("BRB"),
     ])
     _, dispatcher = picker_dispatcher(model)
     dispatcher.handle(Obsctl::TUI::Action.new(Obsctl::TUI::ActionKind::OpenScenePicker))

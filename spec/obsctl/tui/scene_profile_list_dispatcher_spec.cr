@@ -7,15 +7,15 @@ private LIST_SCENES = ["Main", "Cam", "Utility Cam", "BRB Loop"]
 private def list_model(names = LIST_SCENES)
   model = Obsctl::TUI::Model.new
   model.connected_to_daemon = true
-  model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+  model.snapshot = Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: "31.0.0",
     obs_websocket_version: "5.5.0",
     current_scene: names.first?,
     scenes: names.map_with_index do |name, index|
-      Obsctl::OBS::State::SceneState.new(name, active: index == 0, hidden: false)
+      Obsctl::State::SceneState.new(name, active: index == 0, hidden: false)
     end,
-    audio_inputs: [] of Obsctl::OBS::State::AudioState
+    audio_inputs: [] of Obsctl::State::AudioState
   )
   model
 end

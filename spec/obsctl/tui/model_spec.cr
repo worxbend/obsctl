@@ -3,19 +3,19 @@ require "../../support/scene_profiles"
 require "../../../src/obsctl/tui/model"
 
 private def tui_snapshot
-  Obsctl::OBS::State::ObsSnapshot.new(
+  Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: "30.0.0",
     obs_websocket_version: "5.0.0",
     current_scene: "Main",
-    scenes: [Obsctl::OBS::State::SceneState.new("Main", active: true), Obsctl::OBS::State::SceneState.new("Cam")],
-    audio_inputs: [Obsctl::OBS::State::AudioState.new("Mic", muted: false, volume_percent: 80)]
+    scenes: [Obsctl::State::SceneState.new("Main", active: true), Obsctl::State::SceneState.new("Cam")],
+    audio_inputs: [Obsctl::State::AudioState.new("Mic", muted: false, volume_percent: 80)]
   )
 end
 
 private def telemetry_snapshot(cpu : Float64, bitrate : Float64, fps : Float64 = 60.0)
   tui_snapshot.copy_with(
-    stats: Obsctl::OBS::State::ObsStats.new(cpu_usage_percent: cpu, active_fps: fps),
+    stats: Obsctl::State::ObsStats.new(cpu_usage_percent: cpu, active_fps: fps),
     stream_bitrate_kbps: bitrate
   )
 end
@@ -33,13 +33,13 @@ end
 describe Obsctl::TUI::Model do
   it "previews audio volume without waiting for a server snapshot" do
     model = Obsctl::TUI::Model.new
-    model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+    model.snapshot = Obsctl::State::ObsSnapshot.new(
       connected: true,
       obs_studio_version: nil,
       obs_websocket_version: nil,
       current_scene: nil,
-      scenes: [] of Obsctl::OBS::State::SceneState,
-      audio_inputs: [Obsctl::OBS::State::AudioState.new("Mic", volume_percent: 50)]
+      scenes: [] of Obsctl::State::SceneState,
+      audio_inputs: [Obsctl::State::AudioState.new("Mic", volume_percent: 50)]
     )
 
     model.preview_audio_volume("Mic", 65)
@@ -62,9 +62,9 @@ describe Obsctl::TUI::Model do
   it "excludes hidden scenes from navigation while retaining them in the snapshot" do
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot.copy_with(scenes: [
-      Obsctl::OBS::State::SceneState.new("Main", active: true),
-      Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
-      Obsctl::OBS::State::SceneState.new("Cam"),
+      Obsctl::State::SceneState.new("Main", active: true),
+      Obsctl::State::SceneState.new("Utility", hidden: true),
+      Obsctl::State::SceneState.new("Cam"),
     ])
     model.clamp_cursors
 
@@ -80,9 +80,9 @@ describe Obsctl::TUI::Model do
   it "lets an active scene profile decide the whole visible list" do
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot.copy_with(scenes: [
-      Obsctl::OBS::State::SceneState.new("Main", active: true),
-      Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
-      Obsctl::OBS::State::SceneState.new("Cam"),
+      Obsctl::State::SceneState.new("Main", active: true),
+      Obsctl::State::SceneState.new("Utility", hidden: true),
+      Obsctl::State::SceneState.new("Cam"),
     ])
     set_scene_profiles(
       model,
@@ -101,8 +101,8 @@ describe Obsctl::TUI::Model do
     # an empty scene list.
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot.copy_with(scenes: [
-      Obsctl::OBS::State::SceneState.new("Main", active: true),
-      Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
+      Obsctl::State::SceneState.new("Main", active: true),
+      Obsctl::State::SceneState.new("Utility", hidden: true),
     ])
     set_scene_profiles(model, scene_profiles_fixture(active: "missing"), baseline_hidden: ["Utility"])
 
@@ -112,9 +112,9 @@ describe Obsctl::TUI::Model do
   it "clamps the scene profile editor cursor against the unfiltered scene list" do
     model = Obsctl::TUI::Model.new
     model.snapshot = tui_snapshot.copy_with(scenes: [
-      Obsctl::OBS::State::SceneState.new("Main", active: true),
-      Obsctl::OBS::State::SceneState.new("Utility", hidden: true),
-      Obsctl::OBS::State::SceneState.new("Cam"),
+      Obsctl::State::SceneState.new("Main", active: true),
+      Obsctl::State::SceneState.new("Utility", hidden: true),
+      Obsctl::State::SceneState.new("Cam"),
     ])
     model.scene_profile_editor.cursor = 99
     model.clamp_cursors
@@ -245,17 +245,17 @@ end
 describe "cursor motions" do
   it "jumps and steps within the focused panel without leaving it" do
     model = Obsctl::TUI::Model.new
-    model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+    model.snapshot = Obsctl::State::ObsSnapshot.new(
       connected: true,
       obs_studio_version: nil,
       obs_websocket_version: nil,
       current_scene: "A",
       scenes: [
-        Obsctl::OBS::State::SceneState.new("A"),
-        Obsctl::OBS::State::SceneState.new("B"),
-        Obsctl::OBS::State::SceneState.new("C"),
+        Obsctl::State::SceneState.new("A"),
+        Obsctl::State::SceneState.new("B"),
+        Obsctl::State::SceneState.new("C"),
       ],
-      audio_inputs: [] of Obsctl::OBS::State::AudioState
+      audio_inputs: [] of Obsctl::State::AudioState
     )
 
     model.move_bottom

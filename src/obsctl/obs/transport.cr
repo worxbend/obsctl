@@ -5,7 +5,7 @@ require "./connection"
 require "./protocol/close_code"
 require "./protocol/request_id"
 require "./protocol/opcode"
-require "./protocol/json_value"
+require "../json_value"
 require "./protocol/request"
 require "./protocol/response"
 require "./protocol/event"
@@ -207,7 +207,7 @@ module Obsctl
       end
 
       private def rpc_version(data : JSON::Any) : Int64
-        Protocol::JsonValue.integer(data, "rpcVersion") || raise malformed_handshake("rpcVersion")
+        JsonValue.integer(data, "rpcVersion") || raise malformed_handshake("rpcVersion")
       end
 
       private def authentication_response(data : JSON::Any) : String?
@@ -215,8 +215,8 @@ module Obsctl
         return unless auth
 
         password = password_from_config
-        salt = Protocol::JsonValue.string(auth, "salt") || raise malformed_handshake("authentication.salt")
-        challenge = Protocol::JsonValue.string(auth, "challenge") || raise malformed_handshake("authentication.challenge")
+        salt = JsonValue.string(auth, "salt") || raise malformed_handshake("authentication.salt")
+        challenge = JsonValue.string(auth, "challenge") || raise malformed_handshake("authentication.challenge")
         Auth.authentication(password, salt, challenge)
       end
 

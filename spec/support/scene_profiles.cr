@@ -35,13 +35,13 @@ def set_scene_profiles(
     active.try(&.hidden.to_a)
   )
 
-  model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+  model.snapshot = Obsctl::State::ObsSnapshot.new(
     connected: snapshot.connected,
     obs_studio_version: snapshot.obs_studio_version,
     obs_websocket_version: snapshot.obs_websocket_version,
     current_scene: snapshot.current_scene,
     scenes: snapshot.scenes.map do |scene|
-      Obsctl::OBS::State::SceneState.new(
+      Obsctl::State::SceneState.new(
         name: scene.name,
         alias: scene.alias,
         shortcut: scene.shortcut,
@@ -57,7 +57,7 @@ def set_scene_profiles(
     scene_collections: snapshot.scene_collections,
     current_scene_collection: snapshot.current_scene_collection,
     scene_profiles: profiles.profiles.map do |profile|
-      Obsctl::OBS::State::SceneProfileState.new(profile.name, profile.hidden.to_a.sort!)
+      Obsctl::State::SceneProfileState.new(profile.name, profile.hidden.to_a.sort!)
     end,
     # `nil` rather than the name when the config names a profile that is not in
     # the list, the way the daemon refuses to advertise one.
@@ -76,15 +76,15 @@ end
 # `set_scene_profiles` needs a snapshot to fold profiles into, because the
 # dashboard reads them from there now rather than from a field of its own.
 def scene_profile_spec_snapshot(scene_names = ["Main", "Cam", "Utility Cam", "BRB Loop"])
-  Obsctl::OBS::State::ObsSnapshot.new(
+  Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: "31.0.0",
     obs_websocket_version: "5.5.0",
     current_scene: scene_names.first?,
     scenes: scene_names.map_with_index do |name, index|
-      Obsctl::OBS::State::SceneState.new(name, active: index == 0, hidden: false)
+      Obsctl::State::SceneState.new(name, active: index == 0, hidden: false)
     end,
-    audio_inputs: [] of Obsctl::OBS::State::AudioState
+    audio_inputs: [] of Obsctl::State::AudioState
   )
 end
 

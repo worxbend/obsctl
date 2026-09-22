@@ -11,15 +11,15 @@ end
 private def list_model(saved = profiles({"streaming", ["Utility"]}, {"editing", [] of String}))
   model = Obsctl::TUI::Model.new
   model.connected_to_daemon = true
-  model.snapshot = Obsctl::OBS::State::ObsSnapshot.new(
+  model.snapshot = Obsctl::State::ObsSnapshot.new(
     connected: true,
     obs_studio_version: "31.0.0",
     obs_websocket_version: "5.5.0",
     current_scene: "Main",
     scenes: ["Main", "Utility", "Cam"].map_with_index do |name, index|
-      Obsctl::OBS::State::SceneState.new(name, active: index == 0, hidden: false)
+      Obsctl::State::SceneState.new(name, active: index == 0, hidden: false)
     end,
-    audio_inputs: [] of Obsctl::OBS::State::AudioState
+    audio_inputs: [] of Obsctl::State::AudioState
   )
   set_scene_profiles(model, saved)
   model.scene_profile_list.active = true

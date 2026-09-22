@@ -1,4 +1,4 @@
-require "../obs/state/obs_snapshot"
+require "../state/obs_snapshot"
 require "../domain/volume"
 require "../runtime/logger"
 require "./theme"
@@ -119,7 +119,7 @@ module Obsctl
       # swaps and invalidates, and the cursors belong to the focus and picker
       # states. Neither half is optional, which is why the assignment lives
       # here rather than as a setter on either sub-state.
-      def snapshot=(snapshot : OBS::State::ObsSnapshot?) : OBS::State::ObsSnapshot?
+      def snapshot=(snapshot : State::ObsSnapshot?) : State::ObsSnapshot?
         focused = focused_scene.try(&.name)
         picked = dashboard.scenes[scene_picker.cursor]?.try(&.name)
         dashboard.adopt(snapshot)
@@ -193,11 +193,11 @@ module Obsctl
         dashboard.item_count(panel)
       end
 
-      def focused_scene : OBS::State::SceneState?
+      def focused_scene : State::SceneState?
         dashboard.scenes[scene_cursor]?
       end
 
-      def focused_audio : OBS::State::AudioState?
+      def focused_audio : State::AudioState?
         dashboard.audio_inputs[audio_cursor]?
       end
 
@@ -328,19 +328,19 @@ module Obsctl
       {% end %}
 
       # What the daemon reported, and the lists derived from it.
-      def snapshot : OBS::State::ObsSnapshot?
+      def snapshot : State::ObsSnapshot?
         dashboard.snapshot
       end
 
-      def scenes : Array(OBS::State::SceneState)
+      def scenes : Array(State::SceneState)
         dashboard.scenes
       end
 
-      def all_scenes : Array(OBS::State::SceneState)
+      def all_scenes : Array(State::SceneState)
         dashboard.all_scenes
       end
 
-      def audio_inputs : Array(OBS::State::AudioState)
+      def audio_inputs : Array(State::AudioState)
         dashboard.audio_inputs
       end
 
@@ -376,7 +376,7 @@ module Obsctl
         dashboard.recording?
       end
 
-      def stats : OBS::State::ObsStats?
+      def stats : State::ObsStats?
         dashboard.stats
       end
 

@@ -95,12 +95,12 @@ describe Obsctl::OBS::Client do
     client = Obsctl::OBS::Client.new(server.config)
     begin
       client.connect
-      client.output_state.should eq(Obsctl::OBS::State::OutputState.new(false, false))
+      client.output_state.should eq(Obsctl::State::OutputState.new(false, false))
       client.toggle_stream.should be_true
       client.toggle_record.should be_true
       server.streaming?.should be_true
       server.recording?.should be_true
-      client.output_state.should eq(Obsctl::OBS::State::OutputState.new(true, true))
+      client.output_state.should eq(Obsctl::State::OutputState.new(true, true))
     ensure
       client.try(&.close)
       server.stop

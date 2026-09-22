@@ -39,7 +39,7 @@ module Obsctl
 
         # A pulsing glyph while audio is actually moving, so the panel shows the
         # desk is live even when every strip is scrolled off.
-        private def icon(model : Model, inputs : Array(OBS::State::AudioState)) : String
+        private def icon(model : Model, inputs : Array(State::AudioState)) : String
           live = model.advanced_ui && inputs.any? { |input| (model.meter_levels[input.name]? || 0.0) > SILENCE }
           return model.symbol("🎚", "A") unless live
 
@@ -53,7 +53,7 @@ module Obsctl
         # Strips are too narrow for a full name, so the selected channel's
         # identity is spelled out in the panel title instead of truncated into
         # the column.
-        private def hint(model : Model, input : OBS::State::AudioState?) : String
+        private def hint(model : Model, input : State::AudioState?) : String
           keys = model.symbol("←/→ chan  ↑/↓ gain  m mute", "</> chan  ^/v gain  m mute")
           return "[a]  #{keys}" unless input
 
@@ -65,7 +65,7 @@ module Obsctl
           "[a]  #{detail}  #{model.advanced_ui ? "·" : "-"}  #{keys}"
         end
 
-        private def draw_strip(buffer, strip : CryTUI::Rect, rows : MixerRows, input : OBS::State::AudioState, selected : Bool, focused : Bool, model : Model)
+        private def draw_strip(buffer, strip : CryTUI::Rect, rows : MixerRows, input : State::AudioState, selected : Bool, focused : Bool, model : Model)
           columns = MixerLayout.columns(strip)
           level = model.stats_pane.meter_levels[input.name]?
           fraction = level.try { |value| Meter.fraction(value) }
@@ -79,7 +79,7 @@ module Obsctl
           rows.mute.try { |row| draw_mute(buffer, strip, row, input.muted, selected, model) }
         end
 
-        private def draw_name(buffer, strip : CryTUI::Rect, row : Int32, input : OBS::State::AudioState, fraction : Float64?, selected : Bool, focused : Bool, model : Model)
+        private def draw_name(buffer, strip : CryTUI::Rect, row : Int32, input : State::AudioState, fraction : Float64?, selected : Bool, focused : Bool, model : Model)
           theme = model.theme
           # An alias exists to be short, so it wins whenever the real name
           # would be cut off anyway.

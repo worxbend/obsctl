@@ -1,10 +1,10 @@
 require "json"
-require "../obs/protocol/json_value"
-require "../obs/state/obs_snapshot"
-require "../obs/state/scene_state"
-require "../obs/state/audio_state"
-require "../obs/state/output_state"
-require "../obs/state/obs_stats"
+require "../json_value"
+require "../state/obs_snapshot"
+require "../state/scene_state"
+require "../state/audio_state"
+require "../state/output_state"
+require "../state/obs_stats"
 
 module Obsctl
   module IPC
@@ -25,7 +25,7 @@ module Obsctl
     # at all returns nil.
     module StateSnapshotCodec
       # Converts a snapshot into the stable IPC state-event JSON shape.
-      def self.encode(snapshot : OBS::State::ObsSnapshot) : JSON::Any
+      def self.encode(snapshot : State::ObsSnapshot) : JSON::Any
         JSON::Any.new({
           "connected"                => json_any(snapshot.connected),
           "obs_studio_version"       => json_any(snapshot.obs_studio_version),
@@ -49,7 +49,7 @@ module Obsctl
         } of String => JSON::Any)
       end
 
-      private def self.encode_stats(stats : OBS::State::ObsStats?) : JSON::Any
+      private def self.encode_stats(stats : State::ObsStats?) : JSON::Any
         return json_any(nil) unless stats
 
         JSON::Any.new({
@@ -65,7 +65,7 @@ module Obsctl
         } of String => JSON::Any)
       end
 
-      private def self.encode_scene(scene : OBS::State::SceneState) : JSON::Any
+      private def self.encode_scene(scene : State::SceneState) : JSON::Any
         JSON::Any.new({
           "name"     => json_any(scene.name),
           "alias"    => json_any(scene.alias),
@@ -76,7 +76,7 @@ module Obsctl
         } of String => JSON::Any)
       end
 
-      private def self.encode_audio_input(input : OBS::State::AudioState) : JSON::Any
+      private def self.encode_audio_input(input : State::AudioState) : JSON::Any
         JSON::Any.new({
           "name"           => json_any(input.name),
           "alias"          => json_any(input.alias),
@@ -88,22 +88,22 @@ module Obsctl
         } of String => JSON::Any)
       end
 
-      private def self.encode_output(output : OBS::State::OutputState) : JSON::Any
+      private def self.encode_output(output : State::OutputState) : JSON::Any
         JSON::Any.new({
           "streaming" => json_any(output.streaming),
           "recording" => json_any(output.recording),
         } of String => JSON::Any)
       end
 
-      private def self.encode_scene_profile(profile : OBS::State::SceneProfileState) : JSON::Any
+      private def self.encode_scene_profile(profile : State::SceneProfileState) : JSON::Any
         JSON::Any.new({
           "name"   => json_any(profile.name),
           "hidden" => json_any(profile.hidden),
         } of String => JSON::Any)
       end
 
-      def self.decode(data : JSON::Any) : OBS::State::ObsSnapshot?
-        OBS::State::ObsSnapshot.new(
+      def self.decode(data : JSON::Any) : State::ObsSnapshot?
+        State::ObsSnapshot.new(
           connected: data["connected"].as_bool,
           obs_studio_version: string_field(data, "obs_studio_version"),
           obs_websocket_version: string_field(data, "obs_websocket_version"),
@@ -120,7 +120,7 @@ module Obsctl
           scene_profiles: scene_profiles(data["scene_profiles"]?),
           active_scene_profile: string_field(data, "active_scene_profile"),
           stats: decode_stats(data["stats"]?),
-          stream_bitrate_kbps: OBS::Protocol::JsonValue.number(data["stream_bitrate_kbps"]?),
+          stream_bitrate_kbps: JsonValue.number(data["stream_bitrate_kbps"]?),
           stream_duration_ms: int64_field(data, "stream_duration_ms"),
           record_duration_ms: int64_field(data, "record_duration_ms"),
           last_error: string_field(data, "last_error"),
@@ -130,12 +130,12 @@ module Obsctl
         nil
       end
 
-      private def self.decode_scenes(data : JSON::Any) : Array(OBS::State::SceneState)
+      private def self.decode_scenes(data : JSON::Any) : Array(State::SceneState)
         data.as_a.map { |scene| decode_scene(scene) }
       end
 
-      private def self.decode_scene(scene : JSON::Any) : OBS::State::SceneState
-        OBS::State::SceneState.new(
+      private def self.decode_scene(scene : JSON::Any) : State::SceneState
+        State::SceneState.new(
           name: scene["name"].as_s,
           alias: string_field(scene, "alias"),
           shortcut: string_field(scene, "shortcut"),
@@ -145,39 +145,39 @@ module Obsctl
         )
       end
 
-      private def self.decode_audio_inputs(data : JSON::Any) : Array(OBS::State::AudioState)
+      private def self.decode_audio_inputs(data : JSON::Any) : Array(State::AudioState)
         data.as_a.map { |input| decode_audio_input(input) }
       end
 
-      private def self.decode_audio_input(input : JSON::Any) : OBS::State::AudioState
-        OBS::State::AudioState.new(
+      private def self.decode_audio_input(input : JSON::Any) : State::AudioState
+        State::AudioState.new(
           name: input["name"].as_s,
           alias: string_field(input, "alias"),
           shortcut: string_field(input, "shortcut"),
           muted: bool_field(input, "muted"),
-          volume_mul: OBS::Protocol::JsonValue.number(input["volume_mul"]?),
-          volume_db: OBS::Protocol::JsonValue.number(input["volume_db"]?),
+          volume_mul: JsonValue.number(input["volume_mul"]?),
+          volume_db: JsonValue.number(input["volume_db"]?),
           volume_percent: int_field(input, "volume_percent")
         )
       end
 
-      private def self.decode_output(data : JSON::Any?) : OBS::State::OutputState
-        OBS::State::OutputState.new(
+      private def self.decode_output(data : JSON::Any?) : State::OutputState
+        State::OutputState.new(
           streaming: data.try { |value| bool_field(value, "streaming") },
           recording: data.try { |value| bool_field(value, "recording") }
         )
       end
 
-      private def self.decode_stats(data : JSON::Any?) : OBS::State::ObsStats?
+      private def self.decode_stats(data : JSON::Any?) : State::ObsStats?
         return unless data
         return if data.raw.nil?
 
-        OBS::State::ObsStats.new(
-          cpu_usage_percent: OBS::Protocol::JsonValue.number(data["cpu_usage_percent"]?) || 0.0,
-          memory_usage_mb: OBS::Protocol::JsonValue.number(data["memory_usage_mb"]?) || 0.0,
-          available_disk_space_mb: OBS::Protocol::JsonValue.number(data["available_disk_space_mb"]?) || 0.0,
-          active_fps: OBS::Protocol::JsonValue.number(data["active_fps"]?) || 0.0,
-          average_frame_render_time_ms: OBS::Protocol::JsonValue.number(data["average_frame_render_time_ms"]?) || 0.0,
+        State::ObsStats.new(
+          cpu_usage_percent: JsonValue.number(data["cpu_usage_percent"]?) || 0.0,
+          memory_usage_mb: JsonValue.number(data["memory_usage_mb"]?) || 0.0,
+          available_disk_space_mb: JsonValue.number(data["available_disk_space_mb"]?) || 0.0,
+          active_fps: JsonValue.number(data["active_fps"]?) || 0.0,
+          average_frame_render_time_ms: JsonValue.number(data["average_frame_render_time_ms"]?) || 0.0,
           render_skipped_frames: int64_field(data, "render_skipped_frames") || 0_i64,
           render_total_frames: int64_field(data, "render_total_frames") || 0_i64,
           output_skipped_frames: int64_field(data, "output_skipped_frames") || 0_i64,
@@ -185,15 +185,15 @@ module Obsctl
         )
       end
 
-      def self.scene_profiles(data : JSON::Any?) : Array(OBS::State::SceneProfileState)
+      def self.scene_profiles(data : JSON::Any?) : Array(State::SceneProfileState)
         entries = data.try(&.as_a?)
-        return [] of OBS::State::SceneProfileState unless entries
+        return [] of State::SceneProfileState unless entries
 
         entries.compact_map do |entry|
           name = entry["name"]?.try(&.as_s?)
           next unless name
 
-          OBS::State::SceneProfileState.new(name, string_array(entry["hidden"]?))
+          State::SceneProfileState.new(name, string_array(entry["hidden"]?))
         end
       end
 

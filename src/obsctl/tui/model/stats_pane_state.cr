@@ -1,4 +1,4 @@
-require "../../obs/state/obs_snapshot"
+require "../../state/obs_snapshot"
 require "../meter"
 require "./anim_clock"
 
@@ -42,7 +42,7 @@ module Obsctl
       # snapshot with no stats must not push a zero, because a zero is a real
       # reading that would draw as a trough in the graph rather than as the
       # absence of data it really is.
-      def record_sample(stats : OBS::State::ObsStats?, bitrate_kbps : Float64?) : Nil
+      def record_sample(stats : State::ObsStats?, bitrate_kbps : Float64?) : Nil
         if current_stats = stats
           append_metric(@cpu_history, current_stats.cpu_usage_percent)
           append_metric(@fps_history, current_stats.active_fps)

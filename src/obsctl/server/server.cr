@@ -37,7 +37,7 @@ module Obsctl
       )
         @registry = ClientRegistry.new
         @diagnostic_log_broadcast = BestEffortLogBroadcast.new(->(entry : JSON::Any) { @registry.broadcast("logs", entry) })
-        @state = StateStore.new(->(snapshot : OBS::State::ObsSnapshot) { @registry.broadcast("state", IPC::StateSnapshotCodec.encode(snapshot)) })
+        @state = StateStore.new(->(snapshot : State::ObsSnapshot) { @registry.broadcast("state", IPC::StateSnapshotCodec.encode(snapshot)) })
         event_broadcast = ->(event : JSON::Any) { @registry.broadcast("events", event) }
         log_broadcast = ->(entry : JSON::Any) { broadcast_log(entry) }
         diagnostic_log_broadcast = ->(entry : JSON::Any) { @diagnostic_log_broadcast.broadcast(entry) }

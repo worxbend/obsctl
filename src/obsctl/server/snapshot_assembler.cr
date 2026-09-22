@@ -1,8 +1,8 @@
 require "../config/config"
-require "../obs/state/audio_state"
-require "../obs/state/obs_snapshot"
-require "../obs/state/scene_profile_state"
-require "../obs/state/scene_state"
+require "../state/audio_state"
+require "../state/obs_snapshot"
+require "../state/scene_profile_state"
+require "../state/scene_state"
 
 module Obsctl
   module Server
@@ -29,7 +29,7 @@ module Obsctl
       extend self
 
       # Fetches a full state snapshot for publication to local IPC clients.
-      def compose(client : OBS::Client, config : Config::Config) : OBS::State::ObsSnapshot
+      def compose(client : OBS::Client, config : Config::Config) : State::ObsSnapshot
         version_data = client.version
         scene_data = client.scene_readings
         configured_scenes = configured_scenes_by_name(config)
@@ -40,7 +40,7 @@ module Obsctl
         collection_data = client.scene_collections
         scene_profile_data = scene_profiles(config)
         output = client.output_details
-        OBS::State::ObsSnapshot.new(
+        State::ObsSnapshot.new(
           connected: true,
           obs_studio_version: version_data["obsVersion"]?.try(&.as_s),
           obs_websocket_version: version_data["obsWebSocketVersion"]?.try(&.as_s),
@@ -66,7 +66,7 @@ module Obsctl
         scene_names : Array(String),
         current : String?,
         configured : Hash(String, Config::SceneConfig)? = nil,
-      ) : Array(OBS::State::SceneState)
+      ) : Array(State::SceneState)
         # Resolved once for the whole list rather than per scene, and read from
         # here rather than from `configured.hidden`: an active scene profile
         # replaces the per-scene flags outright, so this is the single point at
@@ -76,7 +76,7 @@ module Obsctl
         configured_scenes = configured || configured_scenes_by_name(config)
         scene_names.map do |name|
           scene = configured_scenes[name]?
-          OBS::State::SceneState.new(
+          State::SceneState.new(
             name: name,
             alias: scene.try(&.alias),
             shortcut: scene.try(&.shortcut),
@@ -93,7 +93,7 @@ module Obsctl
         client : OBS::Client,
         config : Config::Config,
         configured : Hash(String, Config::AudioInputConfig)? = nil,
-      ) : Array(OBS::State::AudioState)
+      ) : Array(State::AudioState)
         configured_audio_inputs = configured || configured_audio_inputs_by_name(config)
         client.input_names.compact_map do |name|
           client.audio_readings(name).try do |reading|
@@ -108,7 +108,7 @@ module Obsctl
         name : String,
         muted : Bool?,
         volume : NamedTuple(mul: Float64?, db: Float64?, percent: Int32?),
-      ) : OBS::State::AudioState
+      ) : State::AudioState
         audio_state(name, muted, volume, configured_audio_inputs_by_name(config)[name]?)
       end
 
@@ -118,8 +118,8 @@ module Obsctl
         muted : Bool?,
         volume : NamedTuple(mul: Float64?, db: Float64?, percent: Int32?),
         configured : Config::AudioInputConfig? = nil,
-      ) : OBS::State::AudioState
-        OBS::State::AudioState.new(
+      ) : State::AudioState
+        State::AudioState.new(
           name: name,
           alias: configured.try(&.alias),
           shortcut: configured.try(&.shortcut),
@@ -133,9 +133,9 @@ module Obsctl
       # obsctl's own scene profiles, as clients see them. Read straight from the
       # config: they are obsctl state, not OBS state, so nothing is asked of OBS
       # here and they stay reportable while the connection is down.
-      def scene_profiles(config : Config::Config) : {profiles: Array(OBS::State::SceneProfileState), active: String?}
+      def scene_profiles(config : Config::Config) : {profiles: Array(State::SceneProfileState), active: String?}
         profiles = config.scene_profiles.map do |profile|
-          OBS::State::SceneProfileState.new(profile.name, profile.hidden)
+          State::SceneProfileState.new(profile.name, profile.hidden)
         end
         # The stored spelling, and `nil` when the config names a profile that no
         # longer exists: the snapshot must never advertise an active profile

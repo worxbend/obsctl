@@ -1,7 +1,7 @@
 require "json"
-require "../obs/state/obs_snapshot"
-require "../obs/state/scene_state"
-require "../obs/state/audio_state"
+require "../state/obs_snapshot"
+require "../state/scene_state"
+require "../state/audio_state"
 require "../domain/volume"
 
 module Obsctl
@@ -19,14 +19,14 @@ module Obsctl
     # Authoritative OBS snapshot cache owned by the local daemon.
     class StateStore
       # Creates a disconnected state store with an optional update callback.
-      def initialize(@on_update : Proc(OBS::State::ObsSnapshot, Nil)? = nil)
+      def initialize(@on_update : Proc(State::ObsSnapshot, Nil)? = nil)
         @snapshot = disconnected_snapshot
         @telemetry = ServerTelemetry.new
         @lock = Mutex.new
       end
 
       # Returns the latest cached OBS snapshot.
-      def snapshot : OBS::State::ObsSnapshot
+      def snapshot : State::ObsSnapshot
         @lock.synchronize { @snapshot }
       end
 
@@ -37,12 +37,12 @@ module Obsctl
 
       # Returns the cached snapshot and reconnect telemetry from one critical
       # section, so readers that need both do not queue for the mutex twice.
-      def snapshot_with_telemetry : {OBS::State::ObsSnapshot, ServerTelemetry}
+      def snapshot_with_telemetry : {State::ObsSnapshot, ServerTelemetry}
         @lock.synchronize { {@snapshot, @telemetry} }
       end
 
       # Replaces the cached snapshot and publishes it to subscribers.
-      def update(snapshot : OBS::State::ObsSnapshot) : Nil
+      def update(snapshot : State::ObsSnapshot) : Nil
         @lock.synchronize do
           @telemetry = telemetry_for_snapshot_transition(@snapshot, snapshot)
           @snapshot = snapshot
@@ -77,12 +77,12 @@ module Obsctl
       end
 
       # Replaces the scene list in the cached snapshot and publishes.
-      def update_scenes(current_scene : String?, scenes : Array(OBS::State::SceneState)) : Nil
+      def update_scenes(current_scene : String?, scenes : Array(State::SceneState)) : Nil
         mutate_connected(&.copy_with(current_scene: current_scene, scenes: scenes))
       end
 
       # Replaces the audio input list in the cached snapshot and publishes.
-      def update_audio_inputs(audio_inputs : Array(OBS::State::AudioState)) : Nil
+      def update_audio_inputs(audio_inputs : Array(State::AudioState)) : Nil
         mutate_connected(&.copy_with(audio_inputs: audio_inputs))
       end
 
@@ -100,7 +100,7 @@ module Obsctl
       # even if its `StreamStateChanged` event never arrives; nil leaves the
       # cached value alone.
       def update_stats(
-        stats : OBS::State::ObsStats,
+        stats : State::ObsStats,
         stream_bitrate_kbps : Float64?,
         stream_duration_ms : Int64?,
         record_duration_ms : Int64?,
@@ -148,10 +148,10 @@ module Obsctl
 
       # Replaces one named audio input, leaving the rest of the list untouched.
       private def map_input(
-        snapshot : OBS::State::ObsSnapshot,
+        snapshot : State::ObsSnapshot,
         input_name : String,
-        &block : OBS::State::AudioState -> OBS::State::AudioState
-      ) : Array(OBS::State::AudioState)
+        &block : State::AudioState -> State::AudioState
+      ) : Array(State::AudioState)
         snapshot.audio_inputs.map do |input|
           input.name == input_name ? block.call(input) : input
         end
@@ -159,11 +159,11 @@ module Obsctl
 
       # Output state with nil meaning "leave whatever is cached alone".
       private def merged_output(
-        snapshot : OBS::State::ObsSnapshot,
+        snapshot : State::ObsSnapshot,
         streaming : Bool?,
         recording : Bool?,
-      ) : OBS::State::OutputState
-        OBS::State::OutputState.new(
+      ) : State::OutputState
+        State::OutputState.new(
           streaming: streaming.nil? ? snapshot.output.streaming : streaming,
           recording: recording.nil? ? snapshot.output.recording : recording
         )
@@ -179,7 +179,7 @@ module Obsctl
       # Mutates authoritative reconnect state for a public operator reconnect
       # request and returns the resulting snapshot so callers can defer
       # subscriber fanout until their own locks are released.
-      def mark_reconnect_requested(at : Time = Time.utc) : OBS::State::ObsSnapshot
+      def mark_reconnect_requested(at : Time = Time.utc) : State::ObsSnapshot
         disconnect_transition(
           "OBS reconnect requested",
           reconnecting: true,
@@ -189,7 +189,7 @@ module Obsctl
       end
 
       # Records a successful OBS connection and publishes its fresh snapshot.
-      def mark_connected(snapshot : OBS::State::ObsSnapshot, at : Time = Time.utc) : Nil
+      def mark_connected(snapshot : State::ObsSnapshot, at : Time = Time.utc) : Nil
         @lock.synchronize do
           @telemetry = @telemetry.copy_with(reconnecting: false, last_connected_at: at)
           @snapshot = snapshot
@@ -212,7 +212,7 @@ module Obsctl
       # Kept separate from the transition that produced it so a caller holding
       # its own lock can mutate state now and fan out later, once that lock is
       # released.
-      def publish_snapshot_state(snapshot : OBS::State::ObsSnapshot) : Nil
+      def publish_snapshot_state(snapshot : State::ObsSnapshot) : Nil
         @on_update.try(&.call(snapshot))
       end
 
@@ -221,7 +221,7 @@ module Obsctl
         reconnecting : Bool = false,
         at : Time = Time.utc,
         connection_failed : Bool = true,
-      ) : OBS::State::ObsSnapshot
+      ) : State::ObsSnapshot
         @lock.synchronize do
           current = @snapshot
           updated = current.copy_with(connected: false, last_error: error, updated_at: at)
@@ -237,8 +237,8 @@ module Obsctl
       end
 
       private def telemetry_for_snapshot_transition(
-        current : OBS::State::ObsSnapshot,
-        snapshot : OBS::State::ObsSnapshot,
+        current : State::ObsSnapshot,
+        snapshot : State::ObsSnapshot,
       ) : ServerTelemetry
         if snapshot.connected
           return @telemetry if current.connected && !@telemetry.last_connected_at.nil? && !@telemetry.reconnecting
@@ -251,18 +251,18 @@ module Obsctl
         end
       end
 
-      private def publish_snapshot(snapshot : OBS::State::ObsSnapshot) : Nil
+      private def publish_snapshot(snapshot : State::ObsSnapshot) : Nil
         @on_update.try(&.call(snapshot))
       end
 
-      private def disconnected_snapshot : OBS::State::ObsSnapshot
-        OBS::State::ObsSnapshot.new(
+      private def disconnected_snapshot : State::ObsSnapshot
+        State::ObsSnapshot.new(
           connected: false,
           obs_studio_version: nil,
           obs_websocket_version: nil,
           current_scene: nil,
-          scenes: [] of OBS::State::SceneState,
-          audio_inputs: [] of OBS::State::AudioState
+          scenes: [] of State::SceneState,
+          audio_inputs: [] of State::AudioState
         )
       end
     end

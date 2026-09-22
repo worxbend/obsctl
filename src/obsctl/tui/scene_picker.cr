@@ -1,4 +1,4 @@
-require "../obs/state/scene_state"
+require "../state/scene_state"
 
 module Obsctl
   module TUI
@@ -21,7 +21,7 @@ module Obsctl
 
       # One row of the picker: the scene, where it sits in `Model#scenes`, and
       # the key that jumps to it.
-      record Entry, index : Int32, scene : OBS::State::SceneState, label : Char?
+      record Entry, index : Int32, scene : State::SceneState, label : Char?
 
       extend self
 
@@ -36,7 +36,7 @@ module Obsctl
       # Example: three scenes where the second is configured `shortcut: 1`.
       # The second scene claims `1`, so the first and third get `2` and `3`
       # rather than `1` and `2`.
-      def entries(scenes : Array(OBS::State::SceneState)) : Array(Entry)
+      def entries(scenes : Array(State::SceneState)) : Array(Entry)
         claimed = {} of Int32 => Char
         taken = Set(Char).new
         scenes.each_with_index do |scene, index|
@@ -71,7 +71,7 @@ module Obsctl
       # Multi-character shortcuts such as `brb` are left alone -- they still
       # resolve on the command line and in the CLI, they just cannot be a
       # single keypress here.
-      private def reserved_label(scene : OBS::State::SceneState) : Char?
+      private def reserved_label(scene : State::SceneState) : Char?
         shortcut = scene.shortcut
         return unless shortcut && shortcut.size == 1
 
