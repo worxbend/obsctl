@@ -10,6 +10,7 @@ require "../domain/command_registry"
 require "../domain/local_commands"
 require "../domain/errors"
 require "../ipc/socket_path"
+require "../json_value"
 require "../runtime/logger"
 require "../server/server"
 require "../service/service_installer"
@@ -275,7 +276,7 @@ module Obsctl
         entries = Config::ConfigInspector.explain(config_path)
 
         if json_output
-          stdout.puts json_success(JSON.parse({"entries" => entries}.to_json))
+          stdout.puts json_success(JsonValue.any({"entries" => entries.map(&.to_json_any)}))
         else
           width = entries.max_of?(&.key.size) || 0
           entries.each do |entry|
@@ -290,8 +291,8 @@ module Obsctl
         changes = Config::ConfigInspector.diff(config_path)
 
         if json_output
-          result = {"changed" => !changes.empty?, "changes" => changes}
-          stdout.puts json_success(JSON.parse(result.to_json))
+          result = {"changed" => !changes.empty?, "changes" => changes.map(&.to_json_any)}
+          stdout.puts json_success(JsonValue.any(result))
         elsif changes.empty?
           stdout.puts "config matches defaults: #{config_path}"
         else
@@ -307,7 +308,7 @@ module Obsctl
         migration = Config::ConfigInspector.migrate(config_path, dry_run: dry_run)
 
         if json_output
-          stdout.puts json_success(JSON.parse(migration.to_json))
+          stdout.puts json_success(migration.to_json_any)
           return Domain::ExitCode::Success.value
         end
 
@@ -336,7 +337,7 @@ module Obsctl
         exit_code = healthy ? Domain::ExitCode::Success.value : Domain::ExitCode::Failure.value
 
         if json_output
-          result = JSON.parse({"healthy" => healthy, "checks" => checks}.to_json)
+          result = JsonValue.any({"healthy" => healthy, "checks" => checks.map(&.to_json_any)})
           stdout.puts json_envelope(healthy, result, nil, exit_code)
         else
           width = checks.max_of?(&.name.size) || 0
@@ -351,7 +352,7 @@ module Obsctl
 
       private def self.write_version(stdout : IO, json_output : Bool) : Nil
         if json_output
-          result = JSON.parse({"version" => Obsctl::VERSION}.to_json)
+          result = JsonValue.any({"version" => Obsctl::VERSION})
           stdout.puts json_success(result)
         else
           stdout.puts "obsctl #{Obsctl::VERSION}"
@@ -436,7 +437,7 @@ module Obsctl
       end
 
       private def self.message_result(message : String) : JSON::Any
-        JSON.parse({"message" => message}.to_json)
+        JsonValue.any({"message" => message})
       end
 
       # The envelope for a command that succeeded. Every one of them exits 0

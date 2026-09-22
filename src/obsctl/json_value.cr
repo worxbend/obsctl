@@ -43,5 +43,50 @@ module Obsctl
     def self.integer(data : JSON::Any?, key : String) : Int64?
       data.try(&.[key]?).try(&.as_i64?)
     end
+
+    # Builders for the other direction. The IPC response payload and the CLI
+    # JSON envelopes speak JSON::Any, so a value that is already typed is
+    # built straight into a JSON::Any tree here. The seam this replaces --
+    # `JSON.parse(value.to_json)`, serialize and immediately parse back --
+    # threw the typing away and paid serialize-plus-parse for every response
+    # on the way out.
+    def self.any(value : Nil) : JSON::Any
+      JSON::Any.new(nil)
+    end
+
+    def self.any(value : Bool) : JSON::Any
+      JSON::Any.new(value)
+    end
+
+    def self.any(value : String) : JSON::Any
+      JSON::Any.new(value)
+    end
+
+    def self.any(value : Int) : JSON::Any
+      JSON::Any.new(value.to_i64)
+    end
+
+    def self.any(value : Float) : JSON::Any
+      JSON::Any.new(value.to_f64)
+    end
+
+    def self.any(value : Array(T)) : JSON::Any forall T
+      JSON::Any.new(value.map { |item| any(item) })
+    end
+
+    def self.any(value : Hash(String, T)) : JSON::Any forall T
+      JSON::Any.new(value.transform_values { |item| any(item) })
+    end
+
+    # Key order is insertion order in JSON::Any, and a named tuple keeps its
+    # literal order -- which is what the golden fixtures pin, so the literal
+    # here is the contract, not just a convenience.
+    def self.any(value : NamedTuple) : JSON::Any
+      JSON::Any.new(value.transform_values { |item| any(item) }.to_h)
+    end
+
+    def self.any(value : JSON::Any) : JSON::Any
+      value
+    end
   end
 end

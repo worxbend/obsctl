@@ -13,6 +13,7 @@ require "../ipc/server_status_codec"
 require "../ipc/state_snapshot_codec"
 require "../ipc/request"
 require "../ipc/response"
+require "../json_value"
 require "./log_payload"
 require "./obs_supervisor"
 require "./scene_profile_store"
@@ -415,8 +416,12 @@ module Obsctl
         command.target || raise Domain::CommandParseError.new("missing command target")
       end
 
+      # Builds the response payload straight into JSON::Any. This used to be
+      # `JSON.parse(values.to_json)` -- serialize the named tuple, immediately
+      # parse it back -- which paid for a round trip on every command to
+      # throw the typing away.
       protected def object(values) : JSON::Any
-        JSON.parse(values.to_json)
+        JsonValue.any(values)
       end
 
       private def publish_log(level : String, code : String, message : String) : Nil

@@ -1,4 +1,5 @@
 require "json"
+require "../json_value"
 
 module Obsctl
   module Diagnostics
@@ -44,13 +45,20 @@ module Obsctl
         new(name, Status::Fail, detail, remedy)
       end
 
+      # One shape, two serializers: the doctor's JSON envelope carries these
+      # as JSON::Any built by `to_json_any`, and `to_json` delegates so the
+      # two can never drift apart.
       def to_json(json : JSON::Builder) : Nil
-        json.object do
-          json.field "name", name
-          json.field "status", status.label
-          json.field "detail", detail
-          json.field "remedy", remedy
-        end
+        to_json_any.to_json(json)
+      end
+
+      def to_json_any : JSON::Any
+        JsonValue.any({
+          "name"   => name,
+          "status" => status.label,
+          "detail" => detail,
+          "remedy" => remedy,
+        })
       end
     end
   end

@@ -2,6 +2,7 @@ require "../config/config"
 require "../ipc/command_name"
 require "../ipc/protocol"
 require "../ipc/state_snapshot_codec"
+require "../json_value"
 require "../runtime/logger"
 require "./best_effort_log_broadcast"
 require "./client_registry"
@@ -163,7 +164,7 @@ module Obsctl
         # The acknowledgement and the initial snapshot are written inside
         # the registration so no pushed update can slip in front of them.
         @registry.add(session, request.topics) do
-          session.write_message(IPC::Response.new(request.id, true, JSON.parse({"message" => SUBSCRIBED_MESSAGE}.to_json)))
+          session.write_message(IPC::Response.new(request.id, true, JsonValue.any({"message" => SUBSCRIBED_MESSAGE})))
           session.write_message(IPC::Event.new(STATE_TOPIC, IPC::StateSnapshotCodec.encode(@state.snapshot))) if request.topics.includes?(STATE_TOPIC)
         end
       end

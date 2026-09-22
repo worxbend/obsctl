@@ -5,6 +5,7 @@ require "./config_loader"
 require "./config_schema"
 require "./config_writer"
 require "../domain/errors"
+require "../json_value"
 require "../runtime/secret_redaction"
 
 module Obsctl
@@ -44,22 +45,25 @@ module Obsctl
       end
 
       record Entry, key : String, value : String, source : Source do
+        # One shape, two serializers: the CLI's JSON envelope carries these
+        # as JSON::Any built by `to_json_any`, and `to_json` delegates so the
+        # two can never drift apart.
         def to_json(json : JSON::Builder) : Nil
-          json.object do
-            json.field "key", key
-            json.field "value", value
-            json.field "source", source.label
-          end
+          to_json_any.to_json(json)
+        end
+
+        def to_json_any : JSON::Any
+          JsonValue.any({"key" => key, "value" => value, "source" => source.label})
         end
       end
 
       record Change, key : String, default_value : String?, current_value : String? do
         def to_json(json : JSON::Builder) : Nil
-          json.object do
-            json.field "key", key
-            json.field "default", default_value
-            json.field "current", current_value
-          end
+          to_json_any.to_json(json)
+        end
+
+        def to_json_any : JSON::Any
+          JsonValue.any({"key" => key, "default" => default_value, "current" => current_value})
         end
       end
 
@@ -69,12 +73,16 @@ module Obsctl
         added_keys : Array(String),
         backup_path : String? = nil do
         def to_json(json : JSON::Builder) : Nil
-          json.object do
-            json.field "changed", changed
-            json.field "dropped_keys", dropped_keys
-            json.field "added_keys", added_keys
-            json.field "backup_path", backup_path
-          end
+          to_json_any.to_json(json)
+        end
+
+        def to_json_any : JSON::Any
+          JsonValue.any({
+            "changed"      => changed,
+            "dropped_keys" => dropped_keys,
+            "added_keys"   => added_keys,
+            "backup_path"  => backup_path,
+          })
         end
       end
 
