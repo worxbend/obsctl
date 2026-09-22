@@ -5,6 +5,10 @@ on:
     branches:
       - master
   pull_request:
+  schedule:
+    # Weekly, so breakage from a new Crystal release surfaces between commits
+    # instead of waiting for the next push.
+    - cron: "0 6 * * 1"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
