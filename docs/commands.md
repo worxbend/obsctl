@@ -120,9 +120,12 @@ obsctl mute 'Mic\Aux'
 ```
 
 In the palette there is no shell to do the splitting, so the line is tokenized:
-whitespace separates arguments, double quotes group them, and inside quotes a
-backslash escapes the next character. Quoted names are preserved:
-`/scene "Main Camera"`. A volume percentage must not be quoted.
+whitespace separates arguments, either quote style groups them (`"Main Camera"`
+and `'Main Camera'` name the same scene, and the style that is not open stays
+literal), and inside quotes a backslash escapes the next character. Quoted
+names are preserved: `/scene "Main Camera"`. A volume percentage must not be
+quoted. Palette completion writes names that need it back already quoted, so a
+completed `/scene "Cam 1"` parses the way it reads.
 
 Control characters are rejected in any argument, and an argument is limited to
 256 characters.

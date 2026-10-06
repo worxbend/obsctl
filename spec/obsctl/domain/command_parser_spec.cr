@@ -9,6 +9,20 @@ describe Obsctl::Domain::CommandParser do
     command.as(Obsctl::Domain::SetSceneCommand).target.should eq("Main Camera")
   end
 
+  # Both quote styles name the same scene; the one not open stays literal, so
+  # a name containing a double quote can be written with single quotes.
+  it "parses single-quoted scene names" do
+    parser.parse(%(/scene 'Cam 1')).as(Obsctl::Domain::SetSceneCommand).target.should eq("Cam 1")
+    parser.parse(%(/scene 'Cam "A"')).as(Obsctl::Domain::SetSceneCommand).target.should eq(%(Cam "A"))
+    # An escaped quote survives inside single quotes too.
+    parser.parse(%(/scene 'Cam \\'1\\'')).as(Obsctl::Domain::SetSceneCommand).target.should eq("Cam '1'")
+  end
+
+  it "rejects unterminated quotes in either style" do
+    expect_raises(Obsctl::Domain::CommandParseError, /unterminated quote/) { parser.parse(%(/scene "Main)) }
+    expect_raises(Obsctl::Domain::CommandParseError, /unterminated quote/) { parser.parse(%(/scene 'Main)) }
+  end
+
   # The CLI hands argv straight through instead of rebuilding a quoted line and
   # re-parsing it. Names that used to be mangled or rejected by that round trip
   # now reach the daemon byte for byte.
@@ -94,6 +108,9 @@ describe Obsctl::Domain::CommandParser do
 
   it "rejects quoted volume percentages like the Rust parser" do
     expect_raises(Obsctl::Domain::CommandParseError, /must not be quoted/) { parser.parse(%(/vol mic "50")) }
+    # The quoted-percentage rule does not depend on which quote style the
+    # user picked.
+    expect_raises(Obsctl::Domain::CommandParseError, /must not be quoted/) { parser.parse(%(/vol mic '50')) }
   end
 
   it "parses every explicit record action" do

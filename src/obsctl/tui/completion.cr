@@ -33,9 +33,23 @@ module Obsctl
         candidates = candidates_for(command, model)
         return [] of String unless candidates
 
-        prefix = argument_prefix.downcase
-        sorted(candidates.select(&.downcase.starts_with?(prefix)), argument_prefix)
-          .map { |candidate| "#{command} #{candidate}" }
+        # A typed opening quote is punctuation, not part of the name being
+        # filtered: `:scene "C` is still completing `C`.
+        filter = argument_prefix.starts_with?('"') || argument_prefix.starts_with?('\'') ? argument_prefix[1..] : argument_prefix
+        prefix = filter.downcase
+        sorted(candidates.select(&.downcase.starts_with?(prefix)), filter)
+          .map { |candidate| "#{command} #{quote_argument(candidate)}" }
+      end
+
+      # A candidate replaces the input line verbatim when cycled to, so a name
+      # containing a space or a quote has to arrive quoted: `:scene Cam 1`
+      # parses as two arguments and fails, while `:scene "Cam 1"` names the
+      # scene. Inner quotes and backslashes are escaped the way the parser's
+      # tokenizer reads them back.
+      private def quote_argument(name : String) : String
+        return name unless name.each_char.any? { |char| char.whitespace? || char == '"' || char == '\'' || char == '\\' }
+
+        %("#{name.gsub('\\', "\\\\").gsub('"', "\\\"")}")
       end
 
       # Argument candidates for a command, driven by the kind its spec declares.

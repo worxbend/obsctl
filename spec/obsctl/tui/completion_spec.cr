@@ -67,6 +67,70 @@ describe Obsctl::TUI::Completion do
     Obsctl::TUI::Completion.compute("/stream something", completion_model).should be_empty
   end
 
+  # A name with a space completes quoted, because the candidate replaces the
+  # input line verbatim when cycled to -- bare, it would parse as two
+  # arguments and the command would fail.
+  it "quotes candidates that would not parse bare" do
+    model = completion_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(
+      scenes: [
+        Obsctl::State::SceneState.new("Cam 1"),
+        Obsctl::State::SceneState.new("Main"),
+      ]
+    )
+    Obsctl::TUI::Completion.compute(":scene C", model).should eq([%(:scene "Cam 1")])
+  end
+
+  # A typed opening quote is punctuation: it neither filters anything out nor
+  # survives into the candidate.
+  it "filters by the name behind a typed opening quote" do
+    model = completion_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(
+      scenes: [
+        Obsctl::State::SceneState.new("Cam 1"),
+        Obsctl::State::SceneState.new("Main"),
+      ]
+    )
+    Obsctl::TUI::Completion.compute(%(:scene "C), model).should eq([%(:scene "Cam 1")])
+    Obsctl::TUI::Completion.compute(%(:scene 'C), model).should eq([%(:scene "Cam 1")])
+  end
+
+  # Every candidate the palette offers must be a command line the parser
+  # accepts -- a completion that fails to parse is how `:scene Cam 1` used to
+  # reach the daemon as an arity error.
+  it "offers only completions the parser accepts" do
+    model = completion_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(
+      scenes: [
+        Obsctl::State::SceneState.new("Cam 1"),
+        Obsctl::State::SceneState.new(%(Cam "A")),
+      ],
+      audio_inputs: [
+        Obsctl::State::AudioState.new("Mic Aux"),
+      ]
+    )
+    {":scene ", ":mute "}.each do |input|
+      Obsctl::TUI::Completion.compute(input, model).each do |candidate|
+        command = Obsctl::Domain::CommandParser.new.parse(candidate.lstrip("/:"))
+        expected = input == ":scene " ? Obsctl::Domain::SetSceneCommand : Obsctl::Domain::MuteCommand
+        command.class.should eq(expected)
+      end
+    end
+  end
+
+  # Names that need quoting are escaped the way the tokenizer reads them back:
+  # a quote and a backslash round-trip through the parser.
+  it "escapes inner quotes and backslashes in quoted candidates" do
+    model = completion_model
+    model.snapshot = model.snapshot.not_nil!.copy_with(
+      scenes: [Obsctl::State::SceneState.new(%(Cam "A"))]
+    )
+    candidates = Obsctl::TUI::Completion.compute(":scene ", model)
+    candidates.should eq([%(:scene "Cam \\"A\\"")])
+    Obsctl::Domain::CommandParser.new.parse(candidates.first.lstrip("/:"))
+      .as(Obsctl::Domain::SetSceneCommand).target.should eq(%(Cam "A"))
+  end
+
   # The shell scripts and the palette both read the argument kind off the same
   # command registry, so a kind the shell completes from live daemon state has
   # to be one the palette completes too. `/scene-profile <TAB>` offering

@@ -86,15 +86,17 @@ module Obsctl
 
       # Splits a palette line on unquoted whitespace.
       #
-      # Inside double quotes a backslash escapes the next character, so a name
-      # may contain quotes and spaces. Outside quotes a backslash is literal,
+      # Both quote styles group: `"Cam 1"` and `'Cam 1'` name the same scene,
+      # and the style that is not open stays literal, so a name containing a
+      # double quote can be written `'Cam "A"'`. Inside quotes a backslash
+      # escapes the next character; outside quotes a backslash is literal,
       # which keeps names like `Cam\Main` readable without doubling.
       private def tokenize(input : String) : Array(Token)
         tokens = [] of Token
         current = String::Builder.new
         length = 0
         quoted = false
-        in_quote = false
+        open_quote : Char? = nil
         escaped = false
 
         flush = -> do
@@ -114,17 +116,25 @@ module Obsctl
 
           case char
           when '\\'
-            if in_quote
+            if open_quote
               escaped = true
             else
               current << char
               length += 1
             end
-          when '"'
-            in_quote = !in_quote
-            quoted = true
+          when '"', '\''
+            if open_quote == char
+              open_quote = nil
+              quoted = true
+            elsif open_quote
+              current << char
+              length += 1
+            else
+              open_quote = char
+              quoted = true
+            end
           when ' ', '\t'
-            if in_quote
+            if open_quote
               current << char
               length += 1
             elsif length > 0 || quoted
@@ -136,7 +146,7 @@ module Obsctl
           end
         end
 
-        raise CommandParseError.new("unterminated quote") if in_quote
+        raise CommandParseError.new("unterminated quote") if open_quote
         flush.call if length > 0 || quoted
         tokens
       end

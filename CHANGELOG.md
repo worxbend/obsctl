@@ -10,6 +10,17 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ## [Unreleased]
 
+### Fixed
+
+- The palette tokenizer accepts single quotes as well as double quotes, so
+  `:scene 'Cam 1'` names the same scene as `:scene "Cam 1"` instead of
+  failing with an argument-count error. The style that is not open stays
+  literal, matching the tokenizer obsctl-rs ships.
+- Palette completion writes names containing spaces, quotes, or backslashes
+  back quoted and escaped, so a completed `:scene "Cam 1"` parses instead of
+  reaching the daemon as two arguments; a typed opening quote no longer
+  breaks candidate filtering.
+
 ## [1.0.0] - 2026-09-22
 
 First stable release. The public contract — the IPC protocol (`docs/protocol.md`),
