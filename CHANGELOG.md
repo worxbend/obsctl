@@ -10,6 +10,8 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-06
+
 ### Fixed
 
 - The palette tokenizer accepts single quotes as well as double quotes, so
@@ -750,7 +752,8 @@ frozen: changing it is a breaking change requiring a major version bump.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/worxbend/obsctl/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/worxbend/obsctl/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/worxbend/obsctl/compare/v0.8.4...v0.9.0
 [0.8.4]: https://github.com/worxbend/obsctl/compare/v0.8.3...v0.8.4
