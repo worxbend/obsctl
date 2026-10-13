@@ -40,6 +40,7 @@ module Obsctl
 
       getter model : Model
       getter refresh : Time::Span
+      getter? mouse : Bool
 
       # Whether a frame is owed before the run loop next waits for input.
       getter? needs_render : Bool
@@ -68,7 +69,8 @@ module Obsctl
           output: output,
           refresh: {config.ui.refresh_interval_ms, 50}.max.milliseconds,
           model: model,
-          config_path: config_path
+          config_path: config_path,
+          mouse: config.ui.mouse
         )
       end
 
@@ -79,6 +81,7 @@ module Obsctl
         @refresh : Time::Span = DEFAULT_REFRESH,
         @model = Model.new,
         @config_path : String? = nil,
+        @mouse : Bool = true,
       )
         @messages = Channel(AppMessage).new(128)
         @area = CryTUI::Rect.new(0, 0, 0, 0)
@@ -92,7 +95,7 @@ module Obsctl
       end
 
       def run : Int32
-        backend = CryTUI::AnsiBackend.for_terminal(@output, @input)
+        backend = CryTUI::AnsiBackend.for_terminal(@output, @input, mouse: @mouse)
         terminal = CryTUI::Terminal.new(backend)
         terminal.run(@input) do
           @running = true

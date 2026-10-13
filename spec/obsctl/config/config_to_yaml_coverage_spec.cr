@@ -64,6 +64,7 @@ private def canonical_yaml : YAML::Any
     ui: Obsctl::Config::UiConfig.new(
       refresh_interval_ms: 500,
       command_palette_prefix: ":",
+      mouse: false,
       advanced_ui: false,
       show_icons: false,
       theme: "nord",

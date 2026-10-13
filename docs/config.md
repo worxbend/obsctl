@@ -8,7 +8,7 @@ Top-level fields:
 - `server`: local daemon settings such as Unix socket path and remote shutdown policy
 - `connection`: OBS WebSocket connection and timeout settings
 - `reconnect`: daemon/TUI reconnect behavior
-- `ui`: refresh interval, palette prefix, icon flag, theme name, locale
+- `ui`: refresh interval, palette prefix, mouse capture, icon flag, theme name, locale
 - `scene_profiles` / `active_scene_profile`: named sets of scene-visibility choices
 - `scenes`: configured scene aliases, shortcuts, groups, and stale markers
 - `audio.inputs`: configured audio aliases, shortcuts, kind, and stale markers
@@ -39,6 +39,7 @@ reconnect:
 ui:
   refresh_interval_ms: 250
   command_palette_prefix: "/"
+  mouse: true
   advanced_ui: true
   show_icons: true
   theme: default
@@ -65,6 +66,17 @@ migrate`, so a config written by the Rust reference loads unchanged. The
 dashboard still resolves these four actions from its built-in bindings, which
 are the defaults shown above, so overriding them does not change what the keys
 do yet.
+
+Configs can be shared with `obsctl-rs`. Both preserve server options, audio
+`kind`, scene profiles, keymap overrides, and `ui.mouse` during rewrites.
+`ui.mouse: false` disables terminal mouse capture so text selection works.
+The Rust daemon preserves `server.pid_file` and `server.start_embedded_if_missing`
+for compatibility but does not act on them. Theme IDs beyond the common palette
+set and keymap overrides can behave differently between dashboards.
+An omitted `version` defaults to `1`. An omitted `connection.password_env`
+uses `OBS_WEBSOCKET_PASSWORD`; an explicit empty or null value disables that
+environment lookup. Top-level `reconnect` takes precedence over legacy
+`connection.reconnect`, including when the top-level section is empty.
 
 The TUI accepts 41 built-in themes: the 29 matching the Rust reference, plus 12
 `vivid` palettes — near-black grounds under a two-colour gradient that changes

@@ -7,6 +7,7 @@ describe Obsctl::TUI::App do
       theme: "custom",
       show_icons: false,
       advanced_ui: false,
+      mouse: false,
       custom_theme: Obsctl::Config::CustomThemeConfig.new(accent: "#010203")
     ))
 
@@ -15,6 +16,7 @@ describe Obsctl::TUI::App do
     app.model.theme.accent.should eq(CryTUI::Color.rgb(1, 2, 3))
     app.model.show_icons.should be_false
     app.model.advanced_ui.should be_false
+    app.mouse?.should be_false
     app.model.command_palette_prefix.should eq("/")
   end
 

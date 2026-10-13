@@ -116,6 +116,7 @@ module Obsctl
         yaml.mapping do
           yaml.scalar "refresh_interval_ms"; yaml.scalar @ui.refresh_interval_ms
           yaml.scalar "command_palette_prefix"; yaml.scalar @ui.command_palette_prefix
+          yaml.scalar "mouse"; yaml.scalar @ui.mouse
           yaml.scalar "advanced_ui"; yaml.scalar @ui.advanced_ui
           yaml.scalar "show_icons"; yaml.scalar @ui.show_icons
           yaml.scalar "theme"; yaml.scalar @ui.theme

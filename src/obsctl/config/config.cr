@@ -165,6 +165,7 @@ module Obsctl
       config_value(
         refresh_interval_ms : Int32 = 250,
         command_palette_prefix : String = "/",
+        mouse : Bool = true,
         advanced_ui : Bool = true,
         show_icons : Bool = true,
         theme : String = "default",
