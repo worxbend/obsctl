@@ -623,11 +623,12 @@ describe Obsctl::Server::Server do
     response.ok.should be_false
     response.error.not_nil!.code.should eq("OBS_UNAVAILABLE")
 
-    log = read_ipc_message(logs).as(Obsctl::IPC::Event)
-    log.topic.should eq("logs")
-    log.data.not_nil!["level"].as_s.should eq("warn")
-    log.data.not_nil!["code"].as_s.should eq("command_failed")
-    log.data.not_nil!["message"].as_s.should contain("OBS")
+    # OBS connection diagnostics can race with the command. Assert the
+    # command's log rather than assuming it was the first published warning.
+    log = read_log_until(logs, "command_failed")
+    log["level"].as_s.should eq("warn")
+    log["code"].as_s.should eq("command_failed")
+    log["message"].as_s.should contain("OBS")
   ensure
     logs.try(&.close)
     server.try(&.stop)
