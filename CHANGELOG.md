@@ -10,6 +10,15 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-13
+
+### Fixed
+
+- Preserve `ui.mouse` when rewriting shared Rust/Crystal config files and honor
+  `ui.mouse: false` in the dashboard, restoring terminal text selection.
+- Document shared config behavior with obsctl-rs v0.9.1 and cover config
+  defaults, reconnect precedence, and retained settings with shared fixtures.
+
 ## [1.0.1] - 2026-10-06
 
 ### Fixed
@@ -752,7 +761,8 @@ frozen: changing it is a breaking change requiring a major version bump.
 
 Initial release: the local daemon, the automation CLI, and config handling.
 
-[Unreleased]: https://github.com/worxbend/obsctl/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/worxbend/obsctl/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/worxbend/obsctl/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/worxbend/obsctl/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/worxbend/obsctl/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/worxbend/obsctl/compare/v0.8.4...v0.9.0
