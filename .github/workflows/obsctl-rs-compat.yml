@@ -27,20 +27,20 @@ jobs:
       OBSCTL_RS_REF: ${{ github.event.inputs.obsctl_rs_ref || vars.OBSCTL_RS_REF || '' }}
     steps:
       - name: Check out obsctl
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: obsctl
 
       - name: Check out obsctl-rs default ref
         if: ${{ env.OBSCTL_RS_REF == '' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.OBSCTL_RS_OWNER }}/${{ env.OBSCTL_RS_REPOSITORY }}
           path: obsctl-rs
 
       - name: Check out obsctl-rs selected ref
         if: ${{ env.OBSCTL_RS_REF != '' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.OBSCTL_RS_OWNER }}/${{ env.OBSCTL_RS_REPOSITORY }}
           ref: ${{ env.OBSCTL_RS_REF }}

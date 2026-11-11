@@ -34,7 +34,7 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # site/themes.js is exported from the real theme table by
       # scripts/render_site_themes.cr. It is committed so the deploy needs no

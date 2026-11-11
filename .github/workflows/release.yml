@@ -27,7 +27,7 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Built inside Alpine so `--static` links against musl and the release
       # artifact does not depend on the runner's glibc. Checkout and packaging
@@ -84,7 +84,7 @@ jobs:
       # The installer ships as a release asset too, so a pinned install can
       # fetch the script that matches the tag it is installing.
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
