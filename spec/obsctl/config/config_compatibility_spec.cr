@@ -12,6 +12,7 @@ describe "shared obsctl config" do
     rewritten = Obsctl::Config::Config.from_yaml(config.to_yaml)
     rewritten.to_yaml.should eq(config.to_yaml)
     rewritten.ui.mouse.should be_false
+    rewritten.connection.tls.should be_true
     rewritten.server.pid_file.should eq("/tmp/obsctl.pid")
     rewritten.audio.inputs.first.kind.should eq("wasapi_input_capture")
     rewritten.keymap.quit.should eq(["Q", "ctrl+c"])

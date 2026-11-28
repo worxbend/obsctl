@@ -59,6 +59,9 @@ module Obsctl
       config_value(
         host : String = "127.0.0.1",
         port : Int32 = 4455,
+        # Dials `wss://` instead of `ws://`. obs-websocket itself only serves
+        # plain `ws://`, so this is for an OBS behind a TLS-terminating proxy.
+        tls : Bool = false,
         # Three states, not two: absent means "use the conventional variable",
         # while a present-but-empty value means "there is no env password".
         password_env : String? = DEFAULT_PASSWORD_ENV,

@@ -15,7 +15,8 @@ module Obsctl
       # Honours `connection.connect_timeout_ms`. A non-positive value means "no
       # timeout" and restores the old behaviour of waiting indefinitely.
       def connect : HTTP::WebSocket
-        uri = URI.parse("ws://#{@config.host}:#{@config.port}")
+        scheme = @config.tls ? "wss" : "ws"
+        uri = URI.parse("#{scheme}://#{@config.host}:#{@config.port}")
         timeout = @config.connect_timeout_ms
         timeout > 0 ? open_with_timeout(uri, timeout.milliseconds) : open(uri)
       rescue ex : Domain::ConnectionFailed

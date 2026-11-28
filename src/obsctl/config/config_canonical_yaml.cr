@@ -48,6 +48,7 @@ module Obsctl
         yaml.mapping do
           yaml.scalar "host"; yaml.scalar @connection.host
           yaml.scalar "port"; yaml.scalar @connection.port
+          yaml.scalar "tls"; yaml.scalar @connection.tls
           if password_env = @connection.password_env
             yaml.scalar "password_env"; yaml.scalar password_env
           end

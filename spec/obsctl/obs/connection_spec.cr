@@ -32,6 +32,37 @@ describe Obsctl::OBS::Connection do
     end
   end
 
+  it "opens a TLS session when connection.tls is on" do
+    # No certificate is needed to tell the two apart: a TLS client speaks
+    # first, and the record type that opens its ClientHello (0x16, handshake)
+    # cannot be mistaken for the "G" of a plain-text upgrade request.
+    server = TCPServer.new("127.0.0.1", 0)
+    first_byte = Channel(UInt8?).new(1)
+    spawn do
+      peer = server.accept
+      first_byte.send(peer.read_byte)
+      peer.close
+    rescue
+      first_byte.send(nil)
+    end
+
+    config = Obsctl::Config::ConnectionConfig.new(
+      host: "127.0.0.1",
+      port: server.local_address.port,
+      tls: true,
+      connect_timeout_ms: 1_000
+    )
+
+    begin
+      expect_raises(Obsctl::Domain::ConnectionFailed) do
+        Obsctl::OBS::Connection.new(config).connect
+      end
+      first_byte.receive.should eq(0x16_u8)
+    ensure
+      server.close
+    end
+  end
+
   it "reports a refused connection as a domain error" do
     # Bind and immediately close, so the port is almost certainly free and
     # actively refusing rather than silently dropping.

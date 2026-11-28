@@ -7,6 +7,7 @@ server:
 connection:
   host: localhost
   port: 4456
+  tls: true
   password_env: ""
   password: null
   connect_timeout_ms: 1234

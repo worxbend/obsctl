@@ -26,6 +26,7 @@ server:
 connection:
   host: "127.0.0.1"
   port: 4455
+  tls: false
   password_env: "OBS_WEBSOCKET_PASSWORD"
   connect_timeout_ms: 3000
   request_timeout_ms: 2500
@@ -77,6 +78,11 @@ An omitted `version` defaults to `1`. An omitted `connection.password_env`
 uses `OBS_WEBSOCKET_PASSWORD`; an explicit empty or null value disables that
 environment lookup. Top-level `reconnect` takes precedence over legacy
 `connection.reconnect`, including when the top-level section is empty.
+
+`connection.tls: true` dials `wss://` instead of `ws://`. obs-websocket itself
+only serves plain `ws://`, so this is for an OBS behind a TLS-terminating proxy
+or tunnel. The certificate is verified against the system trust store, and
+`connection.host` must match the name on it.
 
 The TUI accepts 41 built-in themes: the 29 matching the Rust reference, plus 12
 `vivid` palettes — near-black grounds under a two-colour gradient that changes

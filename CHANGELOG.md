@@ -10,6 +10,12 @@ development; the `Unreleased` section below becomes that version at tag time.
 
 ## [Unreleased]
 
+### Added
+
+- `connection.tls: true` dials `wss://` instead of `ws://`, for an OBS behind a
+  TLS-terminating proxy or tunnel. The certificate is verified against the
+  system trust store. Shared with obsctl-rs.
+
 ## [1.0.2] - 2026-10-13
 
 ### Fixed

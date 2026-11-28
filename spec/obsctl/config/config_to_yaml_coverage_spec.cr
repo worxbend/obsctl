@@ -27,6 +27,7 @@ private def canonical_yaml : YAML::Any
     connection: Obsctl::Config::ConnectionConfig.new(
       host: "192.0.2.10",
       port: 4456,
+      tls: true,
       password_env: "OBS_PASSWORD",
       password: "secret",
       connect_timeout_ms: 1234,
